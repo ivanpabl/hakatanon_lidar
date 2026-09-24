@@ -6,11 +6,11 @@ import numpy as np
 
 from tunnel_od import TrackPath
 
-LAT_VIEW = 3.0         # полуширина выпрямленного коридора на картинке, м
+LAT_VIEW = 3.0
 NEAR_VIEW = (2.0, 50.0)
 FAR_VIEW = (50.0, 150.0)
-H_VIEW = (-0.3, 2.5)   # цветовая шкала: высота над головкой рельса
-CORRIDOR_HALF = 1.0    # линии на картинке -- только ориентир, не граница разметки
+H_VIEW = (-0.3, 2.5)
+CORRIDOR_HALF = 1.0
 
 
 def render_frame(fig_path, x, y, z, snap: TrackPath, title):
@@ -36,7 +36,7 @@ def render_frame(fig_path, x, y, z, snap: TrackPath, title):
     for col, (f0, f1), label, size in ((0, NEAR_VIEW, 'ближняя зона', 2.0), (1, FAR_VIEW, 'дальняя зона', 4.0)):
         ax = fig.add_subplot(gs[:, col])
         s = (fwd >= f0) & (fwd <= f1) & (np.abs(lat) < LAT_VIEW) & (h > H_VIEW[0] - 0.5) & (h < 4.0)
-        o = np.argsort(h[s])  # высокие точки поверх низких
+        o = np.argsort(h[s])
         ax.scatter(lat[s][o], fwd[s][o], c=np.clip(h[s][o], *H_VIEW), s=size, cmap=cmap,
                    vmin=H_VIEW[0], vmax=H_VIEW[1], linewidths=0, rasterized=True)
         for v in (-CORRIDOR_HALF, CORRIDOR_HALF):

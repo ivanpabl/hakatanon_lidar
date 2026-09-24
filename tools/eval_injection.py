@@ -19,7 +19,7 @@
 import argparse
 import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
-    os.environ.setdefault(_v, '1')  # numpy по одному потоку на процесс: иначе каждый процесс берёт все ядра
+    os.environ.setdefault(_v, '1')
 import copy
 import csv
 import warnings
@@ -34,12 +34,11 @@ from tunnel_od.sim.inject import inject, on_track
 from tunnel_od.sim.shapes import make_shape
 
 from bags import BAGS, RUNS as OUT, open_cloud_bag
-FRAMES = 8           # кадров со вставкой в испытании
-WARMUP = 20          # кадров прогрева детектора перед окном
-WINDOW_POS = (0.25, 0.5, 0.75)  # где в записи брать окна (доля длительности)
+FRAMES = 8
+WARMUP = 20
+WINDOW_POS = (0.25, 0.5, 0.75)
 DISTANCES = (10, 20, 30, 40, 60, 80, 100, 130, 160, 200)
 
-# фигура: (вид, размеры) -- размеры как в inject.make_shape
 SHAPES = {
     'куб 0.2':         ('box', (0.2, 0.2, 0.2)),
     'куб 0.4':         ('box', (0.4, 0.4, 0.4)),
@@ -50,14 +49,10 @@ SHAPES = {
     'плоский 0.12':    ('box', (0.6, 0.6, 0.12)),
     'балка поперёк':   ('box', (0.2, 2.0, 0.2)),
 }
-# размещение объекта поперёк пути: ближний к оси край объекта, м
-#   axis    -- центр объекта на оси пути;
-#   edge    -- край в 1.1м от оси: задевает вагон (кузов ~1.35м), но вне старого коридора 1.0м;
-#   outside -- край в 1.6м: вне габарита, тревоги быть не должно
 PLACEMENTS = {'edge': 1.1, 'outside': 1.6}
 SIDE_SHAPES = ('куб 0.4', 'куб 1.0', 'человек стоит')
 CORRIDORS = {'rect': None, 'gauge': GAUGE_METRO}
-MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}  # порог точек по дальности  # rect -- прежний прямоугольник +-1м x 0.15-2м
+MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}
 
 
 def half_lat(kind, dims):
@@ -103,7 +98,6 @@ def run_bag(job):
     for place, edge in PLACEMENTS.items():
         trials += [(name, place, edge + half_lat(*SHAPES[name])) for name in SIDE_SHAPES]
     for w, frames in enumerate(windows):
-        # чистый проход: прогрев, затем по кадрам окна -- размещение объектов и базовый результат
         ref = make_det()
         for data, step, fields, _ in frames[:WARMUP]:
             ref.detect(*parse_pointcloud2(data, step, fields), refit_path=True)
@@ -155,7 +149,6 @@ def run_bag(job):
                     'frames_detected': int(sum(det)), 'frames_alarm_on_object': alarm_on,
                     'frames_beyond_path': beyond, 'ambiguous': int(amb > 0),
                     'in_known_path': round(float(np.mean(in_path)), 2),
-                    # объект заслонён сценой: ось пути здесь -- догадка, и она ушла в стену
                     'occluded': int(geo > 0 and vis < 0.5 * geo),
                     'dist_err_m': round(float(np.median(errs)), 2) if errs else '',
                 })

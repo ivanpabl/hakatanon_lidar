@@ -6,25 +6,22 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# У всех фигур z0 -- низ объекта (обычно головка рельса), lat/fwd -- центр основания.
-# intersect(d) -> расстояние вдоль луча до первого попадания, inf -- промах.
 
 @dataclass
 class Box:
     fwd: float
     lat: float
     z0: float
-    length: float   # вдоль пути
-    width: float    # поперёк пути
+    length: float
+    width: float
     height: float
-    yaw_deg: float = 0.0  # поворот вокруг вертикали (90 -- балка поперёк пути при length > width)
+    yaw_deg: float = 0.0
 
     def bound(self):
         c = np.array([self.lat, self.fwd, self.z0 + self.height / 2])
         return c, 0.5 * np.sqrt(self.length ** 2 + self.width ** 2 + self.height ** 2)
 
     def intersect(self, d):
-        # переводим лучи в систему ящика и режем слэбами
         a = np.radians(self.yaw_deg)
         ca, sa = np.cos(a), np.sin(a)
         o = -np.array([self.lat, self.fwd, self.z0 + self.height / 2])
@@ -38,7 +35,7 @@ class Box:
             with np.errstate(divide='ignore', invalid='ignore'):
                 t1 = (-half[k] - o[k]) / dk
                 t2 = (half[k] - o[k]) / dk
-            par = np.abs(dk) < 1e-12  # луч параллелен граням: попадает, только если внутри слэба
+            par = np.abs(dk) < 1e-12
             inside = np.abs(o[k]) <= half[k]
             t1 = np.where(par, np.where(inside, -np.inf, np.inf), t1)
             t2 = np.where(par, np.where(inside, np.inf, -np.inf), t2)
@@ -71,7 +68,6 @@ class Cylinder:
         zs = d[:, 2] * t_side
         side_ok = (disc >= 0) & (a > 1e-12) & (t_side > 1e-3) & (zs >= self.z0) & (zs <= self.z0 + self.height)
         t = np.where(side_ok, t_side, np.inf)
-        # крышка (сверху лидар видит её у низких широких объектов)
         with np.errstate(divide='ignore', invalid='ignore'):
             t_cap = (self.z0 + self.height) / d[:, 2]
         pl, pf = d[:, 0] * t_cap, d[:, 1] * t_cap

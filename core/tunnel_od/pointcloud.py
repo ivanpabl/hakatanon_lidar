@@ -16,9 +16,9 @@ Layout в записях: x,y,z,intensity (float32), ring (uint16), timestamp (f
 """
 import numpy as np
 
-COLUMN_HEIGHT = 128       # каналов в одном столбце (залпе) облака
-DUAL_RETURN_DUP_M = 0.01  # второе отражение ближе 1см к первому -- дубль
-AZ_STEP_DEG = 0.1         # шаг азимута между парами столбцов
+COLUMN_HEIGHT = 128
+DUAL_RETURN_DUP_M = 0.01
+AZ_STEP_DEG = 0.1
 
 _DEFAULT_OFFSETS = {'x': 0, 'y': 4, 'z': 8, 'intensity': 12}
 
@@ -43,7 +43,6 @@ def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_ret
 
     n = len(x)
     if dedupe_dual_return and n % (2 * COLUMN_HEIGHT) == 0:
-        # второй столбец пары выкидываем там, где он повторяет первый
         cols = lambda a: a.reshape(-1, 2, COLUMN_HEIGHT)
         xa, ya, za = cols(x), cols(y), cols(z)
         dup = ((np.abs(xa[:, 1] - xa[:, 0]) < DUAL_RETURN_DUP_M)
@@ -70,12 +69,12 @@ def beam_directions(x, y, z):
 
     wrap = lambda a: (a + 180) % 360 - 180
     col_med = np.nanmedian(az, axis=1)
-    off = np.nanmedian(wrap(az - col_med[:, None]), axis=0)          # сдвиг азимута канала
-    el_ring = np.nanmedian(el, axis=0)                               # угол места канала
-    base = np.nanmedian(wrap(az - off[None, :]), axis=1)             # азимут пары столбцов
+    off = np.nanmedian(wrap(az - col_med[:, None]), axis=0)
+    el_ring = np.nanmedian(el, axis=0)
+    base = np.nanmedian(wrap(az - off[None, :]), axis=1)
     pair = np.arange(ncol) // 2
     ok = np.isfinite(base)
-    a0 = np.median(base[ok] + AZ_STEP_DEG * pair[ok])  # base = a0 - 0.1 * pair
+    a0 = np.median(base[ok] + AZ_STEP_DEG * pair[ok])
     az_all = np.radians(wrap(a0 - AZ_STEP_DEG * pair[:, None] + off[None, :]))
     el_all = np.radians(np.broadcast_to(el_ring, (ncol, COLUMN_HEIGHT)))
     d = np.stack([np.cos(el_all) * np.sin(az_all), np.cos(el_all) * np.cos(az_all), np.sin(el_all)], axis=-1)

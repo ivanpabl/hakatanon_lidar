@@ -22,7 +22,6 @@ class Tracker:
             for tr in self.tracks:
                 df = abs(ob['distance_m'] - tr['distance_m'])
                 dl = abs(ob['lateral_m'] - tr['lateral_m'])
-                # за кадр поезд проходит до ~2м (70км/ч), плюс разброс дальней точки объекта
                 if df < 2.5 + 0.05 * ob['distance_m'] and dl < 0.8 and not tr['hist'][-1]:
                     if best is None or df < best[0]:
                         best = (df, tr)

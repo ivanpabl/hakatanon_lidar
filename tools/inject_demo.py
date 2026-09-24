@@ -35,8 +35,8 @@ def main():
     warnings.simplefilter('ignore')
 
     rng = np.random.default_rng(args.seed)
-    ref = ObstacleDetector()   # чистый поток: путь для размещения объекта и базовый результат
-    test = ObstacleDetector()  # поток со вставкой
+    ref = ObstacleDetector()
+    test = ObstacleDetector()
     last = None
     print(f'{args.shape} {dims} на {args.fwd:.0f}м, смещение {args.lat:+.2f}м от оси; кадры {args.start}..{args.start + args.frames - 1}')
     print(f'{"кадр":>5} {"точек на объекте":>17} {"без вставки":>14} {"со вставкой":>14}  объект около {args.fwd:.0f}м')
