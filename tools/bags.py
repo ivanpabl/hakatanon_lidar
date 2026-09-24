@@ -15,8 +15,8 @@ BAGS = ['doubleT_obstacle', 'doubleT_platform', 'roundT_doubleT', 'roundT_pressu
 
 
 def bag_path(name):
-    """new_data или имя записи из data/Датасет/archive/for_hackathon."""
-    return DATA / name if name == 'new_data' else DATASET / name
+    """Запись прямо в data/ (new_data, cloud_with_fake_obj, ...) или из data/Датасет/archive/for_hackathon."""
+    return DATA / name if (DATA / name).is_dir() else DATASET / name
 
 
 @contextmanager
