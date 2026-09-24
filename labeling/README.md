@@ -14,12 +14,12 @@
 ## Подготовка (один раз, делает тот, у кого лежат данные)
 
 ```bash
-python scripts/make_labeling_set.py render --bag new_data            # можно параллельно по --range
-python scripts/make_labeling_set.py render --bag doubleT_obstacle    # и остальные записи
-python scripts/make_labeling_set.py split --participants 4
+python labeling/make_set.py render --bag new_data            # можно параллельно по --range
+python labeling/make_set.py render --bag doubleT_obstacle    # и остальные записи
+python labeling/make_set.py split --participants 4
 ```
 
-Получаются папки `labeling/participant_1` … `participant_4`. Каждую нужно заархивировать и отдать своему участнику.
+Получаются папки `data/labeling/participant_1` … `participant_4`. Каждую нужно заархивировать и отдать своему участнику.
 
 ## Как размечать (участник)
 
@@ -51,11 +51,11 @@ python scripts/make_labeling_set.py split --participants 4
 
 ## Сведение результатов
 
-Положить все CSV в `labeling/results/` и запустить:
+Положить все CSV в `data/labeling/results/` и запустить:
 
 ```bash
-python scripts/labeling_merge.py labeling/results/*.csv
+python labeling/merge.py data/labeling/results/*.csv
 ```
 
 Скрипт печатает согласие на калибровке и перекрытии, список спорных кадров и
-пишет `labeling/labels_merged.csv`. Спорные кадры разобрать вместе.
+пишет `data/labeling/labels_merged.csv`. Спорные кадры разобрать вместе.

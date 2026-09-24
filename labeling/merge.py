@@ -1,8 +1,8 @@
 """Сводит CSV разметки от участников в один файл и проверяет согласие.
 
-    python scripts/labeling_merge.py labeling/results/*.csv
+    python labeling/merge.py data/labeling/results/*.csv
 
-Пишет labeling/labels_merged.csv и печатает:
+Пишет data/labeling/labels_merged.csv и печатает:
 - согласие на калибровочных кадрах (их размечали все) и на перекрытии (двое);
 - список спорных кадров -- их стоит разобрать вместе и поправить вручную.
 
@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 from itertools import combinations
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / 'labeling' / 'labels_merged.csv'
+OUT = Path(__file__).resolve().parent.parent / 'data' / 'labeling' / 'labels_merged.csv'
 SAME_OBJECT_FWD = 3.0   # два клика -- один объект, если ближе по дальности
 SAME_OBJECT_LAT = 0.6   # и вбок
 
