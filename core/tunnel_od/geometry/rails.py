@@ -19,10 +19,10 @@ FWD_BIN = 1.0
 PROMINENCE = 0.05
 
 _LAT_EDGES = np.arange(-HALF_WIDTH, HALF_WIDTH + LAT_BIN, LAT_BIN)
-_N_LAT = len(_LAT_EDGES) + 1  # np.digitize даёт индексы 0..len(edges)
+_N_LAT = len(_LAT_EDGES) + 1
 _LAT_CENTERS = np.concatenate([[_LAT_EDGES[0] - LAT_BIN], _LAT_EDGES])
-_BASELINE_W = 10  # полуширина окна медианы-подложки, в лат. бинах
-_PEAK_W = 3       # полуширина окна проверки локального максимума
+_BASELINE_W = 10
+_PEAK_W = 3
 
 
 def _sliding(a, w, fill):
@@ -48,7 +48,6 @@ def find_floor_bumps(x, y, z, return_z=False):
     ok = (fbin >= 0) & (fbin < n_f)
     xf, zf, fbin = xf[ok], zf[ok], fbin[ok]
 
-    # точки ниже "пол + 0.9м" своего среза (30-й перцентиль по срезу), срезы с >=50 точками
     order = np.lexsort((zf, fbin))
     fb_s, z_s = fbin[order], zf[order]
     counts = np.bincount(fb_s, minlength=n_f)
@@ -60,7 +59,6 @@ def find_floor_bumps(x, y, z, return_z=False):
     xf, zf, fbin = xf[keep], zf[keep], fbin[keep]
     row_ok = np.bincount(fbin, minlength=n_f) >= 30
 
-    # поперечный профиль: максимум z в каждом (срез, лат. бин)
     lbin = np.digitize(xf, _LAT_EDGES)
     profile = np.full(n_f * _N_LAT, -np.inf)
     np.maximum.at(profile, fbin * _N_LAT + lbin, zf)
@@ -73,7 +71,7 @@ def find_floor_bumps(x, y, z, return_z=False):
     if len(f_rows) == 0:
         return empty
 
-    with warnings.catch_warnings():  # окна целиком из nan -- ожидаемо, дают nan
+    with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
         baseline = np.nanmedian(_sliding(profile, _BASELINE_W, np.nan), axis=-1)
         local_max = np.nanmax(_sliding(profile, _PEAK_W, np.nan), axis=-1)
@@ -86,15 +84,13 @@ def find_floor_bumps(x, y, z, return_z=False):
     return out + (profile[ri, li],) if return_z else out
 
 
-# --- прослеживание пары рельсов своего пути ------------------------------
-
-SEED_FWD = 10.0              # затравка пары -- только по пикам ближе этого
-SEED_GAUGE = (1.45, 1.75)    # колея по пикам профиля (1.52 номинал + ширина головки/бины)
-SEED_MAX_MID = 0.4           # середина пары не дальше этого от лидара
-SEED_WIN = 0.1               # поддержка рельса: пики в ±SEED_WIN от его положения
+SEED_FWD = 10.0
+SEED_GAUGE = (1.45, 1.75)
+SEED_MAX_MID = 0.4
+SEED_WIN = 0.1
 SEED_MIN_SUPPORT = 3
-TRACE_TOL = 0.12             # допуск пика от предсказания при прослеживании
-TRACE_MAX_GAP = 8.0          # столько метров без пика -- рельс потерян
+TRACE_TOL = 0.12
+TRACE_MAX_GAP = 8.0
 
 
 def _trace_rail(pf, pl, pz, seed_idx):
@@ -129,7 +125,6 @@ def trace_rail_pair(pf, pl, pz):
         & (support[i] >= SEED_MIN_SUPPORT) & (support[j] >= SEED_MIN_SUPPORT)
     if not ok.any():
         return None
-    # лучшая пара -- с наибольшей поддержкой; каждые 10см смещения от лидара -- минус 1 пик
     score = np.where(ok, np.minimum(support[i], support[j]) - 10 * np.abs(mid), -np.inf)
     b = np.argmax(score)
     a_lat, b_lat = sorted((ln[i[b]], ln[j[b]]))

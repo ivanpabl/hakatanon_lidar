@@ -15,8 +15,8 @@ from itertools import combinations
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / 'data' / 'labeling' / 'labels_merged.csv'
-SAME_OBJECT_FWD = 3.0   # два клика -- один объект, если ближе по дальности
-SAME_OBJECT_LAT = 0.6   # и вбок
+SAME_OBJECT_FWD = 3.0
+SAME_OBJECT_LAT = 0.6
 
 
 def parse_objects(s):

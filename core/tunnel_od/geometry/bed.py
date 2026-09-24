@@ -9,12 +9,12 @@
 """
 import numpy as np
 
-BED_BIN_M = 4.0        # шаг профиля по дальности
-BED_CORE_HALF = 0.5    # полуширина полосы между рельсами (рельсы на ±0.76м)
-BED_QUANTILE = 10      # перцентиль z в бине: дно лотка, а не шпалы/мусор
+BED_BIN_M = 4.0
+BED_CORE_HALF = 0.5
+BED_QUANTILE = 10
 BED_MIN_PTS = 5
-MAX_GRADE = 0.06       # уклон пути + наклон лидара, м/м (метро: уклон до 4%)
-BED_TOL = 0.15         # насколько бин может отклониться от продолжения профиля
+MAX_GRADE = 0.06
+BED_TOL = 0.15
 
 
 def estimate_floor_z(x, y, z, near=2.0, far=15.0, half_width=3.0):
@@ -65,7 +65,7 @@ def estimate_bed_profile(x, y, z, center_fn, near=2.0, far=250.0):
     acc_f, acc_z = [], []
     for f, v in zip(centers, vals):
         if not acc_f:
-            if f < 15.0:  # профиль начинается только с ближней зоны, где полотно видно надёжно
+            if f < 15.0:
                 acc_f.append(f); acc_z.append(v)
             continue
         pred = _robust_line_pred(acc_f[-6:], acc_z[-6:], f)

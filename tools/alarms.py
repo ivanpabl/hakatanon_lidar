@@ -15,7 +15,7 @@
 import argparse
 import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
-    os.environ.setdefault(_v, '1')  # numpy по одному потоку на процесс: иначе каждый процесс берёт все ядра
+    os.environ.setdefault(_v, '1')
 import csv
 import warnings
 from multiprocessing import Pool
@@ -29,7 +29,7 @@ GAP = 2
 
 
 CORRIDORS = {'rect': None, 'gauge': GAUGE_METRO}
-MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}  # порог точек по дальности  # rect -- прежний прямоугольник +-1м x 0.15-2м
+MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}
 
 
 def run_bag(job):

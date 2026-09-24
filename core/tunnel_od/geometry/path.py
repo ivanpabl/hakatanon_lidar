@@ -16,11 +16,11 @@ import numpy as np
 from .bed import rail_top_at
 
 WALL_BIN_M = 4.0
-WALL_BAND = (0.5, 2.5)     # высота над головкой рельса, в которой ищем стену
-WALL_MIN_LAT = 1.1         # ближе к оси -- это уже коридор, не стена
-WALL_MAX_LAT = 4.5         # дальше -- стены нет (двухпутный тоннель, пустота)
-WALL_TOL = 0.3             # допуск стены от предсказания, м
-WALL_MAX_MISSES = 3        # столько бинов подряд без стены -- ось дальше не известна
+WALL_BAND = (0.5, 2.5)
+WALL_MIN_LAT = 1.1
+WALL_MAX_LAT = 4.5
+WALL_TOL = 0.3
+WALL_MAX_MISSES = 3
 
 
 def _wall_dist(lat, side):
@@ -41,7 +41,6 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0):
     sel = (h > WALL_BAND[0]) & (h < WALL_BAND[1])
     fwd, x = fwd[sel], x[sel]
 
-    # расстояние до стен там, где ось известна по рельсам
     near = fwd <= f_end
     lat_near = x[near] - np.interp(fwd[near], fit_fwd, cl)
     offsets = {}
@@ -52,12 +51,11 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0):
             d = _wall_dist(lat_near[b], side)
             if d is not None:
                 ds.append(d)
-        if len(ds) >= 3 and np.std(ds) < 0.3:  # стена ровная на известном участке
+        if len(ds) >= 3 and np.std(ds) < 0.3:
             offsets[side] = float(np.median(ds))
     if not offsets:
         return fit_fwd, cl
 
-    # ведём ось дальше
     af = list(fit_fwd[::10]) + [fit_fwd[-1]]
     ac = list(cl[::10]) + [cl[-1]]
     far_sel = fwd > f_end
@@ -88,7 +86,6 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0):
         return fit_fwd, cl
     ext_f = np.array(af); ext_c = np.array(ac)
     tail = ext_f > f_end
-    # сгладить продление скользящим средним по 3 бинам
     c_t = ext_c[tail]
     if len(c_t) >= 3:
         c_t = np.convolve(np.r_[c_t[0], c_t, c_t[-1]], np.ones(3) / 3, mode='valid')

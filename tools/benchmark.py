@@ -6,7 +6,7 @@
 """
 import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
-    os.environ.setdefault(_v, '1')  # как в одном процессе ноды: numpy в один поток
+    os.environ.setdefault(_v, '1')
 import argparse
 import time
 import warnings
@@ -17,7 +17,7 @@ from tunnel_od import ObstacleDetector, parse_pointcloud2
 
 from bags import BAGS, open_cloud_bag
 
-WARMUP = 3  # первые кадры не считаем: накладные расходы первого вызова, кэши
+WARMUP = 3
 
 
 def main():

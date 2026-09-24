@@ -33,7 +33,6 @@ def build_rays():
 
 
 def intersect_cylinder(dx, dy, dz):
-    # cylinder axis along Y at (x=TUNNEL_CX, z=TUNNEL_CZ), radius TUNNEL_R
     ox, oz = -TUNNEL_CX, -TUNNEL_CZ
     a = dx ** 2 + dz ** 2
     b = 2 * (ox * dx + oz * dz)
@@ -59,7 +58,6 @@ def intersect_plane_z(dx, dy, dz, z_plane):
 
 
 def intersect_rail_strips(dx, dy, dz):
-    # approximate rails as raised horizontal planes only within their lateral band; use plane at z=Z_FLOOR+RAIL_HEIGHT
     t = intersect_plane_z(dx, dy, dz, Z_FLOOR + RAIL_HEIGHT)
     x_hit = dx * t
     in_band = (np.abs(np.abs(x_hit) - RAIL_HALF_GAUGE) < RAIL_WIDTH / 2)
@@ -90,14 +88,14 @@ def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=
     t_rail = intersect_rail_strips(dx, dy, dz)
 
     t = np.minimum(np.minimum(t_wall, t_floor), t_rail)
-    surface = np.where(t == t_rail, 2, np.where(t == t_floor, 1, 0))  # 0=wall,1=floor,2=rail
+    surface = np.where(t == t_rail, 2, np.where(t == t_floor, 1, 0))
 
     if obstacle_forward is not None:
         oz = obstacle_height if obstacle_height is not None else (Z_FLOOR + obstacle_radius)
         t_obs = intersect_sphere(dx, dy, dz, (obstacle_lateral, obstacle_forward, oz), obstacle_radius)
         hit_obs = t_obs < t
         t = np.minimum(t, t_obs)
-        surface = np.where(hit_obs, 3, surface)  # 3=obstacle
+        surface = np.where(hit_obs, 3, surface)
 
     valid = np.isfinite(t) & (t < MAX_RANGE)
     t = t[valid]
@@ -113,7 +111,6 @@ def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=
     ).astype(np.float32)
     intensity += np.random.normal(0, 2.0, size=intensity.shape).astype(np.float32)
 
-    # convert to sensor-frame convention used by real bags: forward = -y
     x_out = X.astype(np.float32)
     y_out = (-Y).astype(np.float32)
     z_out = Z.astype(np.float32)
@@ -133,7 +130,6 @@ if __name__ == '__main__':
             if d is None:
                 print(f'  empty tunnel: {len(x)} pts, false hits on empty-tunnel baseline: n/a')
                 continue
-            # angular gap analysis: elevation of obstacle center vs nearest real channel
             obs_el_deg = np.degrees(np.arctan2(Z_FLOOR + radius, d))
             nearest_gap = np.min(np.abs(REAL_ELEVATIONS_DEG - obs_el_deg))
             print(f'  {d:>4}m: {n_hits:4d} rays hit obstacle | nearest channel gap={nearest_gap:.3f} deg '

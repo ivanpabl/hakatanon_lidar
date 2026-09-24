@@ -38,7 +38,6 @@ def inject(data, point_step, objects, fields=None, dirs=None, range_noise=0.02, 
     t = np.full(len(x), np.inf)
     per_obj = []
     for ob in objects:
-        # считаем пересечение только для лучей в угловой окрестности объекта
         c, rad = ob.bound()
         dist = np.linalg.norm(c)
         cos_lim = np.cos(np.arcsin(min(1.0, rad / dist)) + np.radians(0.2)) if dist > rad else -1.0
@@ -56,14 +55,11 @@ def inject(data, point_step, objects, fields=None, dirs=None, range_noise=0.02, 
     if 'intensity' in v:
         v['intensity'][ret] = intensity
     lost = blocked & ~ret
-    x[lost] = y[lost] = z[lost] = 0.0  # попал в объект, но отражения нет -- как "нет возврата"
+    x[lost] = y[lost] = z[lost] = 0.0
 
-    # dual return: второй столбец пары дублирует первый -> считаем по первому
     first = lambda m: int(m.reshape(-1, 2, COLUMN_HEIGHT)[:, 0].sum())
     info = {'rays_on_object': per_obj, 'points_replaced': int(ret.sum()), 'rays_dropped': int(lost.sum()),
             'points_on_object': first(ret),
-            # лучи, геометрически попадающие в объект, и те из них, что не заслонены сценой:
-            # visible << geometric -- объект стоит за стеной/платформой (неверное размещение)
             'rays_geometric': first(t < max_range), 'rays_visible': first(blocked)}
     return buf.tobytes(), info
 

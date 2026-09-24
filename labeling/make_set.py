@@ -36,17 +36,15 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
-from bags import DATA, open_cloud_bag  # noqa: E402
-from viz.render import render_frame  # noqa: E402
+from bags import DATA, open_cloud_bag
+from viz.render import render_frame
 
 OUT = DATA / 'labeling'
 STEP = 10
-WARMUP = 20            # кадров прогрева детектора перед диапазоном --range
+WARMUP = 20
 CALIB_N = 40
 OVERLAP = 0.12
 
-
-# --- render -------------------------------------------------------------------
 
 def cmd_render(args):
     import sys
@@ -61,7 +59,7 @@ def cmd_render(args):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     det = ObstacleDetector()
-    buf = deque(maxlen=STEP + 2)   # последние кадры -- чтобы отрисовать короткую тревогу задним числом
+    buf = deque(maxlen=STEP + 2)
     event, frames = None, []
     with open_cloud_bag(args.bag) as (reader, conn):
         t0 = None
@@ -83,7 +81,6 @@ def cmd_render(args):
             todo = []
             if i % STEP == 0:
                 todo.append((buf[-1], 'step'))
-            # тревога, целиком проскочившая между кадрами шага, -- берём её первый кадр
             if res['obstacle']:
                 if event is None:
                     event = {'first': i, 'covered': False}
@@ -107,8 +104,6 @@ def cmd_render(args):
     print(f'{args.bag} [{start}:{end}]: готово, {len(frames)} кадров')
 
 
-# --- split --------------------------------------------------------------------
-
 def cmd_split(args):
     items = []
     for bag_dir in sorted((OUT / 'frames').iterdir()):
@@ -122,7 +117,6 @@ def cmd_split(args):
     for k, f in enumerate(items):
         f['id'] = f"{f['bag']}:{f['frame']}"
 
-    # калибровка: одинаковые кадры у всех -- половина с тревогой детектора, половина без
     rng = random.Random(0)
     alarm = [f for f in items if f['alarm']]
     quiet = [f for f in items if not f['alarm']]
@@ -139,7 +133,7 @@ def cmd_split(args):
     summary = []
     for k in range(n):
         nxt = chunks[(k + 1) % n]
-        overlap = nxt[:int(len(nxt) * OVERLAP)]  # начало куска соседа -- размечают двое
+        overlap = nxt[:int(len(nxt) * OVERLAP)]
         sets = [('calib', calib), ('main', chunks[k]), ('overlap', overlap)]
         pdir = OUT / f'participant_{k + 1}'
         if pdir.exists():
