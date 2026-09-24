@@ -10,14 +10,14 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from detector_interface import ObstacleDetector
+from detector_interface import ObstacleDetector, parse_pointcloud2
 
 ts = get_typestore(Stores.ROS2_HUMBLE)
-BAG = Path('/home/pablo/Documents/hakaton/new_data')
+BAG = Path(__file__).resolve().parent.parent / 'new_data'
 OUT = Path(__file__).parent / 'out'
 OUT.mkdir(exist_ok=True)
 
-REFIT_EVERY = 50  # refresh path geometry every 50 frames (~5s at ~9.86Hz)
+REFIT_EVERY = 1  # путь пересчитывается каждый кадр (~20-40мс, укладывается в 100мс)
 
 det = ObstacleDetector()
 
@@ -29,24 +29,19 @@ with AnyReader([BAG], default_typestore=ts) as reader:
     t0 = None
     for i, (connection, timestamp, rawdata) in enumerate(reader.messages(connections=[conn])):
         msg = reader.deserialize(rawdata, connection.msgtype)
-        buf = np.frombuffer(msg.data, dtype=np.uint8).reshape(-1, msg.point_step)
-        x = buf[:, 0:4].view(np.float32).ravel()
-        y = buf[:, 4:8].view(np.float32).ravel()
-        z = buf[:, 8:12].view(np.float32).ravel()
-        valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
-        x, y, z = x[valid], y[valid], z[valid]
+        x, y, z = parse_pointcloud2(msg.data, msg.point_step, msg.fields)
 
         if t0 is None:
             t0 = timestamp
         times.append((timestamp - t0) / 1e9)
 
-        result = det.detect(x, y, z, refit_path=(i % REFIT_EVERY == 0))
+        result = det.detect(x, y, z, refit_path=(i % REFIT_EVERY == 0), stamp=timestamp / 1e9)
         obstacle_flags.append(result['obstacle'])
         dists.append(result['distance_m'] if result['distance_m'] is not None else np.nan)
         path_ok_flags.append(result['path_available'])
         n_points_list.append(result['n_points'])
 
-        del msg, rawdata, x, y, z, buf
+        del msg, rawdata, x, y, z
         if i % 1000 == 0:
             print(f'  ...{i} кадров обработано, t={times[-1]:.0f}с')
 

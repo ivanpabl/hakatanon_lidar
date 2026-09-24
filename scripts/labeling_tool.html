@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Разметка препятствий</title>
+<script src="manifest.js"></script>
+<style>
+  :root { --bg:#f6f6f4; --panel:#fff; --text:#1d1d1b; --muted:#6b6b66; --line:#d9d9d4;
+          --ok:#2e7d32; --bad:#c62828; --unk:#b26a00; --accent:#1f5fbf; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; gap:16px; align-items:center; padding:8px 14px; background:var(--panel);
+           border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; flex-wrap:wrap; }
+  header b { font-size:15px; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:12px; background:#e8e8e3; }
+  .badge.calib { background:#e3ecfa; color:var(--accent); }
+  .badge.overlap { background:#f6ecd9; color:var(--unk); }
+  .progress { flex:1; min-width:120px; height:6px; background:#e8e8e3; border-radius:3px; overflow:hidden; }
+  .progress > div { height:100%; background:var(--accent); }
+  main { display:flex; gap:12px; padding:12px; align-items:flex-start; }
+  #stage { position:relative; flex:1; min-width:0; }
+  #stage img { width:100%; display:block; background:#fff; border:1px solid var(--line); cursor:crosshair; }
+  #overlay { position:absolute; left:0; top:0; pointer-events:none; }
+  aside { width:320px; flex-shrink:0; background:var(--panel); border:1px solid var(--line);
+          border-radius:6px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; }
+  button { font:inherit; padding:6px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+  button:hover { border-color:#aaa; }
+  button.on.v-empty { background:var(--ok); color:#fff; border-color:var(--ok); }
+  button.on.v-obstacle { background:var(--bad); color:#fff; border-color:var(--bad); }
+  button.on.v-unclear { background:var(--unk); color:#fff; border-color:var(--unk); }
+  button.on.cls { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.on.flag { background:#555; color:#fff; }
+  kbd { font:12px ui-monospace, monospace; background:#eee; color:#333; border:1px solid #ccc; border-radius:3px; padding:0 4px; }
+  button.on kbd { background:rgba(255,255,255,.25); color:#fff; border-color:rgba(255,255,255,.5); }
+  textarea { width:100%; font:inherit; min-height:50px; }
+  ul { margin:0; padding-left:18px; }
+  .muted { color:var(--muted); font-size:12px; }
+  details summary { cursor:pointer; font-weight:600; }
+  @media (max-width: 900px) { main { flex-direction:column; } aside { width:100%; } }
+</style>
+</head>
+<body>
+<header>
+  <b id="who"></b>
+  <span id="pos"></span>
+  <span id="set" class="badge"></span>
+  <span id="where" class="muted"></span>
+  <div class="progress"><div id="bar"></div></div>
+  <span id="done" class="muted"></span>
+</header>
+<main>
+  <div id="stage">
+    <img id="img" alt="кадр">
+    <canvas id="overlay"></canvas>
+  </div>
+  <aside>
+    <div>
+      <div class="muted">Что на кадре</div>
+      <div class="row">
+        <button class="v-empty" data-v="empty">Пусто <kbd>1</kbd></button>
+        <button class="v-obstacle" data-v="obstacle">Препятствие <kbd>2</kbd></button>
+        <button class="v-unclear" data-v="unclear">Неясно <kbd>3</kbd></button>
+      </div>
+    </div>
+    <div>
+      <div class="muted">Тип объекта для следующего клика</div>
+      <div class="row">
+        <button class="cls" data-c="предмет">Предмет <kbd>Q</kbd></button>
+        <button class="cls" data-c="человек">Человек <kbd>W</kbd></button>
+        <button class="cls" data-c="техника">Техника <kbd>E</kbd></button>
+        <button class="cls" data-c="другое">Другое <kbd>R</kbd></button>
+      </div>
+    </div>
+    <div>
+      <div class="muted">Объекты (клик по коридору слева добавляет, <kbd>Backspace</kbd> убирает последний)</div>
+      <ul id="objs"></ul>
+    </div>
+    <div class="row">
+      <button class="flag" id="axis">Ось пути не на пути <kbd>A</kbd></button>
+    </div>
+    <div>
+      <div class="muted">Комментарий</div>
+      <textarea id="comment" placeholder="необязательно"></textarea>
+    </div>
+    <div class="row">
+      <button id="prev">← Назад</button>
+      <button id="next">Дальше →</button>
+      <button id="todo">К неразмеченному <kbd>N</kbd></button>
+    </div>
+    <div class="row">
+      <button id="export">Сохранить CSV</button>
+      <label><button id="importBtn" type="button">Загрузить CSV</button>
+        <input id="import" type="file" accept=".csv" hidden></label>
+    </div>
+    <details>
+      <summary>Как размечать</summary>
+      <ul>
+        <li><b>Пусто</b>: в коридоре (до ~1,5 м от оси пути, выше головки рельса) нет посторонних объектов.</li>
+        <li><b>Препятствие</b>: есть посторонний объект. Кликнуть по нему на одной из двух левых панелей: запишется дальность и смещение от оси. Несколько объектов — несколько кликов.</li>
+        <li><b>Не препятствие</b>: стены, платформа, рельсы, стрелки, гермозатвор, кабели на стенах.</li>
+        <li><b>Признаки настоящего объекта</b>: компактный кластер, не сливается со стеной; тень (нет точек пола) сразу за ним; виден на профиле как «столбик» над нулём.</li>
+        <li><b>Серая зона</b>: ось пути там не найдена, выпрямленный коридор ненадёжен. Сверяться с видом сверху справа внизу. Если линия оси явно не на пути — нажать <kbd>A</kbd>.</li>
+        <li>Не уверены — <b>Неясно</b> и пару слов в комментарии.</li>
+        <li>Разметка сохраняется в браузере сама. В конце — <b>Сохранить CSV</b> и отправить файл.</li>
+      </ul>
+    </details>
+  </aside>
+</main>
+<script>
+(() => {
+  const M = window.MANIFEST;
+  if (!M) { document.body.textContent = 'Не найден manifest.js рядом со страницей.'; return; }
+  const KEY = 'labels_participant_' + M.participant;
+  const items = M.items;
+  let labels = {};
+  try { labels = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  let cls = 'предмет';
+  let i = 0;
+  const $ = id => document.getElementById(id);
+  const img = $('img'), cv = $('overlay');
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(labels)); } catch (e) {} };
+  const cur = () => items[i];
+  const lab = () => (labels[cur().id] ||= { verdict: '', objects: [], axis_wrong: false, comment: '' });
+  const isDone = it => !!(labels[it.id] && labels[it.id].verdict);
+
+  function toData(nx, ny, it) {
+    for (const p of it.panels) {
+      if (nx >= p.x0 && nx <= p.x1 && ny >= p.y_top && ny <= p.y_bottom) {
+        const lat = p.lat[0] + (nx - p.x0) / (p.x1 - p.x0) * (p.lat[1] - p.lat[0]);
+        const fwd = p.fwd[1] - (ny - p.y_top) / (p.y_bottom - p.y_top) * (p.fwd[1] - p.fwd[0]);
+        return { fwd: +fwd.toFixed(1), lat: +lat.toFixed(2) };
+      }
+    }
+    return null;
+  }
+  function toPixels(o, it) {
+    for (const p of it.panels) {
+      if (o.fwd >= p.fwd[0] && o.fwd <= p.fwd[1]) {
+        return [p.x0 + (o.lat - p.lat[0]) / (p.lat[1] - p.lat[0]) * (p.x1 - p.x0),
+                p.y_top + (p.fwd[1] - o.fwd) / (p.fwd[1] - p.fwd[0]) * (p.y_bottom - p.y_top)];
+      }
+    }
+    return null;
+  }
+
+  function draw() {
+    const it = cur();
+    cv.width = img.clientWidth; cv.height = img.clientHeight;
+    cv.style.width = img.clientWidth + 'px'; cv.style.height = img.clientHeight + 'px';
+    const k = img.clientWidth / it.w;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ((labels[it.id] || {}).objects || []).forEach((o, n) => {
+      const px = toPixels(o, it); if (!px) return;
+      ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(px[0] * k, px[1] * k, 9, 0, 2 * Math.PI); ctx.stroke();
+      ctx.fillStyle = '#c62828'; ctx.font = 'bold 12px system-ui';
+      ctx.fillText(String(n + 1), px[0] * k + 11, px[1] * k - 6);
+    });
+  }
+
+  function render() {
+    const it = cur(), l = labels[it.id] || {};
+    $('who').textContent = 'Участник ' + M.participant;
+    $('pos').textContent = (i + 1) + ' / ' + items.length;
+    const setName = { calib: 'калибровка (у всех)', main: 'свой участок', overlap: 'перекрытие с соседом' }[it.set];
+    $('set').textContent = setName; $('set').className = 'badge ' + it.set;
+    $('where').textContent = it.bag + ', кадр ' + it.frame + ', t=' + it.t + ' с';
+    const done = items.filter(isDone).length;
+    $('done').textContent = 'размечено ' + done;
+    $('bar').style.width = (100 * done / items.length) + '%';
+    document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', l.verdict === b.dataset.v));
+    document.querySelectorAll('[data-c]').forEach(b => b.classList.toggle('on', cls === b.dataset.c));
+    $('axis').classList.toggle('on', !!l.axis_wrong);
+    $('comment').value = l.comment || '';
+    $('objs').innerHTML = (l.objects || []).map((o, n) =>
+      `<li>${n + 1}. ${o.cls}: ${o.fwd} м вперёд, ${o.lat > 0 ? '+' : ''}${o.lat} м вбок</li>`).join('') || '<li class="muted">нет</li>';
+    if (img.getAttribute('src') !== it.img) img.src = it.img; else draw();
+  }
+
+  const go = n => { i = Math.max(0, Math.min(items.length - 1, n)); render(); };
+  const setVerdict = v => {
+    const l = lab();
+    l.verdict = v;
+    if (v !== 'obstacle' && v !== 'unclear') l.objects = [];
+    save(); render();
+  };
+  const nextTodo = () => {
+    for (let s = 1; s <= items.length; s++) {
+      const n = (i + s) % items.length;
+      if (!isDone(items[n])) return go(n);
+    }
+  };
+
+  img.addEventListener('load', draw);
+  window.addEventListener('resize', draw);
+  img.addEventListener('click', e => {
+    const it = cur();
+    const k = it.w / img.clientWidth;
+    const d = toData(e.offsetX * k, e.offsetY * k, it);
+    if (!d) return;
+    const l = lab();
+    l.objects.push({ ...d, cls });
+    if (l.verdict !== 'unclear') l.verdict = 'obstacle';
+    save(); render();
+  });
+  document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => setVerdict(b.dataset.v));
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { cls = b.dataset.c; render(); });
+  $('axis').onclick = () => { const l = lab(); l.axis_wrong = !l.axis_wrong; save(); render(); };
+  $('comment').oninput = e => { lab().comment = e.target.value; save(); };
+  $('prev').onclick = () => go(i - 1);
+  $('next').onclick = () => go(i + 1);
+  $('todo').onclick = nextTodo;
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA') return;
+    const k = e.key.toLowerCase();
+    const classKeys = { q: 'предмет', 'й': 'предмет', w: 'человек', 'ц': 'человек', e: 'техника', 'у': 'техника', r: 'другое', 'к': 'другое' };
+    if (k === '1') setVerdict('empty');
+    else if (k === '2') setVerdict('obstacle');
+    else if (k === '3') setVerdict('unclear');
+    else if (classKeys[k]) { cls = classKeys[k]; render(); }
+    else if (k === 'a' || k === 'ф') $('axis').onclick();
+    else if (k === 'n' || k === 'т') nextTodo();
+    else if (e.key === 'ArrowRight' || e.key === 'Enter') go(i + 1);
+    else if (e.key === 'ArrowLeft') go(i - 1);
+    else if (e.key === 'Backspace') { const l = lab(); l.objects.pop(); save(); render(); }
+    else return;
+    e.preventDefault();
+  });
+
+  const csvCell = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
+  $('export').onclick = () => {
+    const head = ['participant', 'id', 'bag', 'frame', 't', 'set', 'verdict', 'axis_wrong', 'objects', 'comment'];
+    const rows = items.map(it => {
+      const l = labels[it.id] || {};
+      const objs = (l.objects || []).map(o => `${o.fwd};${o.lat};${o.cls}`).join('|');
+      return [M.participant, it.id, it.bag, it.frame, it.t, it.set, l.verdict || '', l.axis_wrong ? 1 : 0, objs, l.comment || '']
+        .map(csvCell).join(',');
+    });
+    const blob = new Blob(['﻿' + head.join(',') + '\n' + rows.join('\n') + '\n'], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `labels_participant_${M.participant}.csv`;
+    a.click();
+  };
+  $('importBtn').onclick = () => $('import').click();
+  $('import').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    f.text().then(txt => {
+      const lines = txt.replace(/^﻿/, '').trim().split(/\r?\n/).slice(1);
+      const parse = line => { const out = []; let cur = '', q = false;
+        for (let c = 0; c < line.length; c++) { const ch = line[c];
+          if (q) { if (ch === '"' && line[c + 1] === '"') { cur += '"'; c++; } else if (ch === '"') q = false; else cur += ch; }
+          else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch; }
+        out.push(cur); return out; };
+      let n = 0;
+      for (const line of lines) {
+        const [, id, , , , , verdict, axis, objs, comment] = parse(line);
+        if (!verdict) continue;
+        labels[id] = { verdict, axis_wrong: axis === '1', comment,
+          objects: objs ? objs.split('|').map(s => { const [fwd, lat, c] = s.split(';'); return { fwd: +fwd, lat: +lat, cls: c }; }) : [] };
+        n++;
+      }
+      save(); render(); alert('Загружено разметок: ' + n);
+    });
+  };
+
+  const firstTodo = items.findIndex(it => !isDone(it));
+  go(firstTodo < 0 ? 0 : firstTodo);
+})();
+</script>
+</body>
+</html>

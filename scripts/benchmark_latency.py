@@ -2,78 +2,53 @@
 No ROS2 / Docker needed for this -- it's a pure algorithmic timing benchmark,
 directly relevant to ТЗ criterion 8.3 (speed / real-time performance)."""
 import time
+import warnings
 import numpy as np
 from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore
 from pathlib import Path
 
-from rail_pathfit import find_floor_bumps
+from detector_interface import ObstacleDetector, parse_pointcloud2
 
+warnings.simplefilter('ignore', np.exceptions.RankWarning)
 ts = get_typestore(Stores.ROS2_HUMBLE)
-ROOT = Path('/home/pablo/Documents/hakaton/Датасет/archive/for_hackathon')
+ROOT = Path(__file__).resolve().parent.parent / 'Датасет' / 'archive' / 'for_hackathon'
 BAGS = sorted([p for p in ROOT.iterdir() if p.is_dir()])
 N_FRAMES = 15  # frames to time per bag (after 3 warmup frames)
 
 
-def load_xyz_timed(rawdata, msgtype, reader):
-    t0 = time.perf_counter()
-    msg = reader.deserialize(rawdata, msgtype)
-    buf = np.frombuffer(msg.data, dtype=np.uint8).reshape(-1, msg.point_step)
-    x = buf[:, 0:4].view(np.float32).ravel()
-    y = buf[:, 4:8].view(np.float32).ravel()
-    z = buf[:, 8:12].view(np.float32).ravel()
-    valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
-    x, y, z = x[valid], y[valid], z[valid]
-    t1 = time.perf_counter()
-    return x, y, z, (t1 - t0)
+print(f'{"бег":<38} {"точек/кадр":>10} {"parse мс":>9} {"check мс":>9} {"refit мс":>9} {"detect FPS*":>12}')
+print('-' * 95)
 
-
-def corridor_check_timed(x, y, z, half_width=1.0, near=1.0, z_min=-1.6, z_max=1.0):
-    t0 = time.perf_counter()
-    fwd = -y
-    mask = (fwd > near) & (np.abs(x) < half_width) & (z > z_min) & (z < z_max)
-    d = fwd[mask]
-    _ = d.min() if d.size else np.nan
-    t1 = time.perf_counter()
-    return t1 - t0
-
-
-print(f'{"бег":<38} {"точек/кадр":>10} {"parse мс":>9} {"corridor мс":>12} {"rail-fit мс":>12} {"обзор FPS*":>11}')
-print('-' * 100)
-
-overall_parse, overall_corridor, overall_railfit, overall_n = [], [], [], []
-
+overall = []
 for bag in BAGS:
-    parse_times, corridor_times, railfit_times, npts = [], [], [], []
+    det = ObstacleDetector()
+    t_parse, t_check, t_refit, npts = [], [], [], []
     with AnyReader([bag], default_typestore=ts) as reader:
         conn = reader.connections[0]
         for i, (connection, timestamp, rawdata) in enumerate(reader.messages(connections=[conn])):
             if i >= 3 + N_FRAMES:
                 break
-            x, y, z, dt_parse = load_xyz_timed(rawdata, connection.msgtype, reader)
-            dt_corridor = corridor_check_timed(x, y, z)
+            msg = reader.deserialize(rawdata, connection.msgtype)
             t0 = time.perf_counter()
-            find_floor_bumps(x, y, z)
-            dt_railfit = time.perf_counter() - t0
+            x, y, z = parse_pointcloud2(msg.data, msg.point_step, msg.fields)
+            t1 = time.perf_counter()
+            det.update_path(x, y, z)
+            t2 = time.perf_counter()
+            det.check_frame(x, y, z)
+            t3 = time.perf_counter()
             if i >= 3:  # skip warmup frames (first-call overhead, cache effects)
-                parse_times.append(dt_parse)
-                corridor_times.append(dt_corridor)
-                railfit_times.append(dt_railfit)
+                t_parse.append(t1 - t0); t_refit.append(t2 - t1); t_check.append(t3 - t2)
                 npts.append(len(x))
-            del x, y, z, rawdata
 
-    p_ms = np.mean(parse_times) * 1000
-    c_ms = np.mean(corridor_times) * 1000
-    r_ms = np.mean(railfit_times) * 1000
-    fps = 1000 / (p_ms + c_ms)  # FPS if only parse+corridor ran every frame (rail-fit run less often)
-    print(f'{bag.name:<38} {int(np.mean(npts)):>10} {p_ms:>9.2f} {c_ms:>12.3f} {r_ms:>12.1f} {fps:>11.0f}')
-    overall_parse.append(p_ms); overall_corridor.append(c_ms); overall_railfit.append(r_ms); overall_n.append(np.mean(npts))
+    p_ms, c_ms, r_ms = (np.mean(t) * 1000 for t in (t_parse, t_check, t_refit))
+    fps = 1000 / (p_ms + c_ms + r_ms)  # путь пересчитывается на каждом кадре
+    print(f'{bag.name:<38} {int(np.mean(npts)):>10} {p_ms:>9.1f} {c_ms:>9.1f} {r_ms:>9.1f} {fps:>12.0f}')
+    overall.append((p_ms, c_ms, r_ms, np.mean(npts)))
 
-print('-' * 100)
-print(f'{"СРЕДНЕЕ по всем бегам":<38} {int(np.mean(overall_n)):>10} {np.mean(overall_parse):>9.2f} '
-      f'{np.mean(overall_corridor):>12.3f} {np.mean(overall_railfit):>12.1f} '
-      f'{1000/(np.mean(overall_parse)+np.mean(overall_corridor)):>11.0f}')
+p_ms, c_ms, r_ms, n = np.mean(overall, axis=0)
+print('-' * 95)
+print(f'{"СРЕДНЕЕ по всем бегам":<38} {int(n):>10} {p_ms:>9.1f} {c_ms:>9.1f} {r_ms:>9.1f} {1000/(p_ms+c_ms+r_ms):>12.0f}')
 print()
-print('* FPS-оценка предполагает, что corridor-check (проверка препятствия) считается каждый кадр,')
-print('  а rail-fit (геометрия пути) -- нет, он не обязан пересчитываться на каждом кадре')
-print('  (путь меняется медленно относительно частоты кадров лидара).')
+print('* FPS при пересчёте пути (refit) на КАЖДОМ кадре; "точек/кадр" -- после очистки')
+print('  от нулей и дублей dual return в parse_pointcloud2.')

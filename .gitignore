@@ -19,3 +19,6 @@ scripts/out/
 
 # служебная папка Claude Code
 .claude/
+
+# набор для ручной разметки (картинки, ~сотни МБ) - собирается scripts/make_labeling_set.py
+/labeling/
