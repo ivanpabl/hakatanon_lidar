@@ -33,9 +33,9 @@ MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}
 
 
 def run_bag(job):
-    bag, corridor, minpts = job
+    bag, corridor, minpts, method = job
     warnings.simplefilter('ignore')
-    det = ObstacleDetector(zone=CORRIDORS[corridor], **MINPTS[minpts])
+    det = ObstacleDetector(zone=CORRIDORS[corridor], method=method, **MINPTS[minpts])
     rows = []
     with open_cloud_bag(bag) as (reader, conn):
         t0 = None
@@ -70,11 +70,12 @@ def main():
     ap.add_argument('--bags', nargs='+', default=BAGS)
     ap.add_argument('--corridor', default='rect', choices=list(CORRIDORS))
     ap.add_argument('--minpts', default='on', choices=list(MINPTS), help='порог числа точек по дальности')
+    ap.add_argument('--method', default='zone', choices=['zone', 'background'], help='zone -- точки в зоне; background -- остаток до фона тоннеля')
     ap.add_argument('--workers', type=int, default=2, help='параллельных процессов (каждый -- ядро и до ~0.5ГБ)')
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     with Pool(min(len(args.bags), args.workers)) as pool:
-        parts = pool.map(run_bag, [(b, args.corridor, args.minpts) for b in args.bags])
+        parts = pool.map(run_bag, [(b, args.corridor, args.minpts, args.method) for b in args.bags])
     rows = [r for p in parts for r in p]
     path = OUT / f'alarms_{args.tag}.csv'
     with open(path, 'w', newline='', encoding='utf-8') as f:
@@ -98,7 +99,7 @@ def main():
     print(f'{"ВСЕГО":<37}{tot[0]:>7}{60 * tot[3]:>6.1f}{tot[1]:>9} ({100 * tot[1] / tot[0]:4.1f}%){tot[2]:>10}'
           f'{tot[2] / tot[3]:>11.0f}')
     print(f'\n"1-2 точки" -- доля кадров с тревогой, где ближайший подтверждённый объект из 1-2 точек.')
-    print(f'Коридор: {args.corridor}, порог точек: {args.minpts}. Записано: {path}')
+    print(f'Метод: {args.method}, коридор: {args.corridor}, порог точек: {args.minpts}. Записано: {path}')
 
 
 if __name__ == '__main__':
