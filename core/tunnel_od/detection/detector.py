@@ -12,25 +12,39 @@
 """
 import numpy as np
 
+from ..geometry.ego_motion import S_RANGE as EGO_S_RANGE, EgoMotion
 from ..geometry.bed import bed_at, estimate_bed_profile, estimate_floor_z, rail_top_at
 from ..geometry.path import TrackPath, extend_path_by_walls
 from ..geometry.rails import fit_path
+from . import background
 from .clustering import MIN_POINTS_FLOOR, MIN_POINTS_K, cluster_points, min_points_at
 from .tracking import Tracker
-from .zone import rect_zone, zone_mask
+from .zone import RECT_DEFAULT, rect_zone, zone_mask
 
 
 class ObstacleDetector:
     """Состояние между кадрами: путь (рельсы), смещение головки рельса над
-    полотном, треки объектов для подтверждения."""
+    полотном, треки объектов для подтверждения.
+
+    method='zone' -- объект = точки внутри зоны над рельсами (zone);
+    method='background' -- точки внутри зоны (по умолчанию background.ZONE), которые
+    ближе к оси пути, чем фон тоннеля на этом угле, больше чем на bg_residual; где фон
+    не оценить -- как method='zone' с прямоугольником RECT_DEFAULT."""
 
     def __init__(self, near_cutoff=2.0, max_range=250.0, half_width=1.0,
                  clearance=0.15, height=2.0, confirm_hits=3, confirm_window=5,
                  max_path_age=30, default_rail_offset=0.5, path_margin=10.0, zone=None,
-                 min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR):
+                 min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR,
+                 method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False):
+        if method not in ('zone', 'background'):
+            raise ValueError(method)
+        self.method = method
+        self.bg_residual = bg_residual
         self.near_cutoff = near_cutoff
         self.max_range = max_range
-        self.zone = tuple(zone) if zone is not None else rect_zone(clearance, height, half_width)
+        if zone is None:
+            zone = background.ZONE if method == 'background' else rect_zone(clearance, height, half_width)
+        self.zone = tuple(zone)
         self.half_width = max(hw for _, _, hw in self.zone)
         self.confirm_hits = confirm_hits
         self.confirm_window = confirm_window
@@ -49,6 +63,9 @@ class ObstacleDetector:
         self._offset_measured = False
         self._frame = 0
         self._tracker = Tracker(confirm_hits, confirm_window)
+        self._ego = EgoMotion() if ego_motion else None
+        self.speed = None
+        self._displacement = None
 
     def update_path(self, x, y, z) -> bool:
         """Пересчёт пути по рельсам. True -- путь найден и обновлён;
@@ -124,10 +141,24 @@ class ObstacleDetector:
         m = (fwd > self.near_cutoff) & (fwd < self.max_range)
         fwd, x, z = fwd[m], x[m], z[m]
         lat = x - self._center_of_fwd(fwd)
-        m = np.abs(lat) < self.half_width
-        fwd, lat, z = fwd[m], lat[m], z[m]
-        z_rel = z - self._tor_at(fwd, self._bed)
-        m = zone_mask(lat, z_rel, self.zone)
+        if self._ego is not None:
+            e = fwd < EGO_S_RANGE[1] + self._ego._max_shift
+            self.speed, self._displacement = self._ego.update(
+                fwd[e], lat[e], z[e] - self._tor_at(fwd[e], self._bed), stamp)
+        if self.method == 'zone':
+            m = np.abs(lat) < self.half_width
+            fwd, lat, z = fwd[m], lat[m], z[m]
+            z_rel = z - self._tor_at(fwd, self._bed)
+            m = zone_mask(lat, z_rel, self.zone)
+        else:
+            z_rel = z - self._tor_at(fwd, self._bed)
+            rails_end = self._rail_prof[0][-1] if self._rail_prof is not None else 0.0
+            hw = np.where(fwd <= rails_end, self.half_width, min(self.half_width, background.FAR_HALF_WIDTH))
+            in_zone = (np.abs(lat) < hw) & zone_mask(lat, z_rel, self.zone)
+            res = background.background_residual(fwd, lat, z_rel, in_zone, self.max_range)
+            unknown = np.isnan(res)
+            thr = background.residual_threshold(fwd, self.bg_residual)
+            m = in_zone & ((~unknown & (res > thr)) | (unknown & zone_mask(lat, z_rel, RECT_DEFAULT)))
 
         objects = cluster_points(fwd[m], lat[m], z_rel[m])
         for o in objects:
@@ -149,6 +180,8 @@ class ObstacleDetector:
             'path_age_frames': None if not path_ok else self._frame - self._path_frame,
             'path_range_m': path_range,
             'objects': objects,
+            'speed_mps': self.speed,
+            'displacement_m': self._displacement,
             'stamp': stamp,
         }
 

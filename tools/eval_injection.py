@@ -89,8 +89,8 @@ def read_windows(bag, positions, need):
 
 
 def run_bag(job):
-    bag, positions, distances, seed, corridor, minpts = job
-    make_det = lambda: ObstacleDetector(zone=CORRIDORS[corridor], **MINPTS[minpts])
+    bag, positions, distances, seed, corridor, minpts, method = job
+    make_det = lambda: ObstacleDetector(zone=CORRIDORS[corridor], method=method, **MINPTS[minpts])
     warnings.simplefilter('ignore')
     rows = []
     windows = read_windows(bag, positions, WARMUP + FRAMES)
@@ -142,7 +142,7 @@ def run_bag(job):
                                      and abs(res['distance_m'] - front) < 1.5 + 0.02 * front)
                 first = next((k for k, h in enumerate(det) if h), -1)
                 rows.append({
-                    'corridor': corridor, 'minpts': minpts, 'placement': placement, 'bag': bag, 'window': w, 't_start_s': round(t_win, 1), 'shape': name, 'kind': kind,
+                    'method': method, 'corridor': corridor, 'minpts': minpts, 'placement': placement, 'bag': bag, 'window': w, 't_start_s': round(t_win, 1), 'shape': name, 'kind': kind,
                     'dims': 'x'.join(map(str, dims)), 'fwd_m': d, 'lat_m': round(lat, 2), 'front_m': round(front, 2),
                     'frames': len(det), 'points_on_object': round(float(np.mean(pts)), 1),
                     'detected': int(first >= 0), 'first_frame': first,
@@ -238,6 +238,7 @@ def main():
     ap.add_argument('--workers', type=int, default=2)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--minpts', default='on', choices=list(MINPTS), help='порог числа точек по дальности')
+    ap.add_argument('--method', default='zone', choices=['zone', 'background'], help='zone -- точки в зоне; background -- остаток до фона тоннеля')
     ap.add_argument('--corridor', default='rect', choices=list(CORRIDORS),
                     help='rect -- прямоугольник +-1м x 0.15-2м (по умолчанию в детекторе), gauge -- габарит GAUGE_METRO')
     args = ap.parse_args()
@@ -245,8 +246,8 @@ def main():
     distances = (20, 40, 80, 130, 200) if args.quick else DISTANCES
 
     OUT.mkdir(exist_ok=True)
-    tag = args.corridor + ('' if args.minpts == 'on' else '_nominpts') + ('_quick' if args.quick else '')
-    jobs = [(b, positions, distances, args.seed, args.corridor, args.minpts) for b in args.bags]
+    tag = ('' if args.method == 'zone' else args.method + '_') + args.corridor + ('' if args.minpts == 'on' else '_nominpts') + ('_quick' if args.quick else '')
+    jobs = [(b, positions, distances, args.seed, args.corridor, args.minpts, args.method) for b in args.bags]
     with Pool(min(len(jobs), args.workers)) as pool:
         rows = [r for part in pool.imap_unordered(run_bag, jobs) for r in part]
     rows.sort(key=lambda r: (r['bag'], r['window'], r['placement'], r['shape'], r['fwd_m']))
