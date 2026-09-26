@@ -18,7 +18,7 @@ from ..geometry.path import TrackPath, extend_path_by_walls
 from ..geometry.rails import fit_path
 from . import background
 from .clustering import MIN_POINTS_FLOOR, MIN_POINTS_K, cluster_points, min_points_at
-from .tracking import Tracker
+from .tracking import EvidenceTracker, Tracker
 from .zone import RECT_DEFAULT, rect_zone, zone_mask
 
 
@@ -35,10 +35,14 @@ class ObstacleDetector:
                  clearance=0.15, height=2.0, confirm_hits=3, confirm_window=5,
                  max_path_age=30, default_rail_offset=0.5, path_margin=10.0, zone=None,
                  min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR,
-                 method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False):
+                 method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,
+                 tracker='hits', evidence_threshold=2.2, evidence_decay=0.8, far_axis=True):
         if method not in ('zone', 'background'):
             raise ValueError(method)
+        if tracker not in ('hits', 'evidence'):
+            raise ValueError(tracker)
         self.method = method
+        self.far_axis = far_axis
         self.bg_residual = bg_residual
         self.near_cutoff = near_cutoff
         self.max_range = max_range
@@ -62,7 +66,11 @@ class ObstacleDetector:
         self._path_range = None
         self._offset_measured = False
         self._frame = 0
-        self._tracker = Tracker(confirm_hits, confirm_window)
+        if tracker == 'evidence':
+            self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits)
+            ego_motion = True
+        else:
+            self._tracker = Tracker(confirm_hits, confirm_window)
         self._ego = EgoMotion() if ego_motion else None
         self.speed = None
         self._displacement = None
@@ -95,7 +103,7 @@ class ObstacleDetector:
                 else:
                     self.rail_offset, self._offset_measured = offset, True
             self._fit_fwd, self._fitted_cl = extend_path_by_walls(
-                x, y, z, fit_fwd, cl, lambda f: self._tor_at(f, bed))
+                x, y, z, fit_fwd, cl, lambda f: self._tor_at(f, bed), far_extend=self.far_axis)
         self._path_range = float(self._fit_fwd[-1])
         return True
 
@@ -163,7 +171,8 @@ class ObstacleDetector:
         objects = cluster_points(fwd[m], lat[m], z_rel[m])
         for o in objects:
             o['too_small'] = o['n_points'] < min_points_at(o['distance_m'], self.min_points_k, self.min_points_floor)
-        self._tracker.update([o for o in objects if not o['too_small']])
+        self._tracker.update(objects, self._displacement,
+                             lambda d: min_points_at(d, self.min_points_k, self.min_points_floor))
         for o in objects:
             o.setdefault('confirmed', False)
         path_range = self._path_range if path_ok else None
