@@ -48,10 +48,24 @@ class Tracker:
         for ob in objects:
             ob['confirmed'] = sum(ob.pop('_track')['hist']) >= self.confirm_hits
 
+    def set_alarm(self, track_ids):
+        pass
+
+    def held(self):
+        return []
+
 
 class EvidenceTracker:
+    """hold -- сколько кадров подряд без объекта трек ещё держит тревогу (held()): вдали объект
+    из 2-3 точек иногда пропадает на кадр-два, и тревога мигает. Держится только трек, который
+    поднял тревогу в последнем кадре с объектом (set_alarm) и был в тревоге не меньше hold_min
+    кадров: подтверждённый трек за концом оси тревоги не поднимал, и его прогноз не должен поднять
+    её, когда ось в следующем кадре длиннее; ложная вспышка на 1-3 кадра не должна удлиняться."""
+
     def __init__(self, threshold=2.2, decay=0.8, min_hits=3, gate_fwd=1.0, gate_rel=0.02,
-                 gate_lat=0.6, max_miss=10):
+                 gate_lat=0.6, max_miss=10, hold=0, hold_min=5):
+        self.hold = hold
+        self.hold_min = hold_min
         self.threshold = threshold
         self.decay = decay
         self.min_hits = min_hits
@@ -60,6 +74,7 @@ class EvidenceTracker:
         self.gate_lat = gate_lat
         self.max_miss = max_miss
         self.tracks = []
+        self._next_id = 0
 
     def update(self, objects, displacement=None, expected=None):
         """objects -- все объекты кадра (и too_small); displacement -- путь поезда за кадр, м
@@ -86,7 +101,8 @@ class EvidenceTracker:
                     if best is None or df < best[0]:
                         best = (df, j)
             if best is None:
-                tr = {'score': 0.0, 'hits': 0, 'miss': 0, 'lateral_m': ob['lateral_m']}
+                tr = {'id': self._next_id, 'score': 0.0, 'hits': 0, 'miss': 0, 'lateral_m': ob['lateral_m']}
+                self._next_id += 1
                 self.tracks.append(tr)
                 taken.add(len(self.tracks) - 1)
             else:
@@ -98,7 +114,25 @@ class EvidenceTracker:
             tr['miss'] = 0
             tr['distance_m'] = d
             tr['lateral_m'] = 0.5 * (tr['lateral_m'] + ob['lateral_m'])
+            for k in ('height_m', 'low_m'):
+                if k in ob:
+                    tr[k] = ob[k]
+            tr['alarm'] = False
+            ob['track_id'] = tr['id']
             ob['evidence'] = round(tr['score'], 2)
             ob['confirmed'] = tr['score'] >= self.threshold and tr['hits'] >= self.min_hits
         self.tracks = [tr for tr in self.tracks
                        if tr['miss'] <= self.max_miss and tr['distance_m'] > -5.0 and tr['score'] > 0.05]
+
+    def set_alarm(self, track_ids):
+        """Треки, объекты которых в этом кадре подняли тревогу."""
+        for tr in self.tracks:
+            if tr['miss'] == 0 and tr['id'] in track_ids:
+                tr['alarm'] = True
+                tr['alarm_frames'] = tr.get('alarm_frames', 0) + 1
+
+    def held(self):
+        """Треки, поднявшие тревогу в последнем кадре с объектом; пропущено 1..hold кадров.
+        distance_m -- прогноз с учётом пути поезда."""
+        return [tr for tr in self.tracks if tr.get('alarm') and tr['alarm_frames'] >= self.hold_min
+                and 1 <= tr['miss'] <= self.hold]

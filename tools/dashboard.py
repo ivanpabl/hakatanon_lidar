@@ -246,12 +246,19 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
         sel = in_zone & (fwd >= near - 0.05) & (fwd <= far + 0.05) & (np.abs(lat - cen - o['lateral_m']) < 0.8)
         alarm = bool(o['confirmed'] and not o['beyond_path'])
         tag[sel] = 2 if alarm else 3
+        box = None
         if sel.any():
+            box = [float(lat[sel].min()), float(lat[sel].max()), float(z[sel].min()),
+                   float(z[sel].max()), float(fwd[sel].min()), float(fwd[sel].max())]
+        elif o.get('held'):
+            # объект пропал в этом кадре, тревога держится по прогнозу трека: рамка там, где он был
+            c = float(snap.center_at(np.array([near]))[0]) + o['lateral_m']
+            r = float(snap.rail_top_at(np.array([near]))[0])
+            box = [c - 0.2, c + 0.2, r + o.get('low_m', 0.0), r + max(o['height_m'], 0.3), near, near + 0.3]
+        if box is not None:
             objects.append({'distance_m': near, 'far_m': far, 'lateral_m': o['lateral_m'], 'height_m': o['height_m'],
                             'n_points': int(o['n_points']), 'confirmed': bool(o['confirmed']), 'alarm': alarm,
-                            'edge_line': bool(o.get('edge_line')),
-                            'box': [float(lat[sel].min()), float(lat[sel].max()), float(z[sel].min()),
-                                    float(z[sel].max()), float(fwd[sel].min()), float(fwd[sel].max())]})
+                            'edge_line': bool(o.get('edge_line')), 'held': bool(o.get('held')), 'box': box})
     objects.sort(key=lambda o: (not o['alarm'], o['distance_m']))
 
     if bg_points is not None and (tag == 0).sum() > bg_points:

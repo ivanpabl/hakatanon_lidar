@@ -12,7 +12,7 @@
   --page: #070a0f; --surface: #10161e; --surface-2: #18202a;
   --ink: #eef2f6; --ink-2: #aab5c0; --muted: #7d8894;
   --grid: #222b35; --axis: #34404c; --border: rgba(255, 255, 255, .08);
-  --now: #3987e5; --track: #199e70; --alarm: #ff4d6d; --cand: #fab219; --clear: #9fe0a8;
+  --truth: #e8eef5; --now: #3987e5; --track: #199e70; --alarm: #ff4d6d; --cand: #fab219; --clear: #9fe0a8;
   --font: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 * { box-sizing: border-box; }
@@ -52,6 +52,7 @@ header.top {
 .lbl.obj { font-size: 14px; color: #fff; font-weight: 600; padding: 4px 9px; background: rgba(208, 40, 80, .92); border-radius: 6px; text-shadow: none; transform: translate(-50%, calc(-100% - 10px)); box-shadow: 0 0 18px rgba(255, 46, 97, .55); }
 .lbl.obj::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: rgba(208, 40, 80, .92); }
 .lbl.cand { color: var(--cand); }
+.lbl.truth { color: var(--truth); font-size: 12px; }
 .hud {
   position: absolute; background: rgba(10, 14, 20, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, .08); border-radius: 10px; padding: 14px 16px;
@@ -134,6 +135,7 @@ footer.transport { background: var(--surface); border-top: 1px solid var(--borde
     <span class="sw"><i class="ln" style="background:#3887e5"></i>коридор проверки</span>
     <span class="sw"><i class="neon" style="--c:255,46,97"></i>тревога</span>
     <span class="sw"><i class="neon" style="--c:255,176,33"></i>кандидат</span>
+    <span class="sw" id="lg-truth" hidden><i class="ln" style="background:#e8eef5"></i>вставленный объект (истина)</span>
   </div>
   <div class="hud views" role="group" aria-label="Вид">
     <button type="button" data-view="cab">Кабина</button>
@@ -159,6 +161,7 @@ footer.transport { background: var(--surface); border-top: 1px solid var(--borde
     <div class="tl-legend">
       <span><i style="background:var(--alarm)"></i>кадр с тревогой, дистанция</span>
       <span><i style="background:var(--axis)"></i>ось пути известна до</span>
+      <span id="tl-truth" hidden><i style="background:var(--truth)"></i>истинная дистанция</span>
     </div>
   </div>
   <div id="timeline" role="slider" tabindex="0" aria-label="Кадр"></div>
@@ -198,7 +201,8 @@ const Z0 = D.zone;
 let clip = clips[0], fi = 0;
 
 $('#clips').innerHTML = clips.map((c, k) => {
-  const na = c.frames.filter(f => f.obstacle).length;
+  const na = c.frames.filter(f => f.obstacle).length, a = c.approach;
+  if (a) return `<button type="button" data-k="${k}"><span>Подъезд: ${esc(a.shape)} на ${num(a.start_m, 0)} м</span><small>поезд едет · ${a.first_m != null ? `<b>подтверждён на ${num(a.first_m, 0)} м</b>` : 'не подтверждён'}</small></button>`;
   return `<button type="button" data-k="${k}"><span>${esc(c.bag)}</span><small>${c.frames.length} ${plural(c.frames.length, 'кадр', 'кадра', 'кадров')} · ${na ? `<b>тревога в ${na}</b>` : 'без тревог'}</small></button>`;
 }).join('');
 const clipBtns = [...document.querySelectorAll('#clips button')];
@@ -308,6 +312,12 @@ function buildFrame() {
       seg(P(i, Z0.half_width, Z0.clearance), P(i, Z0.half_width, Z0.height), rc);
     }
   }
+  if (fr.truth_box) {
+    const [x0, x1, z0, z1, f0, f1] = fr.truth_box, tc = [.91, .93, .96, .8];
+    const v = [[x0, z0, -f0], [x1, z0, -f0], [x1, z1, -f0], [x0, z1, -f0], [x0, z0, -f1], [x1, z0, -f1], [x1, z1, -f1], [x0, z1, -f1]];
+    [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([a0, b0]) => seg(v[a0], v[b0], tc));
+    if (!fr.obstacle) addLabel([(x0 + x1) / 2, z1 + .6, -(f0 + f1) / 2], `объект ${num(fr.truth_m, 0)} м`, 'truth');
+  }
   upload(groups[1], lnPos, lnCol);
 
   // объекты: неоновый корпус от головки рельса до верхней точки, с ореолом
@@ -343,6 +353,8 @@ function buildFrame() {
 // --- панель решения
 function hud(fr) {
   const common = `
+    ${fr.truth_m != null ? `<dt>вставлен</dt><dd>${esc(clip.approach.shape)} на ${num(fr.truth_m, 1)} м${fr.obstacle ? `, ошибка ${num(fr.distance_m - fr.truth_m, 2)} м` : `, ${num(fr.truth_points)} ${plural(fr.truth_points, 'точка', 'точки', 'точек')} на объекте`}</dd>` : ''}
+    ${fr.speed_mps != null ? `<dt>поезд</dt><dd>${num(fr.speed_mps * 3.6, 0)} км/ч${fr.travelled_m != null ? `, проехал ${num(fr.travelled_m, 0)} м` : ''}</dd>` : ''}
     <dt>кадр</dt><dd>${fr.i} · ${num(fr.t, 1)} с от начала</dd>
     <dt>ось пути</dt><dd>${fr.path_range_m ? `до ${num(fr.path_range_m, 0)} м${fr.rails_to_m ? `, рельсы до ${num(fr.rails_to_m, 0)} м` : ''}` : 'не найдена'}</dd>
     <dt>в коридоре</dt><dd>${num(fr.n_zone)} ${plural(fr.n_zone, 'точка', 'точки', 'точек')}</dd>
@@ -353,7 +365,7 @@ function hud(fr) {
     $('#hud').innerHTML = `<span class="status alarm">${ALARM_ICON}Тревога: препятствие на пути</span>
       <div class="big">${num(fr.distance_m, 1)}<small>м</small></div>
       <p class="what">до ближайшего подтверждённого объекта</p>
-      <dl>${o ? `<dt>объект</dt><dd>${o.n_points} ${plural(o.n_points, 'точка', 'точки', 'точек')}, ${num(Math.abs(o.lateral_m), 2)} м ${o.lateral_m < 0 ? 'влево' : 'вправо'} от оси</dd>` : ''}${common}</dl>`;
+      <dl>${o ? `<dt>объект</dt><dd>${o.held ? 'в этом кадре не виден, тревога удерживается по треку' : `${o.n_points} ${plural(o.n_points, 'точка', 'точки', 'точек')}`}, ${num(Math.abs(o.lateral_m), 2)} м ${o.lateral_m < 0 ? 'влево' : 'вправо'} от оси</dd>` : ''}${common}</dl>`;
   } else {
     const cand = fr.objects.filter(x => !x.alarm).length;
     $('#hud').innerHTML = `<span class="status ${fr.path_range_m ? 'clear' : 'nopath'}">${fr.path_range_m ? 'Путь свободен' : 'Путь не найден'}</span>
@@ -370,7 +382,7 @@ const look = (e, tg) => { const dx = e[0] - tg[0], dy = e[1] - tg[1], dz = e[2] 
 let W0 = 1, H0 = 1, dpr = 1, dirty = true;
 const VIEWS = {
   cab: () => { const e = axisAt(2), tg = axisAt(48); return look([e[0], e[1] + 2.6, e[2] + 6], [tg[0], tg[1] + 0.8, tg[2]]); },
-  obj: () => { const o = alarmObj || clip.frames[fi].objects[0];
+  obj: () => { const fr = clip.frames[fi], o = alarmObj || (fr.truth_box ? { box: fr.truth_box } : fr.objects[0]);
     if (!o) return VIEWS.side();
     return { tx: (o.box[0] + o.box[1]) / 2, ty: (o.box[2] + o.box[3]) / 2 + .8, tz: -(o.box[4] + o.box[5]) / 2, yaw: .75, pitch: .28, dist: 18 }; },
   top: () => { const r = Math.min(clip.frames[fi].path_range_m || 120, 200) / 2, a = axisAt(r); return { tx: a[0], ty: a[1], tz: a[2], yaw: Math.PI / 2, pitch: 1.5, dist: r * 2 * W0 / Math.max(W0, H0) * 1.45 / (W0 / H0) }; },
@@ -440,7 +452,8 @@ function goTo(target, ms = 900) {
     dirty = true; if (u >= 1) anim = null; };
 }
 const viewBtns = [...document.querySelectorAll('.hud.views button')];
-const press = v => viewBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v ? 'true' : 'false'));
+let curView = null;
+const press = v => { curView = v; viewBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v ? 'true' : 'false')); };
 viewBtns.forEach(b => b.addEventListener('click', () => { press(b.dataset.view); goTo(VIEWS[b.dataset.view]()); }));
 
 // мышь и касание
@@ -479,6 +492,15 @@ function drawTimeline() {
   let path = '';
   fr.forEach((f, i) => { if (f.path_range_m) path += `${path && fr[i - 1] && fr[i - 1].path_range_m ? 'L' : 'M'}${x(i).toFixed(1)},${y(f.path_range_m).toFixed(1)}`; });
   if (path) s += `<path d="${path}" fill="none" stroke="var(--axis)" stroke-width="1" stroke-opacity=".8"/>`;
+  let tp = '';
+  fr.forEach((f, i) => { if (f.truth_m != null) tp += `${tp ? 'L' : 'M'}${x(i).toFixed(1)},${y(f.truth_m).toFixed(1)}`; });
+  if (tp) s += `<path d="${tp}" fill="none" stroke="var(--truth)" stroke-width="1.2" stroke-dasharray="4 3" stroke-opacity=".7"/>`;
+  const a = clip.approach;
+  if (a && a.first_frame != null) {
+    const fx = x(a.first_frame);
+    s += `<line x1="${fx}" x2="${fx}" y1="${y0}" y2="${y1}" stroke="var(--alarm)" stroke-dasharray="2 2"/>`;
+    s += `<text x="${fx + 4}" y="${y0 + 10}" fill="var(--alarm)">подтверждён на ${num(a.first_m, 0)} м</text>`;
+  }
   fr.forEach((f, i) => { if (f.obstacle) s += `<circle cx="${x(i)}" cy="${y(f.distance_m)}" r="${Math.min(2.6, Math.max(1.4, cw / 2))}" fill="var(--alarm)"/>`; });
   const step = n > 400 ? 100 : n > 150 ? 50 : 20;
   for (let i = 0; i < n; i += step) s += `<text x="${x(i)}" y="${h - 3}" text-anchor="middle">${num(fr[i].t, 0)} с</text>`;
@@ -516,7 +538,11 @@ let playing = false, rate = 1, acc = 0, lastT = 0;
 const playBtn = $('#play');
 function setPlaying(p) { playing = p; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Пауза' : 'Пуск'); lastT = performance.now(); acc = 0; }
 function stop() { setPlaying(false); }
-function show(i) { i = Math.max(0, Math.min(clip.frames.length - 1, i)); if (i === fi && labels.length) { movePlayhead(); return; } fi = i; buildFrame(); movePlayhead(); }
+function show(i) {
+  i = Math.max(0, Math.min(clip.frames.length - 1, i)); if (i === fi && labels.length) { movePlayhead(); return; }
+  fi = i; buildFrame(); movePlayhead();
+  if (curView === 'obj' && !anim) { const v = VIEWS.obj(); cam.tx = v.tx; cam.ty = v.ty; cam.tz = v.tz; }   // камера идёт за объектом
+}
 playBtn.addEventListener('click', () => { if (!playing && fi >= clip.frames.length - 1) show(0); setPlaying(!playing); });
 $('#prev').addEventListener('click', () => { stop(); show(fi - 1); });
 $('#next').addEventListener('click', () => { stop(); show(fi + 1); });
@@ -527,6 +553,7 @@ function selectClip(k, fly = true) {
   clip = clips[k]; fi = 0;
   clipBtns.forEach((b, j) => b.setAttribute('aria-pressed', j === k ? 'true' : 'false'));
   buildFrame(); drawTimeline();
+  $('#lg-truth').hidden = $('#tl-truth').hidden = !clip.approach;
   press('cab'); if (fly) goTo(VIEWS.cab(), 700);
 }
 clipBtns.forEach((b, k) => b.addEventListener('click', () => { selectClip(k); setPlaying(true); }));

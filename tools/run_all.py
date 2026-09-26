@@ -175,7 +175,8 @@ def main():
     metrics, demo = args.out / 'metrics.html', args.out / 'demo.html'
     steps = [Step('dashboard', ['tools/dashboard.py', '--out', str(metrics)], logs),
              Step('demo', ['tools/demo.py', '--out', str(demo), '--workers', '2',
-                           *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30'] if args.quick else [])],
+                           *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30',
+                              '--approach', f'{QUICK_APPROACH}:32:person:60'] if args.quick else [])],
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]

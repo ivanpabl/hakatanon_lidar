@@ -14,7 +14,7 @@ import numpy as np
 
 from ..geometry.ego_motion import S_RANGE as EGO_S_RANGE, EgoMotion
 from ..geometry.bed import bed_at, estimate_bed_profile, estimate_floor_z, rail_top_at
-from ..geometry.path import TrackPath, extend_path_by_walls
+from ..geometry.path import TrackPath, extend_path_by_walls, splice_far_axis
 from ..geometry.rails import fit_path
 from . import background
 from .clustering import MIN_POINTS_FLOOR, MIN_POINTS_K, cluster_points, mark_edge_lines, min_points_at
@@ -37,7 +37,8 @@ class ObstacleDetector:
                  min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR,
                  method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,
                  tracker='evidence', evidence_threshold=2.2, evidence_decay=0.8, far_axis=True,
-                 edge_lines=True, far_half_width=0.7, far_top=1.5, far_from=20.0):
+                 edge_lines=True, far_half_width=0.7, far_top=1.5, far_from=20.0, alarm_hold=3,
+                 alarm_hold_min=5, path_hold=0):
         if method not in ('zone', 'background'):
             raise ValueError(method)
         if tracker not in ('hits', 'evidence'):
@@ -71,8 +72,16 @@ class ObstacleDetector:
         self._path_range = None
         self._offset_measured = False
         self._frame = 0
+        # удержание дальней части оси: хвост предыдущей оси, если новая короче (splice_far_axis).
+        # Делается в check_frame, а не в update_path: путь поезда известен только здесь, а
+        # update_path в узле ROS считается в отдельном процессе (path_worker)
+        self.path_hold = path_hold
+        self._travel = 0.0
+        self._seen_path_frame = None
+        self._held_axis = None           # (fwd, cl, кадр, когда хвост измерен, путь поезда тогда)
         if tracker == 'evidence':
-            self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits)
+            self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits,
+                                            hold=alarm_hold, hold_min=alarm_hold_min)
             ego_motion = True
         else:
             self._tracker = Tracker(confirm_hits, confirm_window)
@@ -112,6 +121,18 @@ class ObstacleDetector:
         self._path_range = float(self._fit_fwd[-1])
         return True
 
+    def _hold_far_axis(self):
+        """Новый путь пришёл: если он короче предыдущего, хвост предыдущего (сдвинутый на путь
+        поезда) держится до path_hold кадров с момента, когда этот хвост был измерен."""
+        held, far_frame = self._held_axis, self._frame
+        if held is not None and self.path_hold and self._frame - held[2] <= self.path_hold:
+            fwd, cl, spliced = splice_far_axis(self._fit_fwd, self._fitted_cl, held[0], held[1],
+                                               self._travel - held[3])
+            if spliced:
+                self._fit_fwd, self._fitted_cl, self._path_range = fwd, cl, float(fwd[-1])
+                far_frame = held[2]
+        self._held_axis = (self._fit_fwd, self._fitted_cl, far_frame, self._travel)
+
     def _tor_at(self, fwd, bed):
         return rail_top_at(fwd, bed, self.rail_offset, self._rail_prof)
 
@@ -143,6 +164,9 @@ class ObstacleDetector:
         """Быстрый путь, каждый кадр: использует последний известный путь."""
         self._frame += 1
         path_ok = self._path_valid()
+        if path_ok and self._path_frame != self._seen_path_frame:
+            self._seen_path_frame = self._path_frame
+            self._hold_far_axis()
 
         bed = estimate_bed_profile(x, y, z, self._center_of_fwd)
         if bed is not None:
@@ -158,6 +182,7 @@ class ObstacleDetector:
             e = fwd < EGO_S_RANGE[1] + self._ego._max_shift
             self.speed, self._displacement = self._ego.update(
                 fwd[e], lat[e], z[e] - self._tor_at(fwd[e], self._bed), stamp)
+            self._travel += self._displacement or 0.0
         if self.method == 'zone':
             m = np.abs(lat) < self.half_width
             fwd, lat, z = fwd[m], lat[m], z[m]
@@ -191,11 +216,23 @@ class ObstacleDetector:
                              lambda d: min_points_at(d, self.min_points_k, self.min_points_floor))
         for o in objects:
             o.setdefault('confirmed', False)
+            o['held'] = False
+        # объект с тревогой пропал на кадр-два (вдали на нём 2-3 точки): тревога держится
+        # alarm_hold кадров по прогнозу трека, объект помечается held
+        for tr in self._tracker.held():
+            d = float(tr['distance_m'])
+            objects.append({'distance_m': d, 'far_m': d, 'lateral_m': float(tr['lateral_m']),
+                            'height_m': tr.get('height_m', 0.0), 'low_m': tr.get('low_m', 0.0), 'n_points': 0,
+                            'too_small': False, 'edge_line': False, 'confirmed': True, 'held': True,
+                            'evidence': round(tr['score'], 2)})
         path_range = self._path_range if path_ok else None
         limit = (path_range if path_range is not None else 0.0) + self.path_margin
         for o in objects:
-            o['beyond_path'] = o['distance_m'] > limit
+            # удержанный объект поднимал тревогу в пределах оси и с тех пор только приблизился;
+            # короткая ось в этом кадре (её дальность скачет на 50-200 м) тревогу не снимает
+            o['beyond_path'] = o['distance_m'] > limit and not o['held']
         confirmed = [o for o in objects if o['confirmed'] and not o['beyond_path']]
+        self._tracker.set_alarm({o['track_id'] for o in confirmed if 'track_id' in o})
         return {
             'obstacle': bool(confirmed),
             'distance_m': min(o['distance_m'] for o in confirmed) if confirmed else None,

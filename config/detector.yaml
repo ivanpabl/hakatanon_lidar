@@ -44,6 +44,10 @@ tunnel_od_detector:
       tracker: evidence      # evidence -- накопление с учётом движения | hits -- confirm_hits из confirm_window
       evidence_threshold: 2.2
       evidence_decay: 0.8
+      alarm_hold: 3          # кадров держать тревогу, если объект с тревогой пропал (только evidence)
+      alarm_hold_min: 5      #    держится только тревога, которая уже шла столько кадров
+      path_hold: 0           # кадров держать хвост прежней оси, если новая короче (0 -- выкл.:
+                             #    на doubleT_platform тревог 68 -> 105 кадров)
       confirm_hits: 3        # для evidence -- минимум кадров с объектом до тревоги
       confirm_window: 5      # только для hits
       max_path_age: 30       # кадров держать ось без пересчёта

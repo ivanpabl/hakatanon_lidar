@@ -9,7 +9,7 @@ import pytest
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 from tunnel_od.detection.tracking import EvidenceTracker
-from tunnel_od.geometry.path import extend_path_by_walls
+from tunnel_od.geometry.path import extend_path_by_walls, splice_far_axis
 from tunnel_od.pointcloud import COLUMN_HEIGHT
 from tunnel_od.sim.lidar_sim import simulate_frame
 
@@ -127,3 +127,105 @@ def test_far_axis_follows_curve_by_walls():
     assert fwd[-1] > 160
     far = fwd > 120
     assert np.max(np.abs(cl[far] - center(fwd[far]))) < 0.3
+
+
+def test_evidence_tracker_holds_alarm_track_over_short_gap():
+    """Трек с тревогой без объекта в кадре держится hold кадров с прогнозом дистанции."""
+    tr = EvidenceTracker(hold=3, hold_min=2)
+    for k in range(4):
+        ob = {'distance_m': 60.0 - 1.0 * k, 'lateral_m': 0.1, 'n_points': 20}
+        tr.update([ob], displacement=1.0, expected=lambda d: 5.0)
+        if ob['confirmed']:
+            tr.set_alarm({ob['track_id']})
+    assert ob['confirmed']
+    for k in range(3):
+        tr.update([], displacement=1.0, expected=lambda d: 5.0)
+        held = tr.held()
+        assert len(held) == 1 and abs(held[0]['distance_m'] - (57.0 - 1.0 * (k + 1))) < 1e-6
+    tr.update([], displacement=1.0, expected=lambda d: 5.0)
+    assert tr.held() == []
+
+
+def test_evidence_tracker_holds_only_tracks_that_raised_alarm():
+    """Подтверждённый трек без тревоги (например, за концом оси) не держится."""
+    tr = EvidenceTracker(hold=3, hold_min=1)
+    for k in range(4):
+        ob = {'distance_m': 60.0, 'lateral_m': 0.0, 'n_points': 20}
+        tr.update([ob], displacement=0.0, expected=lambda d: 5.0)
+    assert ob['confirmed']
+    tr.update([], displacement=0.0, expected=lambda d: 5.0)
+    assert tr.held() == []
+
+
+def test_evidence_tracker_does_not_hold_short_alarm():
+    """Тревога короче hold_min кадров (ложная вспышка) не удлиняется."""
+    tr = EvidenceTracker(hold=3, hold_min=5)
+    for k in range(4):
+        ob = {'distance_m': 60.0, 'lateral_m': 0.0, 'n_points': 20}
+        tr.update([ob], displacement=0.0, expected=lambda d: 5.0)
+        if ob['confirmed']:
+            tr.set_alarm({ob['track_id']})
+    tr.update([], displacement=0.0, expected=lambda d: 5.0)
+    assert tr.held() == []
+
+
+def test_detector_alarm_survives_single_missed_frame():
+    det = ObstacleDetector()
+    _run(det, [{}] * 3)
+    res = _run(det, [{'obstacle_forward': 30.0, 'obstacle_radius': 0.35}] * 8)
+    assert res['obstacle']
+    res = _run(det, [{}])
+    assert res['obstacle'] and abs(res['distance_m'] - (30.0 - 0.35)) < 0.5
+    assert any(o.get('held') for o in res['objects'])
+    res = _run(det, [{}] * 4)
+    assert not res['obstacle']
+
+
+def test_detector_alarm_hold_off():
+    det = ObstacleDetector(alarm_hold=0)
+    _run(det, [{}] * 3)
+    assert _run(det, [{'obstacle_forward': 30.0, 'obstacle_radius': 0.35}] * 4)['obstacle']
+    assert not _run(det, [{}])['obstacle']
+
+
+def test_splice_far_axis_keeps_longer_previous_axis():
+    old_f = np.arange(2.0, 200.0, 1.0)
+    old_c = 0.001 * old_f
+    new_f = np.arange(2.0, 60.0, 1.0)
+    new_c = 0.001 * (new_f + 3.0) + 0.05           # поезд проехал 3 м; небольшой сдвиг вбок
+    f, c, ok = splice_far_axis(new_f, new_c, old_f, old_c, shift=3.0)
+    assert ok and f[-1] == pytest.approx(196.0)
+    assert np.all(np.diff(f) > 0)
+    assert np.interp(59.0, f, c) == pytest.approx(new_c[-1])
+    assert abs(np.interp(61.0, f, c) - np.interp(59.0, f, c)) < 0.01   # без ступеньки на стыке
+
+    far_off = 0.001 * new_f + 0.8                    # другая ось (стрелка) -- не склеиваем
+    f, c, ok = splice_far_axis(new_f, far_off, old_f, old_c, shift=0.0)
+    assert not ok and f[-1] == new_f[-1]
+
+    f, c, ok = splice_far_axis(old_f, old_c, new_f, new_c, shift=0.0)   # новая длиннее
+    assert not ok and f[-1] == old_f[-1]
+
+
+def test_detector_holds_far_axis_when_refit_is_short():
+    det = ObstacleDetector(path_hold=5)
+    _run(det, [{}] * 3)
+    full = det.path_range
+    assert full > 100
+    det._fit_fwd, det._fitted_cl = det._fit_fwd[det._fit_fwd < 50], det._fitted_cl[det._fit_fwd < 50]
+    det._path_range = float(det._fit_fwd[-1])
+    det._path_frame = det._frame + 1                # как будто пришёл новый короткий путь
+    x, y, z, *_ = simulate_frame()
+    res = det.check_frame(x, y, z)
+    assert res['path_range_m'] > full - 5
+
+
+def test_held_alarm_survives_short_axis():
+    det = ObstacleDetector()
+    _run(det, [{}] * 3)
+    assert _run(det, [{'obstacle_forward': 60.0, 'obstacle_radius': 0.35}] * 8)['obstacle']
+    x, y, z, *_ = simulate_frame()
+    det._fit_fwd, det._fitted_cl = det._fit_fwd[det._fit_fwd < 50], det._fitted_cl[det._fit_fwd < 50]
+    det._path_range = float(det._fit_fwd[-1])       # новый путь короче объекта, объект пропал
+    res = det.check_frame(x, y, z)
+    assert res['obstacle'] and res['path_range_m'] < 55
