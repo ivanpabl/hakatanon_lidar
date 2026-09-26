@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _RING_TABLE_PATH = Path(__file__).parent / 'ring_table.json'
-_ring_table = json.loads(_RING_TABLE_PATH.read_text())
+_ring_table = json.loads(_RING_TABLE_PATH.read_text(encoding='utf-8'))
 REAL_ELEVATIONS_DEG = np.array([_ring_table[str(r)] for r in sorted(map(int, _ring_table.keys()))])
 
 N_CHANNELS = len(REAL_ELEVATIONS_DEG)  

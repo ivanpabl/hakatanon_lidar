@@ -30,7 +30,7 @@ warnings.simplefilter('ignore')
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2          # noqa: E402
 
-from bags import BAGS, open_cloud_bag                              # noqa: E402
+from bags import BAGS, RUNS, open_cloud_bag                        # noqa: E402
 from to_contract_v1 import legacy_to_contract                      # noqa: E402
 
 CROP = (2.0, 250.0)
@@ -110,7 +110,7 @@ def main():
     ap.add_argument('--bags', nargs='+', default=BAGS)
     ap.add_argument('--frames', type=int, default=30, help='кадров на запись с начала (0 -- все)')
     ap.add_argument('--det', default='{}', help='kwargs ObstacleDetector в JSON')
-    ap.add_argument('--out', default=str(ROOT / 'runs' / 'check_preproc.json'))
+    ap.add_argument('--out', default=str(RUNS / 'check_preproc.json'))
     args = ap.parse_args()
     from tunnel_od_preproc.build_host import ensure
     if ensure(quiet=False) is None:
@@ -126,7 +126,7 @@ def main():
               f'{100 * r["kept_after_crop"]:>14.0f}%{r["parse_ms_python"]:>12.1f}{r["parse_ms_cpp"]:>9.1f}'
               f'{r["parse_ms_contract"]:>9.1f}', flush=True)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+    Path(args.out).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
     bad = [b for b, r in rows.items() if r['parse_bitwise'] != r['frames'] or r['result_identical'] != r['frames']]
     print('ИТОГ:', 'всё совпадает' if not bad else f'РАСХОЖДЕНИЯ: {bad}')
     sys.exit(1 if bad else 0)

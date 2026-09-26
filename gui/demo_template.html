@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Детектор в тоннеле</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --page: #070a0f; --surface: #10161e; --surface-2: #18202a;
+  --ink: #eef2f6; --ink-2: #aab5c0; --muted: #7d8894;
+  --grid: #222b35; --axis: #34404c; --border: rgba(255, 255, 255, .08);
+  --now: #3987e5; --track: #199e70; --alarm: #ff4d6d; --cand: #fab219; --clear: #9fe0a8;
+  --font: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--ink); overflow: hidden;
+  font: 400 15px/1.45 var(--font); -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+}
+:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; border-radius: 4px; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
+
+/* ---------- шапка ---------- */
+header.top {
+  display: flex; align-items: center; gap: 20px; padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface); min-width: 0;
+}
+.brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.brand small { font-weight: 400; color: var(--muted); margin-left: 8px; }
+#clips { display: flex; gap: 6px; overflow-x: auto; min-width: 0; }
+#clips button {
+  font: inherit; font-size: 14px; color: var(--ink-2); background: none; border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; text-align: left;
+}
+#clips button:hover { color: var(--ink); background: var(--surface-2); }
+#clips button[aria-pressed="true"] { color: var(--ink); border-color: var(--now); background: rgba(57, 135, 229, .16); }
+#clips button small { display: block; font-size: 12px; color: var(--muted); }
+#clips button small b { color: var(--alarm); font-weight: 500; }
+.meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* ---------- сцена ---------- */
+#stage { position: relative; min-height: 0; background: radial-gradient(120% 90% at 50% 38%, #111a26 0%, #070a0f 70%); }
+#gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#gl:active { cursor: grabbing; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 12px; color: rgba(232, 238, 245, .72); text-shadow: 0 1px 2px #000; }
+.lbl.obj { font-size: 14px; color: #fff; font-weight: 600; padding: 4px 9px; background: rgba(208, 40, 80, .92); border-radius: 6px; text-shadow: none; transform: translate(-50%, calc(-100% - 10px)); box-shadow: 0 0 18px rgba(255, 46, 97, .55); }
+.lbl.obj::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: rgba(208, 40, 80, .92); }
+.lbl.cand { color: var(--cand); }
+.hud {
+  position: absolute; background: rgba(10, 14, 20, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, .08); border-radius: 10px; padding: 14px 16px;
+}
+.hud.main { top: 16px; left: 16px; width: 340px; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; }
+.status.alarm { color: #ff8a8a; }
+.status.clear { color: var(--clear); }
+.status.nopath { color: var(--cand); }
+.hud .big { font-size: 46px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.hud .big small { font-size: 22px; font-weight: 500; color: rgba(232, 238, 245, .7); margin-left: 4px; }
+.hud .big.dim { color: rgba(232, 238, 245, .28); }
+.hud .what { color: rgba(232, 238, 245, .75); font-size: 14px; margin: 0 0 10px; }
+.hud dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+.hud dt { color: rgba(232, 238, 245, .55); }
+.hud dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud.legend { left: 16px; bottom: 16px; padding: 10px 14px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 16px; max-width: calc(100% - 32px - 330px); }
+.sw { display: inline-flex; align-items: center; gap: 7px; color: rgba(232, 238, 245, .82); }
+.sw i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw i.ln { width: 16px; height: 3px; border-radius: 2px; }
+.sw i.neon { width: 11px; height: 11px; border-radius: 2px; background: rgba(var(--c), .35); border: 1px solid rgb(var(--c)); box-shadow: 0 0 8px rgba(var(--c), .8); }
+.hud.views { right: 16px; bottom: 16px; padding: 6px; display: flex; gap: 4px; }
+.hud.views button { font: inherit; font-size: 13px; color: rgba(232, 238, 245, .82); background: none; border: 0; border-radius: 6px; padding: 7px 11px; cursor: pointer; }
+.hud.views button:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.hud.views button[aria-pressed="true"] { background: rgba(57, 135, 229, .28); color: #fff; }
+.hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(232, 238, 245, .5); text-align: right; }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(232, 238, 245, .7); }
+
+/* ---------- воспроизведение и таймлайн ---------- */
+footer.transport { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 16px 12px; }
+.controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.controls button {
+  font: inherit; font-size: 13px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; height: 32px; min-width: 32px; padding: 0 10px; cursor: pointer; display: inline-grid; place-items: center;
+}
+.controls button:hover { color: var(--ink); }
+.controls button[aria-pressed="true"] { color: #fff; border-color: var(--now); background: rgba(57, 135, 229, .28); }
+#play { min-width: 44px; color: var(--ink); }
+.speed { display: inline-flex; gap: 4px; margin-left: 8px; }
+#clock { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 13px; margin-left: 8px; }
+.tl-legend { margin-left: auto; display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tl-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+#timeline { position: relative; height: 92px; cursor: pointer; touch-action: none; }
+#timeline svg { display: block; width: 100%; height: 100%; overflow: visible; }
+#timeline text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; padding: 7px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4;
+  background: var(--ink); color: var(--page); opacity: 0; transition: opacity .08s; white-space: nowrap;
+}
+#tip.on { opacity: 1; }
+
+@media (max-width: 900px) {
+  header.top { flex-wrap: wrap; gap: 8px 12px; }
+  .meta { display: none; }
+  .hud.main { width: auto; max-width: calc(100% - 32px); padding: 10px 12px; }
+  .hud .big { font-size: 32px; }
+  .hud dl, .hint, .hud.legend, .tl-legend { display: none; }
+  .hud.views { left: 16px; right: auto; }
+  #timeline { height: 72px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Препятствия в тоннеле<small>демонстрация на записях</small></div>
+  <div id="clips" role="group" aria-label="Отрывки записей"></div>
+  <div class="meta" id="meta"></div>
+</header>
+
+<div id="stage">
+  <canvas id="gl" aria-label="Трёхмерное облако точек текущего кадра с решением детектора"></canvas>
+  <div id="labels"></div>
+  <div class="hud main" id="hud" aria-live="polite"></div>
+  <div class="hud legend">
+    <span class="sw"><i style="background:#5598e7"></i>облако (цвет — высота)</span>
+    <span class="sw"><i style="background:#eef4ff"></i>точки в коридоре</span>
+    <span class="sw"><i class="ln" style="background:#1baf7a"></i>ось по рельсам</span>
+    <span class="sw"><i class="ln" style="background:#80d6b5"></i>ось по стенам</span>
+    <span class="sw"><i class="ln" style="background:#3887e5"></i>коридор проверки</span>
+    <span class="sw"><i class="neon" style="--c:255,46,97"></i>тревога</span>
+    <span class="sw"><i class="neon" style="--c:255,176,33"></i>кандидат</span>
+  </div>
+  <div class="hud views" role="group" aria-label="Вид">
+    <button type="button" data-view="cab">Кабина</button>
+    <button type="button" data-view="obj">Объект</button>
+    <button type="button" data-view="side">Сбоку</button>
+    <button type="button" data-view="top">Сверху</button>
+  </div>
+  <div class="hint">мышь: вращать · Shift/правая: сдвиг · колесо: масштаб<br>пробел: пуск/пауза · ← →: кадр</div>
+</div>
+
+<footer class="transport">
+  <div class="controls">
+    <button type="button" id="prev" aria-label="Предыдущий кадр">‹</button>
+    <button type="button" id="play" aria-label="Пуск">▶</button>
+    <button type="button" id="next" aria-label="Следующий кадр">›</button>
+    <div class="speed" role="group" aria-label="Скорость">
+      <button type="button" data-rate="0.25">¼×</button>
+      <button type="button" data-rate="0.5">½×</button>
+      <button type="button" data-rate="1">1×</button>
+      <button type="button" data-rate="2">2×</button>
+    </div>
+    <span id="clock"></span>
+    <div class="tl-legend">
+      <span><i style="background:var(--alarm)"></i>кадр с тревогой, дистанция</span>
+      <span><i style="background:var(--axis)"></i>ось пути известна до</span>
+    </div>
+  </div>
+  <div id="timeline" role="slider" tabindex="0" aria-label="Кадр"></div>
+</footer>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+'use strict';
+const D = DATA || { clips: [] };
+const $ = s => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+function num(v, d = 0) {
+  if (v == null || !isFinite(v)) return '—';
+  const s = Math.abs(v).toFixed(d).split('.');
+  s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '−' : '') + s.join(',');
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+const ALARM_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.8 12H1.2z" fill="currentColor"/><path d="M8 6v3.4M8 11.4v.1" stroke="#1a0b0b" stroke-width="1.7" stroke-linecap="round"/></svg>';
+function b64(s) { const bin = atob(s), n = bin.length, out = new Uint8Array(n); for (let i = 0; i < n; i++) out[i] = bin.charCodeAt(i); return out; }
+
+$('#meta').textContent = D.generated ? `собрано ${D.generated.split('-').reverse().join('.')}${D.commit ? ' · ' + D.commit : ''}` : '';
+if (!D.clips.length) { $('#stage').insertAdjacentHTML('beforeend', '<div class="nogl">Нет данных. Запустите <code>python tools/demo.py</code>.</div>'); return; }
+
+// --- отрывки: точки декодируются один раз
+const clips = D.clips.map(c => ({ ...c, q: new Int16Array(b64(c.points).buffer), tg: b64(c.tags) }));
+clips.forEach(c => { delete c.points; delete c.tags; });
+const Z0 = D.zone;
+let clip = clips[0], fi = 0;
+
+$('#clips').innerHTML = clips.map((c, k) => {
+  const na = c.frames.filter(f => f.obstacle).length;
+  return `<button type="button" data-k="${k}"><span>${esc(c.bag)}</span><small>${c.frames.length} ${plural(c.frames.length, 'кадр', 'кадра', 'кадров')} · ${na ? `<b>тревога в ${na}</b>` : 'без тревог'}</small></button>`;
+}).join('');
+const clipBtns = [...document.querySelectorAll('#clips button')];
+
+// --- WebGL
+const canvas = $('#gl'), stage = $('#stage');
+const gl = canvas.getContext('webgl', { antialias: true }) || canvas.getContext('experimental-webgl');
+if (!gl) stage.insertAdjacentHTML('beforeend', '<div class="nogl">Браузер не дал WebGL — 3D-вид недоступен. Таймлайн и решения по кадрам работают.</div>');
+const vs = `attribute vec3 p; attribute vec4 c; attribute float sz; uniform mat4 m; uniform float k; uniform float minpx; uniform float maxpx; varying vec4 vc;
+  void main(){ gl_Position = m * vec4(p, 1.0); gl_PointSize = clamp(sz * k / gl_Position.w, minpx, maxpx); vc = c; }`;
+const fsP = `precision mediump float; varying vec4 vc; void main(){ vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard; gl_FragColor = vc; }`;
+const fsL = `precision mediump float; uniform float am; varying vec4 vc; void main(){ gl_FragColor = vec4(vc.rgb, vc.a * am); }`;
+const fsG = `precision mediump float; uniform float am; varying vec4 vc; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard; float ring = exp(-pow((r - 0.8) / 0.06, 2.0)); float f = 0.75 * exp(-r * r * 4.5) + 0.8 * ring; gl_FragColor = vec4(vc.rgb, vc.a * f * am); }`;
+function prog(fs) {
+  const pr = gl.createProgram();
+  [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(([ty, src]) => { const sh = gl.createShader(ty); gl.shaderSource(sh, src); gl.compileShader(sh); gl.attachShader(pr, sh); });
+  gl.linkProgram(pr);
+  return pr;
+}
+let groups = [];
+if (gl) {
+  const pP = prog(fsP), pL = prog(fsL), pG = prog(fsG);
+  const G = (pr, mode, minpx, maxpx, extra = {}) => ({ pr, mode, minpx, maxpx, pos: gl.createBuffer(), col: gl.createBuffer(), sz: gl.createBuffer(), n: 0, ...extra });
+  groups = [
+    G(pP, gl.POINTS, 1.0, 3.2),                                              // фон и коридор
+    G(pL, gl.LINES, 1, 1, { blend: true }),                                  // ось, коридор
+    G(pP, gl.POINTS, 6.0, 12.0),                                             // точки объектов
+    G(pL, gl.TRIANGLES, 1, 1, { blend: 'add', pulse: true }),                // корпус объекта
+    G(pG, gl.POINTS, 64, 220, { blend: 'add', pulse: true, nodepth: true }), // ореол
+    G(pL, gl.LINES, 1, 1, { blend: 'add', pulse: true })                     // рёбра, флажок
+  ];
+}
+function upload(gp, pos, col, size) {
+  const n = pos.length / 3;
+  gl.bindBuffer(gl.ARRAY_BUFFER, gp.pos); gl.bufferData(gl.ARRAY_BUFFER, pos instanceof Float32Array ? pos : new Float32Array(pos), gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gp.col); gl.bufferData(gl.ARRAY_BUFFER, col instanceof Float32Array ? col : new Float32Array(col), gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gp.sz); gl.bufferData(gl.ARRAY_BUFFER, size instanceof Float32Array ? size : (size ? new Float32Array(size) : new Float32Array(n).fill(1)), gl.DYNAMIC_DRAW);
+  gp.n = n;
+}
+
+const ramp = [[0x1c, 0x5c, 0xab], [0x2a, 0x78, 0xd6], [0x55, 0x98, 0xe7], [0x86, 0xb6, 0xef], [0xcd, 0xe2, 0xfb]];
+const rampAt = u => { u = Math.max(0, Math.min(1, u)) * (ramp.length - 1); const i = Math.min(ramp.length - 2, Math.floor(u)), f = u - i; return ramp[i].map((c, k) => (c + (ramp[i + 1][k] - c) * f) / 255); };
+const NEON = { alarm: [1, .18, .38], cand: [1, .69, .13] };
+
+// --- текущий кадр: ось и функции по ней
+let axis = [[0, 0, 2]], axF0 = 2, axStep = 1;
+const axIdx = f => Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep)));
+const railAt = f => axis[axIdx(f)][1];
+const axisAt = f => { const a = axis[axIdx(f)]; return [a[0], a[1], -a[2]]; };
+let alarmObj = null;
+
+const labelsEl = $('#labels');
+let labels = [];
+function addLabel(pos, html, cls) { const e = document.createElement('div'); e.className = 'lbl ' + (cls || ''); e.innerHTML = html; labelsEl.appendChild(e); labels.push({ pos, e }); }
+
+function buildFrame() {
+  const fr = clip.frames[fi];
+  axis = fr.axis.length ? fr.axis : [[0, 0, 2]];
+  axF0 = axis[0][2]; axStep = axis.length > 1 ? axis[1][2] - axis[0][2] : 1;
+  alarmObj = fr.objects.find(o => o.alarm) || null;
+  labelsEl.textContent = ''; labels = [];
+  for (const d of [25, 50, 100, 150, 200]) {
+    if (!fr.path_range_m || d > fr.path_range_m || (alarmObj && Math.abs(d - alarmObj.distance_m) < 12)) continue;
+    const a = axisAt(d); addLabel([a[0] + 2.2, a[1] + 0.1, a[2]], `${d} м`);
+  }
+  hud(fr);
+  if (!gl) return;
+
+  // облако
+  const i0 = clip.offs[fi], i1 = clip.offs[fi + 1], q = clip.q, tg = clip.tg;
+  let nb = 0, nh = 0;
+  for (let i = i0; i < i1; i++) tg[i] >= 2 ? nh++ : nb++;
+  const bp = new Float32Array(nb * 3), bc = new Float32Array(nb * 4), bs = new Float32Array(nb);
+  const hp = new Float32Array(nh * 3), hc = new Float32Array(nh * 4), hs = new Float32Array(nh);
+  let b = 0, h = 0;
+  for (let i = i0; i < i1; i++) {
+    const lat = q[3 * i] / 100, z = q[3 * i + 1] / 100, f = q[3 * i + 2] / 100, t = tg[i];
+    if (t >= 2) {
+      hp[3 * h] = lat; hp[3 * h + 1] = z; hp[3 * h + 2] = -f;
+      if (t === 2) hc.set([1, .45, .6, 1], 4 * h); else hc.set([1, .78, .3, 1], 4 * h);
+      hs[h++] = t === 2 ? .22 : .14;
+      continue;
+    }
+    let c = t === 1 ? [.93, .96, 1] : rampAt((z - railAt(Math.max(2, f)) + 0.4) / 5.5);
+    const fade = t === 1 ? 0 : Math.min(.55, Math.max(0, (f - 30) / 360));
+    bp[3 * b] = lat; bp[3 * b + 1] = z; bp[3 * b + 2] = -f;
+    bc[4 * b] = c[0] * (1 - fade) + .04 * fade; bc[4 * b + 1] = c[1] * (1 - fade) + .04 * fade; bc[4 * b + 2] = c[2] * (1 - fade) + .04 * fade; bc[4 * b + 3] = 1;
+    bs[b++] = t === 1 ? .07 : .035;
+  }
+  upload(groups[0], bp, bc, bs);
+  upload(groups[2], hp, hc, hs);
+
+  // ось (по рельсам / по стенам) и коридор
+  const lnPos = [], lnCol = [];
+  const seg = (a, b2, c) => { lnPos.push(...a, ...b2); lnCol.push(...c, ...c); };
+  const railEnd = fr.rails_to_m || 0;
+  const P = (i, dl, dz) => [axis[i][0] + dl, axis[i][1] + dz, -axis[i][2]];
+  if (fr.path_range_m) for (let i = 0; i + 1 < axis.length; i++) {
+    seg(P(i, 0, 0.02), P(i + 1, 0, 0.02), axis[i][2] <= railEnd ? [.106, .686, .478, 1] : [.5, .84, .71, .9]);
+    const cc = [.22, .53, .9, .55];
+    for (const dl of [-Z0.half_width, Z0.half_width]) for (const dz of [Z0.clearance, Z0.height]) seg(P(i, dl, dz), P(i + 1, dl, dz), cc);
+    if (Math.round(axis[i][2]) % 10 === 0) {
+      const rc = [.22, .53, .9, .28];
+      seg(P(i, -Z0.half_width, Z0.clearance), P(i, Z0.half_width, Z0.clearance), rc);
+      seg(P(i, -Z0.half_width, Z0.height), P(i, Z0.half_width, Z0.height), rc);
+      seg(P(i, -Z0.half_width, Z0.clearance), P(i, -Z0.half_width, Z0.height), rc);
+      seg(P(i, Z0.half_width, Z0.clearance), P(i, Z0.half_width, Z0.height), rc);
+    }
+  }
+  upload(groups[1], lnPos, lnCol);
+
+  // объекты: неоновый корпус от головки рельса до верхней точки, с ореолом
+  const tri = [], triCol = [], ln = [], lnC = [], haloPos = [], haloCol = [], haloSize = [], labelled = [];
+  fr.objects.forEach(o => {
+    if (!o.alarm && !o.confirmed && o.n_points < 3) return;
+    const [x0, x1, , zB, f0, f1] = o.box, fm = (f0 + f1) / 2, xm = (x0 + x1) / 2;
+    const hx = Math.max(.2, (x1 - x0) / 2 + .08), hf = Math.max(.2, (f1 - f0) / 2 + .08);
+    const bot = railAt(fm), top = Math.max(zB + .08, bot + .3);
+    const col = o.alarm ? NEON.alarm : NEON.cand, k = o.alarm ? 1 : .55;
+    [[0, .30], [.07, .13], [.17, .07], [.32, .035]].forEach(([g, a]) => {
+      const X0 = xm - hx - g, X1 = xm + hx + g, Zb = bot - Math.min(g, .02), Zt = top + g, F0 = -(fm - hf - g), F1 = -(fm + hf + g);
+      const v = [[X0, Zb, F0], [X1, Zb, F0], [X1, Zt, F0], [X0, Zt, F0], [X0, Zb, F1], [X1, Zb, F1], [X1, Zt, F1], [X0, Zt, F1]];
+      [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]].forEach(([a0, b0, c0, d0]) => {
+        [v[a0], v[b0], v[c0], v[a0], v[c0], v[d0]].forEach(pt => { tri.push(...pt); triCol.push(...col, a * k); });
+      });
+      if (!g) [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([a0, b0]) => {
+        ln.push(...v[a0], ...v[b0]); lnC.push(...col, .95 * k, ...col, .95 * k);
+      });
+    });
+    if (o.alarm) { ln.push(xm, top + .05, -fm, xm, top + 3.2, -fm); lnC.push(...col, .9, ...col, .15); }
+    haloPos.push(xm, (bot + top) / 2, -fm); haloCol.push(...col, o.alarm ? .85 : .4); haloSize.push(o.alarm ? 3.0 : 1.6);
+    if (o === alarmObj) addLabel([xm, top + 3.3, -fm], `${num(o.distance_m, 1)} м`, 'obj');
+    else if (!o.alarm && !labelled.some(d => Math.abs(d - fm) < 4)) addLabel([xm, top + .5, -fm], `кандидат ${num(o.distance_m, 0)} м`, 'cand');
+    labelled.push(fm);
+  });
+  upload(groups[3], tri, triCol);
+  upload(groups[4], haloPos, haloCol, haloSize);
+  upload(groups[5], ln, lnC);
+  dirty = true;
+}
+
+// --- панель решения
+function hud(fr) {
+  const common = `
+    <dt>кадр</dt><dd>${fr.i} · ${num(fr.t, 1)} с от начала</dd>
+    <dt>ось пути</dt><dd>${fr.path_range_m ? `до ${num(fr.path_range_m, 0)} м${fr.rails_to_m ? `, рельсы до ${num(fr.rails_to_m, 0)} м` : ''}` : 'не найдена'}</dd>
+    <dt>в коридоре</dt><dd>${num(fr.n_zone)} ${plural(fr.n_zone, 'точка', 'точки', 'точек')}</dd>
+    <dt>разбор</dt><dd>${num(fr.parse_ms, 0)} мс</dd>
+    <dt>детектор</dt><dd>${num(fr.check_ms, 0)} мс, с пересчётом пути</dd>`;
+  const o = alarmObj;
+  if (fr.obstacle) {
+    $('#hud').innerHTML = `<span class="status alarm">${ALARM_ICON}Тревога: препятствие на пути</span>
+      <div class="big">${num(fr.distance_m, 1)}<small>м</small></div>
+      <p class="what">до ближайшего подтверждённого объекта</p>
+      <dl>${o ? `<dt>объект</dt><dd>${o.n_points} ${plural(o.n_points, 'точка', 'точки', 'точек')}, ${num(Math.abs(o.lateral_m), 2)} м ${o.lateral_m < 0 ? 'влево' : 'вправо'} от оси</dd>` : ''}${common}</dl>`;
+  } else {
+    const cand = fr.objects.filter(x => !x.alarm).length;
+    $('#hud').innerHTML = `<span class="status ${fr.path_range_m ? 'clear' : 'nopath'}">${fr.path_range_m ? 'Путь свободен' : 'Путь не найден'}</span>
+      <div class="big dim">—<small>м</small></div>
+      <p class="what">${cand ? `${cand} ${plural(cand, 'кандидат', 'кандидата', 'кандидатов')} копят подтверждение` : 'подтверждённых объектов нет'}</p>
+      <dl>${common}</dl>`;
+  }
+}
+
+// --- камера
+const cam = { tx: 0, ty: 0, tz: -40, yaw: 0, pitch: .12, dist: 46, fov: 50 };
+const look = (e, tg) => { const dx = e[0] - tg[0], dy = e[1] - tg[1], dz = e[2] - tg[2], d = Math.hypot(dx, dy, dz);
+  return { tx: tg[0], ty: tg[1], tz: tg[2], dist: d, yaw: Math.atan2(dx, dz), pitch: Math.asin(dy / d) }; };
+let W0 = 1, H0 = 1, dpr = 1, dirty = true;
+const VIEWS = {
+  cab: () => { const e = axisAt(2), tg = axisAt(48); return look([e[0], e[1] + 2.6, e[2] + 6], [tg[0], tg[1] + 0.8, tg[2]]); },
+  obj: () => { const o = alarmObj || clip.frames[fi].objects[0];
+    if (!o) return VIEWS.side();
+    return { tx: (o.box[0] + o.box[1]) / 2, ty: (o.box[2] + o.box[3]) / 2 + .8, tz: -(o.box[4] + o.box[5]) / 2, yaw: .75, pitch: .28, dist: 18 }; },
+  top: () => { const r = Math.min(clip.frames[fi].path_range_m || 120, 200) / 2, a = axisAt(r); return { tx: a[0], ty: a[1], tz: a[2], yaw: Math.PI / 2, pitch: 1.5, dist: r * 2 * W0 / Math.max(W0, H0) * 1.45 / (W0 / H0) }; },
+  side: () => { const a = axisAt(45); return { tx: a[0], ty: a[1] + 1, tz: a[2], yaw: 1.05, pitch: .42, dist: 62 }; }
+};
+const mul = (a, b) => { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let v = 0; for (let k = 0; k < 4; k++) v += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = v; } return o; };
+function matrix(w, h) {
+  const cp = Math.cos(cam.pitch), ex = cam.tx + cam.dist * cp * Math.sin(cam.yaw), ey = cam.ty + cam.dist * Math.sin(cam.pitch), ez = cam.tz + cam.dist * cp * Math.cos(cam.yaw);
+  let fx = cam.tx - ex, fy = cam.ty - ey, fz = cam.tz - ez; const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
+  let up = [0, 1, 0]; if (Math.abs(fy) > .999) up = [Math.sin(cam.yaw) * -1, 0, -Math.cos(cam.yaw)];
+  let sx = fy * up[2] - fz * up[1], sy = fz * up[0] - fx * up[2], sz = fx * up[1] - fy * up[0]; const sl = Math.hypot(sx, sy, sz); sx /= sl; sy /= sl; sz /= sl;
+  const ux = sy * fz - sz * fy, uy = sz * fx - sx * fz, uz = sx * fy - sy * fx;
+  const view = new Float32Array([sx, ux, -fx, 0, sy, uy, -fy, 0, sz, uz, -fz, 0,
+    -(sx * ex + sy * ey + sz * ez), -(ux * ex + uy * ey + uz * ez), fx * ex + fy * ey + fz * ez, 1]);
+  const n = .1, f = 900, ft = 1 / Math.tan(cam.fov * Math.PI / 360), a = w / h;
+  const proj = new Float32Array([ft / a, 0, 0, 0, 0, ft, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]);
+  return { m: mul(proj, view), k: h / 2 * ft };
+}
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W0 = Math.max(1, canvas.clientWidth); H0 = Math.max(1, canvas.clientHeight);
+  canvas.width = Math.round(W0 * dpr); canvas.height = Math.round(H0 * dpr);
+  dirty = true;
+}
+let pulse = 1;
+function draw() {
+  const { m, k } = matrix(W0, H0);
+  if (gl) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    groups.forEach(gp => {
+      if (!gp.n) return;
+      gl.useProgram(gp.pr);
+      if (gp.nodepth) gl.disable(gl.DEPTH_TEST); else gl.enable(gl.DEPTH_TEST);
+      if (gp.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gp.blend === 'add' ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); } else { gl.disable(gl.BLEND); gl.depthMask(true); }
+      [['p', gp.pos, 3], ['c', gp.col, 4], ['sz', gp.sz, 1]].forEach(([nm, b, sz]) => {
+        const loc = gl.getAttribLocation(gp.pr, nm); if (loc < 0) return;
+        gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0);
+      });
+      gl.uniformMatrix4fv(gl.getUniformLocation(gp.pr, 'm'), false, m);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'k'), k * dpr);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'minpx'), gp.minpx * dpr);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'maxpx'), gp.maxpx * dpr);
+      const amLoc = gl.getUniformLocation(gp.pr, 'am'); if (amLoc) gl.uniform1f(amLoc, gp.pulse ? pulse : 1);
+      gl.drawArrays(gp.mode, 0, gp.n);
+    });
+    gl.depthMask(true);
+  }
+  labels.forEach(({ pos, e }) => {
+    const x = m[0] * pos[0] + m[4] * pos[1] + m[8] * pos[2] + m[12], y = m[1] * pos[0] + m[5] * pos[1] + m[9] * pos[2] + m[13], w = m[3] * pos[0] + m[7] * pos[1] + m[11] * pos[2] + m[15];
+    if (w <= .1) { e.style.display = 'none'; return; }
+    const sx = (x / w * .5 + .5) * W0, sy = (1 - (y / w * .5 + .5)) * H0;
+    if (sx < -80 || sx > W0 + 80 || sy < -40 || sy > H0 + 40) { e.style.display = 'none'; return; }
+    e.style.display = ''; e.style.left = sx + 'px'; e.style.top = sy + 'px';
+    if (!e.classList.contains('obj')) e.style.opacity = Math.max(.25, Math.min(1, 60 / w)).toFixed(2);
+  });
+}
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let anim = null;
+function goTo(target, ms = 900) {
+  const from = { ...cam }; let dy = target.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const to = { ...target, yaw: from.yaw + dy };
+  if (reduce || !ms) { Object.assign(cam, to); dirty = true; return; }
+  const t0 = performance.now();
+  anim = now => { let u = Math.min(1, (now - t0) / ms); u = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    for (const k2 of ['tx', 'ty', 'tz', 'yaw', 'pitch', 'dist']) cam[k2] = from[k2] + (to[k2] - from[k2]) * u;
+    dirty = true; if (u >= 1) anim = null; };
+}
+const viewBtns = [...document.querySelectorAll('.hud.views button')];
+const press = v => viewBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v ? 'true' : 'false'));
+viewBtns.forEach(b => b.addEventListener('click', () => { press(b.dataset.view); goTo(VIEWS[b.dataset.view]()); }));
+
+// мышь и касание
+const pts = new Map(); let last = null, pinch = null, mode = 'rot';
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); anim = null; press(null);
+  mode = e.button === 2 || e.shiftKey ? 'pan' : 'rot'; last = [e.clientX, e.clientY]; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+canvas.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) cam.dist = Math.max(2, Math.min(500, cam.dist * pinch / d)); pinch = d; dirty = true; return; }
+  const dx = e.clientX - last[0], dy = e.clientY - last[1]; last = [e.clientX, e.clientY];
+  if (mode === 'rot') { cam.yaw -= dx * .005; cam.pitch = Math.max(-.2, Math.min(1.55, cam.pitch + dy * .005)); }
+  else { const k = cam.dist / H0 * 1.1, cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+    cam.tx -= (dx * cy) * k; cam.tz -= (-dx * sy) * k; cam.ty += dy * k * .6; }
+  dirty = true;
+});
+const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', e => { e.preventDefault(); anim = null; cam.dist = Math.max(2, Math.min(500, cam.dist * Math.exp(e.deltaY * .0012))); dirty = true; }, { passive: false });
+
+// --- таймлайн: тревога и дистанция по кадрам, ось известна до
+const tl = $('#timeline'), tip = $('#tip');
+let tlX = null, playhead = null;
+const RMAX = 200;
+function drawTimeline() {
+  const w = Math.max(200, tl.clientWidth), h = tl.clientHeight, fr = clip.frames, n = fr.length;
+  const L = 62, R = 8, top = 4, strip = 12, gap = 8, y0 = top + strip + gap, y1 = h - 16;
+  const x = i => L + (i + .5) / n * (w - L - R), cw = Math.max(1, (w - L - R) / n);
+  const y = d => y1 - Math.min(d, RMAX) / RMAX * (y1 - y0);
+  tlX = { L, R, w, n };
+  let s = `<svg viewBox="0 0 ${w} ${h}" aria-hidden="true">`;
+  s += `<rect x="${L}" y="${top}" width="${w - L - R}" height="${strip}" rx="2" fill="var(--surface-2)"/>`;
+  fr.forEach((f, i) => { if (f.obstacle) s += `<rect x="${x(i) - cw / 2}" y="${top}" width="${cw + .3}" height="${strip}" fill="var(--alarm)"/>`; });
+  s += `<text x="${L - 6}" y="${top + 10}" text-anchor="end">тревога</text>`;
+  for (const d of [0, 100, 200]) s += `<line x1="${L}" x2="${w - R}" y1="${y(d)}" y2="${y(d)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(d) + 4}" text-anchor="end">${d} м</text>`;
+  let path = '';
+  fr.forEach((f, i) => { if (f.path_range_m) path += `${path && fr[i - 1] && fr[i - 1].path_range_m ? 'L' : 'M'}${x(i).toFixed(1)},${y(f.path_range_m).toFixed(1)}`; });
+  if (path) s += `<path d="${path}" fill="none" stroke="var(--axis)" stroke-width="1" stroke-opacity=".8"/>`;
+  fr.forEach((f, i) => { if (f.obstacle) s += `<circle cx="${x(i)}" cy="${y(f.distance_m)}" r="${Math.min(2.6, Math.max(1.4, cw / 2))}" fill="var(--alarm)"/>`; });
+  const step = n > 400 ? 100 : n > 150 ? 50 : 20;
+  for (let i = 0; i < n; i += step) s += `<text x="${x(i)}" y="${h - 3}" text-anchor="middle">${num(fr[i].t, 0)} с</text>`;
+  s += `<line id="ph" y1="${top - 2}" y2="${y1 + 2}" stroke="var(--ink)" stroke-width="1.5"/></svg>`;
+  tl.innerHTML = s;
+  playhead = tl.querySelector('#ph');
+  movePlayhead();
+}
+function movePlayhead() {
+  if (!tlX || !playhead) return;
+  const px = tlX.L + (fi + .5) / tlX.n * (tlX.w - tlX.L - tlX.R);
+  playhead.setAttribute('x1', px); playhead.setAttribute('x2', px);
+  const f = clip.frames[fi];
+  tl.setAttribute('aria-valuemin', 0); tl.setAttribute('aria-valuemax', clip.frames.length - 1); tl.setAttribute('aria-valuenow', fi);
+  tl.setAttribute('aria-valuetext', `кадр ${f.i}, ${f.obstacle ? 'тревога ' + num(f.distance_m, 1) + ' м' : 'без тревоги'}`);
+  $('#clock').textContent = `кадр ${fi + 1} из ${clip.frames.length} · ${num(f.t, 1)} с`;
+}
+const frameAt = ex => { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(tlX.n - 1, Math.floor((ex - r.left - tlX.L) / (r.width - tlX.L - tlX.R) * tlX.n))); };
+let scrubbing = false;
+tl.addEventListener('pointerdown', e => { scrubbing = true; tl.setPointerCapture(e.pointerId); stop(); show(frameAt(e.clientX)); });
+tl.addEventListener('pointermove', e => {
+  const i = frameAt(e.clientX), f = clip.frames[i];
+  if (scrubbing) show(i);
+  tip.innerHTML = `кадр ${f.i} · ${num(f.t, 1)} с<br>${f.obstacle ? `<b>тревога</b>, ${num(f.distance_m, 1)} м` : 'без тревоги'}${f.path_range_m ? ` · ось до ${num(f.path_range_m, 0)} м` : ''}`;
+  tip.classList.add('on');
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, e.clientX - r.width / 2)) + 'px';
+  tip.style.top = (tl.getBoundingClientRect().top - r.height - 8) + 'px';
+});
+tl.addEventListener('pointerup', () => { scrubbing = false; });
+tl.addEventListener('pointerleave', () => tip.classList.remove('on'));
+
+// --- воспроизведение
+let playing = false, rate = 1, acc = 0, lastT = 0;
+const playBtn = $('#play');
+function setPlaying(p) { playing = p; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Пауза' : 'Пуск'); lastT = performance.now(); acc = 0; }
+function stop() { setPlaying(false); }
+function show(i) { i = Math.max(0, Math.min(clip.frames.length - 1, i)); if (i === fi && labels.length) { movePlayhead(); return; } fi = i; buildFrame(); movePlayhead(); }
+playBtn.addEventListener('click', () => { if (!playing && fi >= clip.frames.length - 1) show(0); setPlaying(!playing); });
+$('#prev').addEventListener('click', () => { stop(); show(fi - 1); });
+$('#next').addEventListener('click', () => { stop(); show(fi + 1); });
+const rateBtns = [...document.querySelectorAll('[data-rate]')];
+const setRate = r => { rate = r; rateBtns.forEach(b => b.setAttribute('aria-pressed', +b.dataset.rate === r ? 'true' : 'false')); };
+rateBtns.forEach(b => b.addEventListener('click', () => setRate(+b.dataset.rate)));
+function selectClip(k, fly = true) {
+  clip = clips[k]; fi = 0;
+  clipBtns.forEach((b, j) => b.setAttribute('aria-pressed', j === k ? 'true' : 'false'));
+  buildFrame(); drawTimeline();
+  press('cab'); if (fly) goTo(VIEWS.cab(), 700);
+}
+clipBtns.forEach((b, k) => b.addEventListener('click', () => { selectClip(k); setPlaying(true); }));
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === ' ' && !e.target.closest('button')) { e.preventDefault(); playBtn.click(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); stop(); show(fi + 1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); stop(); show(fi - 1); }
+  else if (e.key === 'Home') { stop(); show(0); }
+  else if (e.key === 'End') { stop(); show(clip.frames.length - 1); }
+});
+
+function loop(now) {
+  if (playing) {
+    // кадры идут в темпе записи (разница меток времени), rate -- множитель
+    acc += (now - lastT) / 1000 * rate; lastT = now;
+    const f = clip.frames, dt = fi + 1 < f.length ? Math.max(.02, f[fi + 1].t - f[fi].t) : .1;
+    if (acc >= dt) { acc = Math.min(acc - dt, .5); if (fi + 1 < f.length) show(fi + 1); else stop(); }
+  }
+  if (anim) anim(now);
+  if (alarmObj && !reduce) { pulse = .72 + .28 * Math.sin(now / 1600 * 2 * Math.PI); dirty = true; }
+  if (dirty) { dirty = false; draw(); }
+  requestAnimationFrame(loop);
+}
+
+new ResizeObserver(() => { resize(); drawTimeline(); }).observe(stage);
+resize();
+setRate(1);
+selectClip(0, false);
+Object.assign(cam, VIEWS.top());
+press('cab');
+setTimeout(() => goTo(VIEWS.cab(), 1600), 200);
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

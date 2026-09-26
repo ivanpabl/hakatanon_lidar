@@ -12,7 +12,10 @@
   check_preproc.json                           побитное совпадение и время разбора (check_preproc.py)
   input_report.json                            проверка входного потока (input_report.py)
   smoke/doubleT_platform_*                     e2e в Docker с C++-приёмом (./run.sh play)
-Чего нет в runs/ (замер десериализации, число тестов), лежит в DOCUMENTED с источником.
+Файла нет в runs/ -- берётся из reference/ (результаты с машины разработки, в git): исходная
+версия A_base (её код -- ae38df6, текущим не воспроизводится), e2e в Docker, проверка входа
+и замер разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
+Чего нет ни там, ни там (замер десериализации, число тестов), лежит в DOCUMENTED с источником.
 3D-сцена -- кадр doubleT_obstacle после прогона детектора с первого кадра: облако, ось пути,
 коридор, объект на 56 м.
 """
@@ -20,6 +23,8 @@ import argparse
 import base64
 import csv
 import json
+import os
+import platform
 import re
 import subprocess
 import sys
@@ -33,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bags import BAGS, RUNS, ROOT, open_cloud_bag   # noqa: E402
 
 TEMPLATE = ROOT / 'gui' / 'template.html'
+REFERENCE = ROOT / 'reference'
 OUT = ROOT / 'gui' / 'dashboard.html'
 BEFORE, AFTER = 'A_base', 'P_ev_f20'           # исходная версия (ae38df6) и текущая по умолчанию
 EMPTY = [b for b in BAGS if b not in ('doubleT_obstacle', 'new_data')]
@@ -48,9 +54,48 @@ DOCUMENTED = {
 }
 
 
+SOURCES = {}                                   # файл -> 'runs' | 'reference': откуда взят
+
+
+def source(name):
+    """Путь к результату: runs/, иначе reference/ (или несуществующий путь в runs/)."""
+    for kind, base in (('runs', RUNS), ('reference', REFERENCE)):
+        p = base / name
+        if p.exists():
+            SOURCES[name] = kind
+            return p
+    return RUNS / name
+
+
 def read_csv(name):
-    p = RUNS / name
-    return list(csv.DictReader(open(p))) if p.exists() else None
+    p = source(name)
+    if not p.exists():
+        return None
+    with open(p, encoding='utf-8', newline='') as f:
+        return list(csv.DictReader(f))
+
+
+def read_json(name):
+    p = source(name)
+    return json.loads(p.read_text(encoding='utf-8')) if p.exists() else None
+
+
+def host():
+    """Эта машина: для подписи прогонов качества и замера разбора, если он сделан здесь."""
+    cpu = platform.processor() or platform.machine()
+    if sys.platform == 'darwin':
+        try:
+            cpu = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True,
+                                 text=True).stdout.strip() or cpu
+        except OSError:
+            pass
+    elif sys.platform.startswith('linux'):
+        try:
+            cpu = next(line.split(':', 1)[1].strip() for line in open('/proc/cpuinfo', encoding='utf-8')
+                       if line.startswith('model name'))
+        except (OSError, StopIteration):
+            pass
+    return f'{cpu}, {os.cpu_count()} потоков, {platform.system()} {platform.release()}, Python {platform.python_version()}'
 
 
 def episodes(alarm):
@@ -77,10 +122,11 @@ def quality():
                          'after': [int(r['alarm']) for r in ob(after)],
                          'distance_m': float(np.median(dist)) if dist else None}
         per_bag = []
-        for b in EMPTY:
+        empty = [b for b in EMPTY if any(r['bag'] == b for r in after)]     # прогон мог быть не по всем
+        for b in empty:
             sb, sa = alarm_share([r for r in before if r['bag'] == b]), alarm_share([r for r in after if r['bag'] == b])
             per_bag.append({'bag': b, 'frames': sa['frames'], 'before': sb['pct'], 'after': sa['pct']})
-        eb, ea = [r for r in before if r['bag'] in EMPTY], [r for r in after if r['bag'] in EMPTY]
+        eb, ea = [r for r in before if r['bag'] in empty], [r for r in after if r['bag'] in empty]
         q['empty'] = {'bags': per_bag, 'before': alarm_share(eb)['pct'], 'after': alarm_share(ea)['pct'],
                       'frames': len(ea), 'minutes': len(ea) / 600}
     nb, na = read_csv(f'alarms_nd_{BEFORE}.csv'), read_csv(f'alarms_nd_{AFTER}.csv')
@@ -125,15 +171,13 @@ def quality():
 
 def speed():
     s = {'deser': DOCUMENTED['deser_ms']}
-    p = RUNS / 'check_preproc.json'
-    if p.exists():
-        d = json.loads(p.read_text())
+    d = read_json('check_preproc.json')
+    if d:
         s['parse'] = [{'bag': b, 'mb': FRAME_MB.get(b, 8), 'python': v['parse_ms_python'], 'cpp': v['parse_ms_cpp'],
                        'kept_after_crop': v['kept_after_crop']} for b, v in d.items()]
-    st, res = RUNS / 'smoke' / 'doubleT_platform_stats.json', RUNS / 'smoke' / 'doubleT_platform_result.jsonl'
-    if st.exists():
-        stats = json.loads(st.read_text())
-        rows = [json.loads(line) for line in open(res) if line.strip()] if res.exists() else []
+    stats, res = read_json('smoke/doubleT_platform_stats.json'), source('smoke/doubleT_platform_result.jsonl')
+    if stats:
+        rows = [json.loads(line) for line in open(res, encoding='utf-8') if line.strip()] if res.exists() else []
         pre = stats.get('preproc', {})
         s['e2e'] = {k: stats.get(k) for k in ('received', 'processed', 'dropped_stale', 'latency_ms_p50', 'latency_ms_p95',
                                               'latency_ms_max', 'e2e_ms_p50', 'e2e_ms_p95', 'e2e_ms_max', 'alarm_frames')}
@@ -141,9 +185,8 @@ def speed():
                          'latency_ms': [round(r['latency_ms'], 2) for r in rows if r.get('latency_ms') is not None],
                          'detect_ms': [round(r['detect_ms'], 2) for r in rows if r.get('detect_ms') is not None],
                          'queue_ms': [round(r['queue_ms'], 2) for r in rows if r.get('queue_ms') is not None]})
-        pp = RUNS / 'smoke' / 'doubleT_platform_stats_preproc.json'
-        if pp.exists():
-            pj = json.loads(pp.read_text())
+        pj = read_json('smoke/doubleT_platform_stats_preproc.json')
+        if pj:
             s['e2e']['preproc_ms_p50'], s['e2e']['preproc_ms_p95'] = pj.get('preproc_ms_p50'), pj.get('preproc_ms_p95')
             s['e2e']['transport_ms_p50'], s['e2e']['transport_ms_p95'] = pj.get('transport_ms_p50'), pj.get('transport_ms_p95')
     return s
@@ -151,21 +194,19 @@ def speed():
 
 def count_tests():
     """gtest считается по исходникам; pytest -- из DOCUMENTED: тесты узлов собираются только в образе."""
-    gtest = sum(len(re.findall(r'^TEST(?:_F|_P)?\(', f.read_text(), re.M))
+    gtest = sum(len(re.findall(r'^TEST(?:_F|_P)?\(', f.read_text(encoding='utf-8'), re.M))
                 for f in (ROOT / 'ros2_ws' / 'src').glob('*/test/*.cpp'))
     return {'gtest': gtest, 'pytest': DOCUMENTED['pytest']['n'], 'pytest_src': DOCUMENTED['pytest']['src']}
 
 
 def robustness():
     r = {'tests': count_tests()}
-    p = RUNS / 'check_preproc.json'
-    if p.exists():
-        d = json.loads(p.read_text())
+    d = read_json('check_preproc.json')
+    if d:
         r['bitwise'] = [{'bag': b, 'frames': v['frames'], 'parse_bitwise': v['parse_bitwise'],
                          'result_identical': v['result_identical']} for b, v in d.items()]
-    p = RUNS / 'input_report.json'
-    if p.exists():
-        d = json.loads(p.read_text())
+    d = read_json('input_report.json')
+    if d:
         rows = []
         for bag, v in d.items():
             c = v['checks']
@@ -180,21 +221,11 @@ def robustness():
     return r
 
 
-def scene(frame, bag='doubleT_obstacle'):
-    """Кадр записи после прогона детектора с начала записи: облако, ось, коридор, объекты."""
-    from tunnel_od import ObstacleDetector, parse_pointcloud2
-    warnings.simplefilter('ignore')
-    det = ObstacleDetector()
-    with open_cloud_bag(bag) as (reader, conn):
-        for i, (c, t, raw) in enumerate(reader.messages(connections=[conn])):
-            m = reader.deserialize(raw, c.msgtype)
-            x, y, z = parse_pointcloud2(m.data, m.point_step, m.fields)
-            res = det.detect(x, y, z, refit_path=True, stamp=t / 1e9)
-            if i == frame:
-                break
-    snap = det.track_path()
+def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
+    """Кадр для 3D-вида: точки (см, int16: вбок, вверх, вперёд), метки точек, ось, объекты.
+    bg_points -- оставить столько точек фона (случайно), точки зоны и объектов -- все."""
     fwd, lat = -y, x
-    keep = (fwd > -15) & (fwd < 230) & (np.abs(lat) < 12) & (z > -6) & (z < 8)
+    keep = (fwd > -15) & (fwd < max_fwd) & (np.abs(lat) < 12) & (z > -6) & (z < 8)
     fwd, lat, z = fwd[keep], lat[keep], z[keep]
 
     # оси детектора: вперёд = -y, вбок = x; в сцене: X вбок, Y вверх, Z назад (правая тройка WebGL)
@@ -223,6 +254,21 @@ def scene(frame, bag='doubleT_obstacle'):
                                     float(z[sel].max()), float(fwd[sel].min()), float(fwd[sel].max())]})
     objects.sort(key=lambda o: (not o['alarm'], o['distance_m']))
 
+    if bg_points is not None and (tag == 0).sum() > bg_points:
+        # фон: сначала по точке на воксель (вблизи точек в сотни раз больше, чем вдали -- дальние
+        # стены так не пропадают), остаток -- случайно
+        bg = np.flatnonzero(tag == 0)
+        for vox in (0.15, 0.25, 0.4):
+            key = np.floor(np.stack([lat[bg], z[bg], fwd[bg]], 1) / vox).astype(np.int32)
+            _, first = np.unique(key, axis=0, return_index=True)
+            if len(first) <= bg_points * 1.5:
+                break
+        keep_bg = bg[np.sort(first)]
+        if len(keep_bg) > bg_points:
+            keep_bg = np.sort((rng or np.random.default_rng(0)).choice(keep_bg, bg_points, replace=False))
+        mask = tag > 0
+        mask[keep_bg] = True
+        lat, z, fwd, tag = lat[mask], z[mask], fwd[mask], tag[mask]
     q = np.stack([np.round(lat * 100), np.round(z * 100), np.round(fwd * 100)], 1).astype(np.int16)
     step = 1.0
     axis_f = np.arange(2.0, (snap.path_range or 40.0) + step / 2, step)
@@ -230,10 +276,27 @@ def scene(frame, bag='doubleT_obstacle'):
     rails = None
     if snap.rail_prof is not None:
         rails = float(snap.rail_prof[0][-1])
-    return {'bag': bag, 'frame': frame, 'n_points': int(len(fwd)),
-            'points': base64.b64encode(q.tobytes()).decode(), 'tags': base64.b64encode(tag.tobytes()).decode(),
-            'axis': np.round(axis, 3).tolist(), 'path_range_m': snap.path_range, 'rails_to_m': rails,
-            'obstacle': bool(res['obstacle']), 'distance_m': res['distance_m'], 'objects': objects[:12],
+    return {'q': q, 'tag': tag, 'axis': np.round(axis, 3).tolist(), 'path_range_m': snap.path_range,
+            'rails_to_m': rails, 'objects': objects[:12]}
+
+
+def scene(frame, bag='doubleT_obstacle'):
+    """Кадр записи после прогона детектора с начала записи: облако, ось, коридор, объекты."""
+    from tunnel_od import ObstacleDetector, parse_pointcloud2
+    warnings.simplefilter('ignore')
+    det = ObstacleDetector()
+    with open_cloud_bag(bag) as (reader, conn):
+        for i, (c, t, raw) in enumerate(reader.messages(connections=[conn])):
+            m = reader.deserialize(raw, c.msgtype)
+            x, y, z = parse_pointcloud2(m.data, m.point_step, m.fields)
+            res = det.detect(x, y, z, refit_path=True, stamp=t / 1e9)
+            if i == frame:
+                break
+    v = frame_view(x, y, z, res, det.track_path())
+    return {'bag': bag, 'frame': frame, 'n_points': int(len(v['q'])),
+            'points': base64.b64encode(v['q'].tobytes()).decode(), 'tags': base64.b64encode(v['tag'].tobytes()).decode(),
+            'axis': v['axis'], 'path_range_m': v['path_range_m'], 'rails_to_m': v['rails_to_m'],
+            'obstacle': bool(res['obstacle']), 'distance_m': res['distance_m'], 'objects': v['objects'],
             'zone': {'half_width': 1.0, 'clearance': 0.15, 'height': 2.0}}
 
 
@@ -253,16 +316,20 @@ def main():
     args = ap.parse_args()
 
     data = {'generated': date.today().isoformat(), 'commit': git_rev(), 'bench': DOCUMENTED['bench'],
-            'quality': quality(), 'speed': speed(), 'robust': robustness()}
+            'host': host(), 'quality': quality(), 'speed': speed(), 'robust': robustness()}
+    data['sources'] = dict(sorted(SOURCES.items()))
     if not args.no_scene:
         try:
             data['scene'] = scene(args.scene_frame)
         except Exception as e:                                          # noqa: BLE001
             print(f'3D-сцена пропущена: {e}', file=sys.stderr)
-    html = TEMPLATE.read_text().replace('/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+    html = TEMPLATE.read_text(encoding='utf-8').replace('/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(html)
+    args.out.write_text(html, encoding='utf-8')
+    ref = [k for k, v in SOURCES.items() if v == 'reference']
     print(f'{args.out}  {args.out.stat().st_size / 1e6:.1f} МБ')
+    if ref:
+        print(f'  из reference/: {", ".join(sorted(ref))}')
 
 
 if __name__ == '__main__':

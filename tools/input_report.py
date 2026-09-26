@@ -86,7 +86,7 @@ def main():
         for cid, ch in s['checks'].items():
             print(f'   {cid:<7}{ch["level"]:<8}{ch["message"]}')
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'\nзаписано: {args.out}')
 
 

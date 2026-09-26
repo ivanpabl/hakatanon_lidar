@@ -21,7 +21,7 @@ import numpy as np
 
 FORMATS = {'auto': 0, 'legacy_hesai': 1, 'contract_v1': 2, 'generic': 3}
 AXES = {'auto': 0, 'legacy': 1, 'rep103': 2}
-LIB_NAME = 'libtunnel_od_canonical' + ('.dylib' if sys.platform == 'darwin' else '.so')
+LIB_NAME = 'libtunnel_od_canonical' + {'darwin': '.dylib', 'win32': '.dll'}.get(sys.platform, '.so')
 API_VERSION = 1
 
 

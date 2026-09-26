@@ -13,11 +13,16 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent.parent
 SOURCES = [PKG / 'src' / n for n in ('canonical.cpp', 'monitor.cpp', 'c_api.cpp')]
 HEADERS = sorted((PKG / 'include' / 'tunnel_od_preproc').glob('*'))
-LIB = 'libtunnel_od_canonical' + ('.dylib' if sys.platform == 'darwin' else '.so')
+LIB = 'libtunnel_od_canonical' + {'darwin': '.dylib', 'win32': '.dll'}.get(sys.platform, '.so')
 
 
 def _variants(cxx):
-    base = [cxx, '-std=c++17', '-O3', '-shared', '-fPIC', f'-I{PKG / "include"}']
+    base = [cxx, '-std=c++17', '-O3', '-shared', f'-I{PKG / "include"}']
+    if sys.platform == 'win32':
+        # MinGW-w64 (g++ из MSYS2 / WinLibs): рантайм C++ статически, чтобы ctypes не искал libstdc++-6.dll
+        yield base + ['-static']
+        return
+    base.append('-fPIC')
     yield base
     if sys.platform == 'darwin':
         # Command Line Tools без заголовков libc++ по умолчанию -- берём их из SDK явно

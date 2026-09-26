@@ -853,20 +853,27 @@ function mTable() {
    ===================================================================== */
 function method() {
   const e = S.e2e || {};
+  const src = D.sources || {}, fromRef = Object.keys(src).filter(k => src[k] === 'reference'), fromRuns = Object.keys(src).filter(k => src[k] === 'runs');
+  const parseHere = src['check_preproc.json'] === 'runs';
+  const stand = D.host
+    ? `e2e в Docker${parseHere ? '' : ' и замер разбора'} — ${esc(D.bench || '')}. Прогоны качества${parseHere ? ' и замер разбора' : ''} — ${esc(D.host)}. Все процессы numpy в один поток.`
+    : `${esc(D.bench || '')}. Все процессы numpy в один поток.`;
+  const files = list => list.map(f => `<code>${esc(f)}</code>`).join(', ');
   $('#method-body').innerHTML = `<dl>
-    <dt>Стенд</dt><dd>${esc(D.bench || '')}. Все процессы numpy в один поток.</dd>
+    <dt>Стенд</dt><dd>${stand}</dd>
     <dt>Задержка</dt><dd>Задержка e2e берётся по времени публикации сообщений DDS (<code>source_timestamp</code>): плеер опубликовал облако → детектор опубликовал результат. Штамп <code>header.stamp</code> в записях — 2000 год, от него задержку не посчитать. Задержка узла — от приёма облака до публикации результата.</dd>
     <dt>Версии</dt><dd>«Исходная» — коммит <code>ae38df6</code>, «текущая» — настройки по умолчанию (<code>config/detector.yaml</code>). Обе прогнаны одними и теми же инструментами.</dd>
     <dt>Ложные тревоги</dt><dd>Эпизод — серия кадров с тревогой, разрыв до двух кадров не прерывает эпизод. Пустые записи использовались при подборе, <code>new_data</code> — нет.</dd>
     <dt>Дальность</dt><dd>Объект вставляется в реальные кадры лучами настоящего датчика, с тенью. Поезд едет к нему со скоростью, оценённой по сцене. Объект ставится на ось, найденную детектором: ошибка оси в эту оценку не попадает.</dd>
     <dt>Воспроизведение</dt><dd>
+      <code class="cmd">python tools/run_all.py</code>
       <code class="cmd">./run.sh build && ./run.sh play data/Датасет/archive/for_hackathon/doubleT_platform</code>
       <code class="cmd">python tools/check_preproc.py</code>
       <code class="cmd">python tools/input_report.py</code>
       <code class="cmd">python tools/alarms.py --tag P_ev_f20 && python tools/eval_approach.py --tag P_ev_f20</code>
       <code class="cmd">python tools/dashboard.py</code>
     </dd>
-    <dt>Сборка страницы</dt><dd class="src">Сгенерировано ${esc(D.generated || '')}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}, из файлов <code>runs/</code>: alarms_*.csv, approach_*.csv, check_preproc.json, input_report.json, smoke/*. Число тестов pytest — ${esc((R.tests || {}).pytest_src || '')}.</dd>
+    <dt>Сборка страницы</dt><dd class="src">Сгенерировано ${esc(D.generated || '')}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}${D.sources ? `. Прогон на этой машине (<code>runs/</code>): ${files(fromRuns) || '—'}. Эталон с машины разработки (<code>reference/</code>): ${files(fromRef) || '—'}` : ', из файлов <code>runs/</code>: alarms_*.csv, approach_*.csv, check_preproc.json, input_report.json, smoke/*'}. Число тестов pytest — ${esc((R.tests || {}).pytest_src || '')}.</dd>
   </dl>`;
 }
 
