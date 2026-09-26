@@ -62,6 +62,45 @@ def build_detector_kwargs(ros_params: dict, json_override: str = '', target=None
     return kwargs
 
 
+# ---------------------------------------------------------------- вход
+
+CANONICAL_FIELDS = (('x', 0, 7), ('y', 4, 7), ('z', 8, 7))
+
+
+def is_canonical(msg):
+    """Облако от tunnel_od_preproc: x, y, z float32 подряд, point_step 12."""
+    return (msg.point_step == 12 and len(msg.fields) == 3 and not msg.is_bigendian
+            and all((f.name, f.offset, f.datatype) == c for f, c in zip(msg.fields, CANONICAL_FIELDS)))
+
+
+def canonical_xyz(msg):
+    """Каноническое облако -> (x, y, z) -- представления над буфером сообщения, без копии.
+    parse_pointcloud2 сюда нельзя: при числе точек, кратном 256, он удалил бы "дубли"
+    уже очищенного облака."""
+    if not is_canonical(msg):
+        raise ValueError(f'не каноническое облако: point_step {msg.point_step}, '
+                         f'fields {[(f.name, f.offset, f.datatype) for f in msg.fields]}')
+    a = np.frombuffer(msg.data, dtype=np.float32).reshape(-1, 3)
+    return a[:, 0], a[:, 1], a[:, 2]
+
+
+def required_fwd_range(det_kwargs):
+    """Какой диапазон дальности вперёд ядро может использовать при этих параметрах:
+    (min, max). Обрезка облака в tunnel_od_preproc безопасна, только если
+    crop_fwd_min <= min и crop_fwd_max >= max (см. docs/INPUT_FORMAT.md, "Обрезка")."""
+    from tunnel_od.detection.detector import ObstacleDetector
+    from tunnel_od.geometry import bed, path, rails
+    defaults = {k: p.default for k, p in inspect.signature(ObstacleDetector.__init__).parameters.items()}
+    near = float(det_kwargs.get('near_cutoff', defaults['near_cutoff']))
+    far = float(det_kwargs.get('max_range', defaults['max_range']))
+    bed_sig = inspect.signature(bed.estimate_bed_profile).parameters
+    floor_sig = inspect.signature(bed.estimate_floor_z).parameters
+    ext_sig = inspect.signature(path.extend_path_by_walls).parameters
+    lo = min(near, rails.NEAR, bed_sig['near'].default, floor_sig['near'].default)
+    hi = max(far, rails.FAR, bed_sig['far'].default, ext_sig['far'].default, floor_sig['far'].default)
+    return lo, hi
+
+
 # ---------------------------------------------------------------- JSON
 
 def to_jsonable(obj, _depth=0):

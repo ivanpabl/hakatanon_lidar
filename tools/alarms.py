@@ -23,9 +23,9 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from tunnel_od import GAUGE_METRO, ObstacleDetector, parse_pointcloud2
+from tunnel_od import GAUGE_METRO, ObstacleDetector
 
-from bags import BAGS, RUNS as OUT, open_cloud_bag
+from bags import BAGS, RUNS as OUT, cloud_parser, open_cloud_bag
 GAP = 2
 
 
@@ -50,8 +50,9 @@ def _stream(reader, conn, segments, seglen):
 
 
 def run_bag(job):
-    bag, corridor, minpts, method, det_kwargs, segments, seglen = job
+    bag, corridor, minpts, method, det_kwargs, segments, seglen, parser = job
     warnings.simplefilter('ignore')
+    parse_pointcloud2 = cloud_parser(parser)
     make = lambda: ObstacleDetector(zone=CORRIDORS[corridor], method=method, **{**MINPTS[minpts], **det_kwargs})
     rows = []
     with open_cloud_bag(bag) as (reader, conn):
@@ -93,11 +94,13 @@ def main():
     ap.add_argument('--det', default='{}', help='доп. kwargs ObstacleDetector в JSON')
     ap.add_argument('--segments', type=int, default=0, help='не вся запись, а столько отрезков (для длинной new_data)')
     ap.add_argument('--seglen', type=int, default=400, help='кадров в отрезке')
+    ap.add_argument('--parser', default='python', choices=['python', 'cpp'],
+                    help='разбор облака: python -- parse_pointcloud2, cpp -- как C++-узел приёма (tunnel_od_preproc)')
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     with Pool(min(len(args.bags), args.workers)) as pool:
         parts = pool.map(run_bag, [(b, args.corridor, args.minpts, args.method, json.loads(args.det),
-                                    args.segments, args.seglen) for b in args.bags])
+                                    args.segments, args.seglen, args.parser) for b in args.bags])
     rows = [r for p in parts for r in p]
     path = OUT / f'alarms_{args.tag}.csv'
     with open(path, 'w', newline='', encoding='utf-8') as f:

@@ -5,7 +5,8 @@ import math
 import numpy as np
 import pytest
 
-from tunnel_od_detector.util import Stats, build_detector_kwargs, dumps, to_jsonable
+from tunnel_od_detector.util import (Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
+                                     required_fwd_range, to_jsonable)
 
 
 def _target(self, near_cutoff=2.0, zone=None, method='zone', path_margin=10.0):
@@ -64,3 +65,33 @@ def test_stats():
     assert out['received'] == 5 and out['processed'] == 5 and out['stamp_gaps'] == 2
     assert out['alarm_frames'] == 1 and out['min_alarm_distance_m'] == 56.0
     assert math.isclose(out['latency_ms_p50'], 12.0)
+
+
+class _Field:
+    def __init__(self, name, offset, datatype=7):
+        self.name, self.offset, self.datatype = name, offset, datatype
+
+
+class _Cloud:
+    def __init__(self, data, point_step=12, fields=None):
+        self.data, self.point_step, self.is_bigendian = data, point_step, False
+        self.fields = fields if fields is not None else [_Field('x', 0), _Field('y', 4), _Field('z', 8)]
+
+
+def test_canonical_xyz_views_without_copy():
+    xyz = np.arange(3 * 256, dtype=np.float32).reshape(-1, 3)     # 256 точек: parse_pointcloud2 удалил бы "дубли"
+    buf = xyz.tobytes()
+    x, y, z = canonical_xyz(_Cloud(buf))
+    assert len(x) == 256 and np.array_equal(x, xyz[:, 0]) and np.array_equal(z, xyz[:, 2])
+    assert not x.flags.owndata
+    assert not is_canonical(_Cloud(buf, 16))
+    with pytest.raises(ValueError):
+        canonical_xyz(_Cloud(buf, 12, [_Field('y', 0), _Field('x', 4), _Field('z', 8)]))
+
+
+def test_default_crop_is_safe_for_core():
+    """Обрезка tunnel_od_preproc по умолчанию (2..250 м) не задевает то, что берёт ядро."""
+    pytest.importorskip('tunnel_od')
+    lo, hi = required_fwd_range({})
+    assert lo >= 2.0 - 1e-9 and hi <= 250.0 + 1e-9
+    assert required_fwd_range({'max_range': 300.0})[1] == 300.0

@@ -2,12 +2,19 @@
 
 Вход:  sensor_msgs/PointCloud2 (топик -- параметр `topic`; пусто = первый найденный
        топик этого типа, в записях это /lidar_points или /sensing/lidar/hesai128/pointcloud).
+       canonical_input: true -- на входе каноническое облако от C++-узла tunnel_od_preproc
+       (/tunnel_od/cloud: x, y, z float32, уже без пустых лучей и дублей, в осях ядра);
+       разбор тогда -- np.frombuffer без копии, а из /tunnel_od/input_meta берутся время
+       публикации исходного кадра, скорость поезда (S1) и сводка проверки входа.
+       Без него облако разбирается здесь: нативной библиотекой tunnel_od_preproc (тот же
+       код, что в C++-узле; parse_backend: auto|native) или parse_pointcloud2 (python).
 Выход: /tunnel_od/result  -- std_msgs/String, JSON на каждый обработанный кадр;
        /tunnel_od/markers -- visualization_msgs/MarkerArray для RViz.
 
 Кадры обрабатываются в отдельном потоке. Колбэк подписки только кладёт сообщение в
-«слот»; если прошлый кадр ещё не взят в работу, он заменяется новым (счётчик
-dropped_stale). Так задержка не растёт, даже если детектор временно не успевает.
+очередь на max_pending кадров; если она полна, самый старый кадр отбрасывается
+(счётчик dropped_stale, предупреждение в лог). Так задержка не растёт без предела,
+даже если детектор надолго не успевает.
 
 Путь (update_path, ~80 мс) по умолчанию пересчитывается в отдельном процессе по самому
 свежему кадру (refit_mode: async, см. path_worker.py) -- тогда задержка кадра = разбор +
@@ -20,6 +27,7 @@ import json
 import os
 import threading
 import time
+from collections import OrderedDict, deque
 
 import rclpy
 import rclpy.executors
@@ -32,7 +40,7 @@ from visualization_msgs.msg import MarkerArray
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 
 from .markers import build_markers
-from .util import Stats, build_detector_kwargs, dumps, percentile
+from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, percentile
 
 CLOUD_TYPE = 'sensor_msgs/msg/PointCloud2'
 
@@ -60,7 +68,12 @@ class DetectorNode(Node):
         self.stats_file = p('stats_file', '')
         depth = int(p('qos_depth', 5))
         reliability = str(p('qos_reliability', 'reliable')).lower()
+        self.canonical_input = bool(p('canonical_input', False))
+        self.meta_topic = p('meta_topic', '/tunnel_od/input_meta')
+        self.max_pending = max(1, int(p('max_pending', 2)))
+        self.parse_backend = str(p('parse_backend', 'auto')).lower()
         p('detector_json', '')
+        self._parse = self._make_parser()
 
         det_params = {name: prm.value for name, prm in self.get_parameters_by_prefix('detector').items()}
         kwargs = build_detector_kwargs(det_params, self.get_parameter('detector_json').value,
@@ -84,7 +97,11 @@ class DetectorNode(Node):
         self.stats = Stats()
         self._lock = threading.Lock()
         self._event = threading.Event()
-        self._pending = None           # (msg, t_recv)
+        self._pending = deque()        # (msg, t_recv)
+        self._meta = OrderedDict()     # (sec, nanosec) -> JSON от tunnel_od_preproc
+        self._last_meta = None
+        self._last_input = None
+        self._e2e = []
         self._stop = False
         self._frame = 0
         self._sub = None
@@ -92,6 +109,10 @@ class DetectorNode(Node):
         self._t_period = self._t_start
         self._result_fh = open(self.result_file, 'w', encoding='utf-8') if self.result_file else None
 
+        if self.canonical_input:
+            self.create_subscription(String, self.meta_topic, self._on_meta,
+                                     QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=20,
+                                                reliability=ReliabilityPolicy.RELIABLE))
         if self.topic:
             self._subscribe(self.topic)
         else:
@@ -120,6 +141,29 @@ class DetectorNode(Node):
         except Exception as e:
             self.get_logger().warning(f'прогрев не удался (не критично): {e}')
 
+    def _make_parser(self):
+        """Разбор входного облака. Возвращает функцию msg -> (x, y, z)."""
+        if self.canonical_input:
+            self.get_logger().info('вход: каноническое облако tunnel_od_preproc (np.frombuffer без копии)')
+            return canonical_xyz
+        if self.parse_backend not in ('auto', 'native', 'python'):
+            raise ValueError(f'parse_backend: auto | native | python, получено {self.parse_backend!r}')
+        if self.parse_backend != 'python':
+            try:
+                from tunnel_od_preproc import native
+                if native.available():
+                    self.get_logger().info('разбор облака: нативная библиотека tunnel_od_preproc (ctypes)')
+                    return native.parse_msg
+                err = native.load_error
+            except ImportError as e:
+                err = str(e)
+            if self.parse_backend == 'native':
+                raise RuntimeError(f'parse_backend: native, но библиотека недоступна: {err}')
+            self.get_logger().warning(f'нативный разбор недоступен ({err}) -- parse_pointcloud2')
+        else:
+            self.get_logger().info('разбор облака: parse_pointcloud2 (Python)')
+        return lambda msg: parse_pointcloud2(msg.data, msg.point_step, msg.fields)
+
     # ------------------------------------------------------------------ параметры
     def _param(self, name, default):
         if self.has_parameter(name):
@@ -128,9 +172,8 @@ class DetectorNode(Node):
 
     # ------------------------------------------------------------------ подписка
     def _discover(self):
-        own = {'/tunnel_od/result', '/tunnel_od/markers'}
         for name, types in sorted(self.get_topic_names_and_types()):
-            if CLOUD_TYPE in types and name not in own:
+            if CLOUD_TYPE in types and not name.startswith('/tunnel_od/'):
                 self._discover_timer.cancel()
                 self._subscribe(name)
                 return
@@ -145,32 +188,53 @@ class DetectorNode(Node):
 
     def _on_cloud(self, msg):
         t_recv = time.monotonic()
+        dropped = False
         with self._lock:
             self.stats.on_receive(_stamp_sec(msg.header))
-            if self._pending is not None:
+            if len(self._pending) >= self.max_pending:
+                self._pending.popleft()
                 self.stats.dropped += 1
-            self._pending = (msg, t_recv)
+                dropped = True
+            self._pending.append((msg, t_recv))
         self._event.set()
+        if dropped:
+            self.get_logger().warning(f'детектор не успевает: отброшен кадр (всего {self.stats.dropped})',
+                                      throttle_duration_sec=5.0)
+
+    def _on_meta(self, msg):
+        try:
+            meta = json.loads(msg.data)
+        except ValueError:
+            return
+        with self._lock:
+            self._meta[(meta.get('stamp_sec'), meta.get('stamp_nanosec'))] = meta
+            while len(self._meta) > 50:
+                self._meta.popitem(last=False)
+            self._last_meta = meta
+            if 'input' in meta:
+                self._last_input = meta['input']
 
     # ------------------------------------------------------------------ обработка
     def _work_loop(self):
         while not self._stop:
             if not self._event.wait(0.2):
                 continue
-            with self._lock:
-                item, self._pending = self._pending, None
-                self._event.clear()
-            if item is None:
-                continue
-            try:
-                self._process(*item)
-            except Exception as e:  # кадр с ошибкой не должен ронять узел
-                self.stats.errors += 1
-                self.get_logger().error(f'ошибка обработки кадра: {type(e).__name__}: {e}')
+            while True:
+                with self._lock:
+                    item = self._pending.popleft() if self._pending else None
+                    if item is None:
+                        self._event.clear()
+                if item is None:
+                    break
+                try:
+                    self._process(*item)
+                except Exception as e:  # кадр с ошибкой не должен ронять узел
+                    self.stats.errors += 1
+                    self.get_logger().error(f'ошибка обработки кадра: {type(e).__name__}: {e}')
 
     def _process(self, msg, t_recv):
         t0 = time.monotonic()
-        x, y, z = parse_pointcloud2(msg.data, msg.point_step, msg.fields)
+        x, y, z = self._parse(msg)
         t1 = time.monotonic()
         stamp = _stamp_sec(msg.header)
         path_updated = False
@@ -201,6 +265,21 @@ class DetectorNode(Node):
         })
         with self._lock:
             out['dropped_total'] = self.stats.dropped
+            meta = self._meta.pop((msg.header.stamp.sec, msg.header.stamp.nanosec), None)
+        if self.canonical_input:
+            parse = (meta or {}).get('parse') or {}
+            out.update({
+                'train_speed_mps': meta.get('train_speed_mps') if meta else None,   # S1, в детекции не используется
+                'preproc_ms': meta.get('preproc_ms') if meta else None,
+                'transport_ms': meta.get('transport_ms') if meta else None,
+                'n_points_raw': parse.get('n_in'),
+                'n_points_valid': parse.get('n_valid'),
+                'input_format': parse.get('format'),
+            })
+            if meta and meta.get('source_ts_ns'):
+                # полная задержка: исходный кадр опубликован -> результат публикуется (часы системы)
+                out['e2e_ms'] = (time.time_ns() - int(meta['source_ts_ns'])) * 1e-6
+                self._e2e.append(out['e2e_ms'])
         out['latency_ms'] = (time.monotonic() - t_recv) * 1e3
         text = dumps(out)
         self.pub_result.publish(String(data=text))
@@ -248,7 +327,14 @@ class DetectorNode(Node):
             s = self.stats.summary()
         s.update({'topic': self.topic, 'refit_mode': self.refit_mode, 'refit_every': self.refit_every,
                   'path_fits_async': self.fitter.fits if self.fitter else None,
-                  'wall_s': time.monotonic() - self._t_start})
+                  'wall_s': time.monotonic() - self._t_start, 'max_pending': self.max_pending,
+                  'canonical_input': self.canonical_input})
+        if self.canonical_input:
+            with self._lock:
+                meta, inp = self._last_meta, self._last_input
+            s.update({'e2e_ms_p50': percentile(self._e2e, 50), 'e2e_ms_p95': percentile(self._e2e, 95),
+                      'e2e_ms_max': max(self._e2e) if self._e2e else None,
+                      'preproc': (meta or {}).get('counters'), 'input': inp})
         self.get_logger().info('ИТОГ ' + json.dumps(s, ensure_ascii=False))
         if self.stats_file:
             with open(self.stats_file, 'w', encoding='utf-8') as fh:

@@ -1,4 +1,4 @@
-# Параметры ROS 2-узла tunnel_od_detector.
+# Параметры узлов tunnel_od_preproc (C++, приём облака) и tunnel_od_detector (Python).
 # Всё под `detector:` передаётся в ObstacleDetector(**kwargs) как есть -- новые
 # аргументы ядра можно добавлять сюда без правки узла. Ключи, которых нет у текущей
 # версии ObstacleDetector, узел пропускает с предупреждением в логе.
@@ -13,6 +13,8 @@ tunnel_od_detector:
     refit_every: 1           # только для sync
     qos_reliability: reliable   # reliable | best_effort (ros2 bag play публикует RELIABLE)
     qos_depth: 5
+    max_pending: 2           # очередь кадров к детектору; полна -- отбрасывается самый старый
+    parse_backend: auto      # без C++-узла: auto (нативная библиотека, иначе Python) | native | python
     publish_markers: true
     marker_max_objects: 30
     markers_every: 1         # маркеры раз в N кадров (строятся после публикации результата)
@@ -48,3 +50,28 @@ tunnel_od_detector:
       default_rail_offset: 0.5
       min_points_k: 12000.0  # ожидаемый минимум точек max(floor, k / d^2)
       min_points_floor: 3
+
+# C++-узел приёма облака (use_cpp_preproc:=true в detector.launch.py). Формат входа --
+# docs/INPUT_FORMAT.md. На детекцию влияют только формат, оси, дубли и обрезка; проверка
+# потока (/tunnel_od/input_diagnostics) -- только сообщает.
+tunnel_od_preproc:
+  ros__parameters:
+    input_topic: ""          # "" -- первый найденный топик sensor_msgs/msg/PointCloud2
+    input_format: auto       # auto | legacy_hesai | contract_v1 | generic
+    input_axes: auto         # auto (legacy для legacy_hesai/generic, rep103 для contract_v1) | legacy | rep103
+    dedupe_dual_return: true
+    # Обрезка по дальности вперёд -- только то, что ядро отбрасывает само: при near_cutoff >= 2
+    # и max_range <= 250 ядро не берёт точки ближе 2 м и дальше 250 м (rails.NEAR, bed/path far).
+    # launch проверяет это по параметрам detector.* и выключает обрезку, если она небезопасна.
+    crop_enabled: true
+    crop_fwd_min: 2.0
+    crop_fwd_max: 250.0
+    apply_mount_tf: false    # поворот облака по /tf_static base_link -> лидар; меняет вход ядра --
+                             # включать только после прогона tools/alarms.py и eval_approach.py
+    base_frame: base_link
+    speed_topic: ""          # S1: TwistStamped / Odometry -> train_speed_mps в результате (в детекции не используется)
+    speed_type: auto         # auto | twist | odometry
+    description_topic: /lidar/description   # M6: описание датчика (латченый std_msgs/String)
+    stats_period_s: 5.0
+    qos_reliability: reliable
+    qos_depth: 5

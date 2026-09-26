@@ -27,12 +27,12 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from tunnel_od import ObstacleDetector, parse_pointcloud2
+from tunnel_od import ObstacleDetector
 from tunnel_od.pointcloud import beam_directions, xyz_views
 from tunnel_od.sim.inject import inject, on_track
 from tunnel_od.sim.shapes import make_shape
 
-from bags import RUNS as OUT, open_cloud_bag
+from bags import RUNS as OUT, cloud_parser, open_cloud_bag
 from eval_injection import front_of
 
 BAGS = ['doubleT_platform', 'roundT_doubleT', 'roundT_pressureGate_roundT',
@@ -49,6 +49,9 @@ SHAPES = {
     'человек стоит': ('cylinder', (0.25, 1.7)),
     'человек лежит': ('box', (1.7, 0.5, 0.3)),
 }
+
+
+parse_pointcloud2 = cloud_parser('python')      # --parser cpp -- как C++-узел приёма
 
 
 def pick_windows(bag, n_windows, det_kwargs):
@@ -96,8 +99,10 @@ def match(objs, front, tol_lat=0.8):
 
 
 def run_bag(job):
-    bag, det_kwargs, seed = job
+    global parse_pointcloud2
+    bag, det_kwargs, seed, parser = job
     warnings.simplefilter('ignore')
+    parse_pointcloud2 = cloud_parser(parser)
     rows = []
     for w, start in enumerate(pick_windows(bag, N_WINDOWS, det_kwargs)):
         frames = read_frames(bag, start, WARMUP + FRAMES)
@@ -186,11 +191,13 @@ def main():
     ap.add_argument('--det', default='{}', help='kwargs ObstacleDetector в JSON')
     ap.add_argument('--workers', type=int, default=3)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--parser', default='python', choices=['python', 'cpp'],
+                    help='разбор облака: python -- parse_pointcloud2, cpp -- как C++-узел приёма (tunnel_od_preproc)')
     args = ap.parse_args()
     det_kwargs = json.loads(args.det)
     OUT.mkdir(exist_ok=True)
     with Pool(min(len(args.bags), args.workers)) as pool:
-        rows = [r for part in pool.imap_unordered(run_bag, [(b, det_kwargs, args.seed) for b in args.bags]) for r in part]
+        rows = [r for part in pool.imap_unordered(run_bag, [(b, det_kwargs, args.seed, args.parser) for b in args.bags]) for r in part]
     rows.sort(key=lambda r: (r['bag'], r['window'], r['shape'], r['start_m']))
     path = OUT / f'approach_{args.tag}.csv'
     with open(path, 'w', newline='', encoding='utf-8') as f:

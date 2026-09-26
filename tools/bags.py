@@ -28,3 +28,32 @@ def open_cloud_bag(name):
     with AnyReader([bag_path(name)], default_typestore=get_typestore(Stores.ROS2_HUMBLE)) as reader:
         conn = [c for c in reader.connections if c.msgtype == 'sensor_msgs/msg/PointCloud2'][0]
         yield reader, conn
+
+
+CROP = (2.0, 250.0)       # обрезка по дальности, как в tunnel_od_preproc (config/detector.yaml)
+
+
+def cloud_parser(kind='python'):
+    """Разбор облака (data, point_step, fields) -> (x, y, z).
+    python -- parse_pointcloud2 (ядро); cpp -- библиотека tunnel_od_preproc с обрезкой по
+    дальности, облако взято представлениями над одним буфером x, y, z -- ровно как в узле
+    детектора при use_cpp_preproc:=true."""
+    if kind == 'python':
+        from tunnel_od import parse_pointcloud2
+        return parse_pointcloud2
+    if kind != 'cpp':
+        raise ValueError(kind)
+    import sys
+    import numpy as np
+    sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
+    from tunnel_od_preproc.build_host import ensure
+    if ensure() is None:
+        raise RuntimeError('не собрать libtunnel_od_canonical')
+    from tunnel_od_preproc import native
+
+    def parse(data, point_step, fields):
+        x, y, z = native.parse_fast(data, point_step, fields, crop=CROP)
+        buf = np.empty((len(x), 3), np.float32)
+        buf[:, 0], buf[:, 1], buf[:, 2] = x, y, z
+        return buf[:, 0], buf[:, 1], buf[:, 2]
+    return parse

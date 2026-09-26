@@ -7,7 +7,7 @@
 #                                           монтируется только на чтение; результат в $OUT_DIR
 #   ./run.sh detector [аргументы launch...] только узел (для внешнего плеера / живого лидара),
 #                                           например: ./run.sh detector topic:=/lidar_points
-#   ./run.sh test                           pytest узла внутри образа
+#   ./run.sh test                           gtest + pytest узлов внутри образа
 #   ./run.sh shell                          bash в контейнере с настроенным окружением
 #
 # Переменные окружения:
@@ -17,6 +17,8 @@
 #   TUNNEL_OD_DDS  fastdds_shm (по умолчанию) | cyclone | default
 #   TOPIC          топик PointCloud2 для play ("" -- автопоиск по типу)
 #   READ_AHEAD, PLAY_DELAY  параметры плеера для play (очередь 20 кадров, старт через 3 с)
+#   LAUNCH_ARGS    доп. аргументы detector.launch.py для play, например "use_cpp_preproc:=false"
+#   PROBE          1 (по умолчанию) -- замер e2e-задержки latency_probe в play, 0 -- без него
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +34,7 @@ NET_SYSCTL=(--sysctl net.core.rmem_max=134217728 --sysctl net.core.wmem_max=1342
 COMMON=(--rm -e "TUNNEL_OD_DDS=$DDS" -v "$CONFIG_DIR:/opt/tunnel_od/config:ro")
 [ -t 0 ] && [ -t 1 ] && COMMON+=(-it)
 
-usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 cmd="${1:-}"; [ $# -gt 0 ] && shift
 case "$cmd" in
@@ -47,6 +49,7 @@ case "$cmd" in
     mkdir -p "$OUT_DIR"
     docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" \
         -e "TOPIC=${TOPIC:-}" -e "READ_AHEAD=${READ_AHEAD:-20}" -e "PLAY_DELAY=${PLAY_DELAY:-3}" \
+        -e "LAUNCH_ARGS=${LAUNCH_ARGS:-}" -e "PROBE=${PROBE:-1}" \
         -v "$BAG:/bags/$NAME:ro" -v "$OUT_DIR:/out" \
         "$IMAGE" play.sh "/bags/$NAME" "$@"
     ;;
@@ -58,7 +61,10 @@ case "$cmd" in
         "$IMAGE" ros2 launch tunnel_od_detector detector.launch.py "$@"
     ;;
   test)
-    docker run "${COMMON[@]}" "$IMAGE" python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test "$@"
+    # gtest tunnel_od_preproc + pytest обоих пакетов
+    docker run "${COMMON[@]}" "$IMAGE" bash -o pipefail -c \
+        '/ws/install/tunnel_od_preproc/lib/tunnel_od_preproc/test_canonical 2>&1 | tail -3 && \
+         python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test "$@"' _ "$@"
     ;;
   shell)
     docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"
