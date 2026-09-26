@@ -319,6 +319,7 @@ CycloneDDS с `docker/cyclone_big.xml` и FastDDS по умолчанию тож
 | `research/compare.sh <tag> '<json>'` | всё сразу для варианта детектора: тревоги на 6 записях, на `new_data`, дальность при подъезде |
 | `python tools/benchmark.py [--det '{…}']` | время разбора, пересчёта пути и проверки кадра |
 | `python tools/inject_demo.py --bag … --fwd 56` | вставка объекта в несколько кадров подряд с картинками до и после |
+| `python tools/dashboard.py [--no-scene]` | дашборд метрик `gui/dashboard.html`: один файл без сети — 3D-кадр `doubleT_obstacle` с найденным объектом, качество, скорость приёма, проверка входа, контракт M1–M6, методика. Цифры берутся из `runs/` |
 
 У `alarms.py` и `eval_injection.py` есть флаги `--corridor rect|gauge` и `--minpts on|off` для сравнения вариантов зоны и порога.
 
