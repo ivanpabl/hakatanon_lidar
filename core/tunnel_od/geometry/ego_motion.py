@@ -51,6 +51,8 @@ class EgoMotion:
         return g
 
     def _match(self, prev, cur, shifts):
+        if len(shifts) == 0:
+            return None, False
         a = cur[:self._n]
         scores = np.full(len(shifts), np.inf)
         for j, k in enumerate(shifts):
@@ -84,6 +86,8 @@ class EgoMotion:
                 c = int(round(self.speed * dt / S_BIN))
                 w = int(SEARCH_HALF / S_BIN)
                 lo, hi = max(-int(1.0 / S_BIN), c - w), min(int(self._max_shift / S_BIN), c + w)
+                if lo > hi:   # пропуск кадров в потоке: ожидаемый сдвиг за пределами поиска
+                    lo, hi = -int(1.0 / S_BIN), int(self._max_shift / S_BIN)
             shift, at_edge = self._match(prev, img, np.arange(lo, hi + 1))
             if at_edge and self.speed is not None:
                 shift, _ = self._match(prev, img, np.arange(-int(1.0 / S_BIN), int(self._max_shift / S_BIN) + 1))

@@ -1,0 +1,50 @@
+# Параметры ROS 2-узла tunnel_od_detector.
+# Всё под `detector:` передаётся в ObstacleDetector(**kwargs) как есть -- новые
+# аргументы ядра можно добавлять сюда без правки узла. Ключи, которых нет у текущей
+# версии ObstacleDetector, узел пропускает с предупреждением в логе.
+# Не заданные здесь аргументы берутся по умолчанию из ядра (core/tunnel_od).
+tunnel_od_detector:
+  ros__parameters:
+    topic: ""                # "" -- первый найденный топик типа sensor_msgs/msg/PointCloud2
+    # Пересчёт оси пути (~80 мс -- больше, чем всё остальное на кадре):
+    #   async -- в отдельном процессе по самому свежему кадру, кадр не ждёт пересчёта;
+    #   sync  -- в том же вызове detect() раз в refit_every кадров (как в ядре).
+    refit_mode: async
+    refit_every: 1           # только для sync
+    qos_reliability: reliable   # reliable | best_effort (ros2 bag play публикует RELIABLE)
+    qos_depth: 5
+    publish_markers: true
+    marker_max_objects: 30
+    markers_every: 1         # маркеры раз в N кадров (строятся после публикации результата)
+    log_alarms: true         # строка в лог на каждый кадр с тревогой
+    stats_period_s: 5.0      # период сводки (кадр/с, задержка p50/p95, пропуски)
+    result_file: ""          # путь для JSONL с результатом каждого кадра ("" -- не писать)
+    stats_file: ""           # путь для итоговой статистики JSON при остановке узла
+    # JSON-объект, перекрывает detector.* ; для того, что не выразить ROS-параметром
+    # (null, вложенные списки), например: '{"zone": [[0.15, 0.35, 1.2], [0.35, 3.7, 1.35]]}'
+    detector_json: ""
+
+    detector:
+      method: zone           # zone | background
+      near_cutoff: 2.0       # м, диапазон дальностей проверки
+      max_range: 250.0
+      half_width: 1.0        # м, прямоугольная зона: полуширина от оси,
+      clearance: 0.15        #    низ и верх над головкой рельса
+      height: 2.0
+      # zone: GAUGE_METRO    # своя зона: имя константы ядра или плоский список троек
+      #                      # [низ, верх, полуширина, низ, верх, полуширина, ...]
+      far_axis: true         # продление оси по стенам дальше пошагового (до 150-200 м)
+      path_margin: 0.0       # м, тревога только до конца известной оси + столько
+      far_from: 20.0         # м за концом найденных рельсов начинается "дальняя" зона:
+      far_half_width: 0.7    #    там объект у края (|смещение| > 0.7 м)
+      far_top: 1.5           #    или целиком выше 1.5 м над рельсом не поднимает тревогу
+      edge_lines: true       # продольные конструкции (кабель, контактный рельс, стена) -- не объект
+      tracker: evidence      # evidence -- накопление с учётом движения | hits -- confirm_hits из confirm_window
+      evidence_threshold: 2.2
+      evidence_decay: 0.8
+      confirm_hits: 3        # для evidence -- минимум кадров с объектом до тревоги
+      confirm_window: 5      # только для hits
+      max_path_age: 30       # кадров держать ось без пересчёта
+      default_rail_offset: 0.5
+      min_points_k: 12000.0  # ожидаемый минимум точек max(floor, k / d^2)
+      min_points_floor: 3
