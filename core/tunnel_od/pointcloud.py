@@ -13,12 +13,16 @@ Layout в записях: x,y,z,intensity (float32), ring (uint16), timestamp (f
 
 Система координат: x -- вбок, вперёд = -y (не +y!), z -- вверх. Во всём пакете
 продольная координата fwd = -y, поперечная lat = x.
+
+Синтетика организаторов (cloud_with_fake_obj) -- 16-байтные точки x, y, z, intensity; облако может
+быть не из столбцов по 128. Тогда дубли снимаются запасным способом: одна точка на ячейку 1 см.
 """
 import numpy as np
 
 COLUMN_HEIGHT = 128
 DUAL_RETURN_DUP_M = 0.01
 AZ_STEP_DEG = 0.1
+DEDUPE_CELL_M = 0.01
 
 _DEFAULT_OFFSETS = {'x': 0, 'y': 4, 'z': 8, 'intensity': 12}
 
@@ -49,7 +53,39 @@ def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_ret
                & (np.abs(ya[:, 1] - ya[:, 0]) < DUAL_RETURN_DUP_M)
                & (np.abs(za[:, 1] - za[:, 0]) < DUAL_RETURN_DUP_M))
         valid.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] &= ~dup
-    return x[valid], y[valid], z[valid]
+        return x[valid], y[valid], z[valid]
+    x, y, z = x[valid], y[valid], z[valid]
+    if dedupe_dual_return:
+        return dedupe_rounded(x, y, z)
+    return x, y, z
+
+
+def dedupe_rounded(x, y, z, cell=DEDUPE_CELL_M):
+    """Дубли облака не из столбцов: точки, совпавшие после округления до cell, -- одна точка.
+    Порядок оставшихся точек -- как во входе (первое вхождение)."""
+    if len(x) == 0:
+        return x, y, z
+    q = lambda a: (np.round(np.asarray(a, np.float64) / cell).astype(np.int64) + 32768) & 0xFFFF
+    key = (q(x) << 32) | (q(y) << 16) | q(z)          # +-327 м по каждой оси в 16 битах
+    _, first = np.unique(key, return_index=True)
+    keep = np.sort(first)
+    return x[keep], y[keep], z[keep]
+
+
+class FrameRepeat:
+    """Облако, побитово совпадающее с предыдущим: в бэге организаторов кадры повторяются
+    («объекты замирают»), и повтор нельзя подавать в детектор как новый кадр -- трекер и
+    оценка скорости посчитают его кадром с нулевым движением."""
+
+    def __init__(self):
+        self._prev = None
+
+    def check(self, data) -> bool:
+        cur = np.frombuffer(data, np.uint8)
+        same = self._prev is not None and len(cur) == len(self._prev) and np.array_equal(cur, self._prev)
+        if not same:
+            self._prev = cur.copy()
+        return same
 
 
 def beam_directions(x, y, z):

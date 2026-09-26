@@ -10,7 +10,7 @@ import pytest
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 from tunnel_od.detection.tracking import EvidenceTracker
 from tunnel_od.geometry.path import extend_path_by_walls, splice_far_axis
-from tunnel_od.pointcloud import COLUMN_HEIGHT
+from tunnel_od.pointcloud import COLUMN_HEIGHT, FrameRepeat, dedupe_rounded
 from tunnel_od.sim.lidar_sim import simulate_frame
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -229,3 +229,51 @@ def test_held_alarm_survives_short_axis():
     det._path_range = float(det._fit_fwd[-1])       # новый путь короче объекта, объект пропал
     res = det.check_frame(x, y, z)
     assert res['obstacle'] and res['path_range_m'] < 55
+
+
+def _cloud16(x, y, z):
+    """16-байтное облако синтетики организаторов: x, y, z, intensity (float32), без ring и времени."""
+    dt = np.dtype([('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('intensity', '<f4')])
+    a = np.zeros(len(x), dt)
+    a['x'], a['y'], a['z'] = x, y, z
+    return a.tobytes(), dt.itemsize, [_Field(n, dt.fields[n][1]) for n in dt.names]
+
+
+def test_parse_unordered_16_byte_cloud_drops_duplicates():
+    rng = np.random.default_rng(0)
+    base = rng.uniform(-20, 20, (200, 3)).astype(np.float32)
+    pts = np.vstack([base, base[:100]])                      # 300 точек: не кратно 256, 100 дублей
+    data, step, fields = _cloud16(pts[:, 0], pts[:, 1], pts[:, 2])
+    assert step == 16
+    px, py, pz = parse_pointcloud2(data, step, fields)
+    assert len(px) == 200
+    assert np.array_equal(px, base[:, 0])                    # порядок первых вхождений сохранён
+
+
+def test_parse_ordered_cloud_keeps_close_points_outside_dual_pair():
+    """Упорядоченное облако: дубли снимаются только внутри пары столбцов, запасной способ не включается."""
+    n_cols = 4
+    x = np.arange(n_cols * COLUMN_HEIGHT, dtype=np.float32) * 0.01 + 1.0      # 512 точек: пары (0,1), (2,3)
+    x.reshape(n_cols, COLUMN_HEIGHT)[2] = x.reshape(n_cols, COLUMN_HEIGHT)[0]   # столбец 2 = столбец 0 (другая пара)
+    y, z = np.full_like(x, -5.0), np.zeros_like(x)
+    data, step, fields = _cloud_bytes(x, y, z)
+    px, _, _ = parse_pointcloud2(data, step, fields)
+    assert len(px) == n_cols * COLUMN_HEIGHT
+
+
+def test_parse_empty_and_all_zero_unordered_cloud():
+    data, step, fields = _cloud16(np.zeros(0), np.zeros(0), np.zeros(0))
+    assert all(len(a) == 0 for a in parse_pointcloud2(data, step, fields))
+    data, step, fields = _cloud16(np.zeros(300), np.zeros(300), np.zeros(300))
+    assert all(len(a) == 0 for a in parse_pointcloud2(data, step, fields))
+    assert all(len(a) == 0 for a in dedupe_rounded(np.zeros(0, np.float32), np.zeros(0, np.float32), np.zeros(0, np.float32)))
+
+
+def test_frame_repeat_detects_bitwise_same_cloud():
+    rep = FrameRepeat()
+    a = np.arange(1000, dtype=np.uint8).tobytes()
+    b = bytes(reversed(a))
+    assert not rep.check(a)
+    assert rep.check(a)
+    assert not rep.check(b)
+    assert rep.check(np.frombuffer(b, np.uint8))             # numpy-массив (rosbags) и bytes -- одно и то же
