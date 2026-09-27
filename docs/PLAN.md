@@ -57,3 +57,48 @@
 - Низкие предметы ниже головки рельса — шум остатка у полотна 4–18 % ячеек выше 8 см (`research/floor_residual.py`).
 - `method='background'` в сочетании с P не сравнивался (нет времени); по базе он давал меньше тревог внутри известной оси.
 - Классификатор кандидатов (P3.10) — не начат.
+
+## Доводка под данные организаторов (27–29.09)
+
+### Бэг организаторов: вход
+
+**Архив (шаг 1, сделан контроллером).** `data/fake_obj/cloud_with_fake_obj.zst`: md5
+`5c0cefe7ef10fae249b5ae653cbd165d` совпал с ожидаемым, `zstd -t` — целостность потока OK
+(распаковывается в 7 421 655 040 байт). Файл архива сейчас 1 746 145 824 байт (~1,75 ГБ), спека
+называла ~1,2 ГБ — расхождение не помешало распаковке, оставлено как есть. Распакован в
+`data/cloud_with_fake_obj/` (`bag_path` находит его прямо в `data/`, без `Датасет/archive/...`):
+`metadata.yaml` + `cloud_with_fake_obj_0.db3` (sqlite3, 6,9 ГБ на диске), 1 записи, топик
+`/lidar_points` (`sensor_msgs/msg/PointCloud2`), 1510 сообщений, `duration` 150 851 120 580 нс
+(150,85 с), `compression_format`/`compression_mode` пустые.
+
+**`tools/input_report.py --bags cloud_with_fake_obj doubleT_platform` (шаг 6, python-сводка
+облака `cloud_stats`, полный бэг, без `--max-frames`).** `read_errors` пуст для обоих —
+дочитано до конца без обрывов.
+
+| запись | frames_read | point_step | fields | ordered_share | dup_share_median | gap_s p5/p50/p95/p99 | gap_max_s | gaps_over_0.15s | bitwise_repeats |
+|---|---|---|---|---|---|---|---|---|---|
+| `cloud_with_fake_obj` | 1510 | [16] | x,y,z,intensity (float32) | 0,502 | 0,512 | 0,086 / 0,100 / 0,114 / 0,123 | 0,140 | 0 | 0 |
+| `doubleT_platform` | 345 | [26] | x,y,z,intensity,ring,timestamp | 1,0 | 0,502 | 0,092 / 0,100 / 0,109 / 0,114 | 0,123 | 0 | 0 |
+
+Совпало с ожиданием брифа: `frames_read=1510`, `point_step=[16]` у бэга организаторов;
+`point_step=[26]`, `ordered_share=1.0` у своей записи. `bitwise_repeats=0` у обеих (в этом бэге,
+в отличие от заявленного в докстринге `FrameRepeat`, побитовых повторов кадра на всех 1510
+кадрах не нашлось — не баг реализации, а свойство этих конкретных данных). Проверка C++-узла
+(`native.Monitor`, тот же прогон) отдельно отметила по `cloud_with_fake_obj`: `format=generic/legacy`,
+M1 warn (неупорядоченное, height=1; нули вместо NaN), M3/M6 warn (нет `/tf_static`, нет описания
+датчика), M4 warn (часы не синхронизированы, 2000 год; нет времени точек) — точный текст в
+`runs/input_report_fake.json`.
+
+**`tools/check_preproc.py --bags cloud_with_fake_obj --frames 30` (шаг 7).** БЛОКЕР: команда
+падает на первом кадре с `ValueError: 307187 точек: не целое число пар столбцов по 128` —
+исключение из `tools/to_contract_v1.py:legacy_to_contract` (ветка `contract` в `check_bag`),
+которая жёстко требует упорядоченное облако (кратно `2*COLUMN_HEIGHT=256`). У `cloud_with_fake_obj`
+только ~50 % кадров такие (`ordered_share=0.502` выше), остальные — «плоский» 16-байтный формат без
+столбцов, и на них конвертация в контракт v1 не работает. Отдельно (не через `check_preproc.py`,
+а прямым вызовом `bags.cloud_parser('cpp')`) `native.parse_fast` на 16-байтных кадрах не падает и
+что-то возвращает, но числа точек python/cpp расходятся сильнее, чем на снятых дублях (кадр 2:
+py=117781, cpp=170937) — разбираться в этом расхождении не входит в эту задачу.
+Не наш баг по этой задаче: контроллер решил не чинить `to_contract_v1.py`/`check_preproc.py` для
+неупорядоченных кадров здесь. Решать в задаче 17: e2e по умолчанию с
+`LAUNCH_ARGS=use_cpp_preproc:=false` (`play.sh` / `detector.launch.py`), пока C++-приём кадра
+организаторов не подтверждён отдельно.

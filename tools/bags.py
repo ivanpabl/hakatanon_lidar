@@ -14,6 +14,8 @@ DATASET = DATA / 'Датасет' / 'archive' / 'for_hackathon'
 RUNS = Path(os.environ.get('TUNNEL_OD_RUNS') or ROOT / 'runs')
 BAGS = ['doubleT_obstacle', 'doubleT_platform', 'roundT_doubleT', 'roundT_pressureGate_roundT',
         'roundT_squareT_pressureGate_squareT', 'squareT_platform_squareT_switch', 'new_data']
+EMPTY_BAGS = [b for b in BAGS if b not in ('doubleT_obstacle', 'new_data')]   # 5 записей без препятствий
+FAKE_OBJ = 'cloud_with_fake_obj'           # бэг организаторов с 10 синтетическими объектами (#437)
 
 
 def bag_path(name):
@@ -32,6 +34,15 @@ def open_cloud_bag(name):
         yield reader, conn
 
 
+def safe_messages(it, errors):
+    """Сообщения из reader.messages(): ошибка чтения (битый архив, обрыв zstd) останавливает
+    поток, текст ошибки -- в errors. Прочитанное до ошибки остаётся в работе."""
+    try:
+        yield from it
+    except Exception as e:
+        errors.append(f'{type(e).__name__}: {e}')
+
+
 CROP = (2.0, 250.0)       # обрезка по дальности, как в tunnel_od_preproc (config/detector.yaml)
 
 
@@ -47,6 +58,7 @@ def cloud_parser(kind='python'):
         raise ValueError(kind)
     import sys
     import numpy as np
+    from tunnel_od.pointcloud import COLUMN_HEIGHT, dedupe_rounded
     sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
     from tunnel_od_preproc.build_host import ensure
     if ensure() is None:
@@ -55,6 +67,8 @@ def cloud_parser(kind='python'):
 
     def parse(data, point_step, fields):
         x, y, z = native.parse_fast(data, point_step, fields, crop=CROP)
+        if (len(data) // point_step) % (2 * COLUMN_HEIGHT):
+            x, y, z = dedupe_rounded(x, y, z)          # C++ снимает дубли только в облаке из столбцов
         buf = np.empty((len(x), 3), np.float32)
         buf[:, 0], buf[:, 1], buf[:, 2] = x, y, z
         return buf[:, 0], buf[:, 1], buf[:, 2]

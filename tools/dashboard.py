@@ -35,13 +35,13 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bags import BAGS, RUNS, ROOT, open_cloud_bag   # noqa: E402
+from bags import RUNS, ROOT, open_cloud_bag         # noqa: E402
+from bags import EMPTY_BAGS as EMPTY                # noqa: E402
 
 TEMPLATE = ROOT / 'gui' / 'template.html'
 REFERENCE = ROOT / 'reference'
 OUT = ROOT / 'gui' / 'dashboard.html'
 BEFORE, AFTER = 'A_base', 'P_ev_f20'           # исходная версия (ae38df6) и текущая по умолчанию
-EMPTY = [b for b in BAGS if b not in ('doubleT_obstacle', 'new_data')]
 FRAME_MB = {'doubleT_obstacle': 23}            # остальные записи -- 8 МБ
 GAP = 2                                        # как tools/alarms.py: разрыв до 2 кадров -- тот же эпизод
 
