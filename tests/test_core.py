@@ -399,3 +399,62 @@ def test_held_object_inherits_level():
     res = _run(det, [{}])
     held = [o for o in res['objects'] if o.get('held')]
     assert held and held[0]['level'] == 'stop' and held[0]['reason'] == 'in_gauge' and 'track_id' in held[0]
+
+
+def _ego_run(disp, dist, n=8, travel_none=False, **kw):
+    tr = EvidenceTracker(ego_check=True, **kw)
+    travel, ob = 0.0, None
+    for k in range(n):
+        ob = {'distance_m': dist(k), 'lateral_m': 0.0, 'n_points': 20}
+        tr.update([ob], displacement=disp, expected=lambda d: 5.0, travel=None if travel_none else travel)
+        travel += disp
+    return ob
+
+
+def test_ego_constant_distance_is_carried():
+    ob = _ego_run(1.2, lambda k: 30.0)
+    assert ob['ego_carried'] and ob['ego_slope'] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_ego_approaching_object_is_not_carried():
+    ob = _ego_run(1.2, lambda k: 60.0 - 1.2 * k)
+    assert not ob['ego_carried'] and ob['ego_slope'] == pytest.approx(-1.0, abs=1e-6)
+
+
+def test_ego_no_decision_when_train_stands_or_travel_unknown():
+    ob = _ego_run(0.0, lambda k: 30.0)
+    assert ob['ego_slope'] is None and not ob['ego_carried']
+    ob = _ego_run(1.2, lambda k: 30.0, travel_none=True)
+    assert ob['ego_slope'] is None and not ob['ego_carried']
+
+
+def test_ego_short_travel_no_decision():
+    ob = _ego_run(1.2, lambda k: 30.0, n=4)          # пробег 3,6 м < 4 м
+    assert ob['ego_slope'] is None and not ob['ego_carried']
+
+
+def test_ego_check_off_only_measures():
+    tr = EvidenceTracker(ego_check=False)
+    travel = 0.0
+    for k in range(8):
+        ob = {'distance_m': 30.0, 'lateral_m': 0.0, 'n_points': 20}
+        tr.update([ob], displacement=1.2, expected=lambda d: 5.0, travel=travel)
+        travel += 1.2
+    assert ob['ego_slope'] == pytest.approx(0.0, abs=1e-6) and not ob['ego_carried']
+
+
+def test_detector_passes_ego_params():
+    det = ObstacleDetector(ego_check=True, ego_min_travel=5.0, ego_max_slope=-0.5)
+    assert det._tracker.ego_check and det._tracker.ego_min_travel == 5.0 and det._tracker.ego_max_slope == -0.5
+
+
+def test_held_track_not_held_past_near_cutoff():
+    tr = EvidenceTracker(hold=3, hold_min=1)
+    for k in range(4):                      # подтверждённый объект подъезжает к 3 м, тревога
+        ob = {'distance_m': 6.0 - k, 'lateral_m': 0.0, 'n_points': 50}
+        tr.update([ob], displacement=1.0, expected=lambda d: 5.0)
+        tr.set_alarm({ob['track_id']})
+    tr.update([], displacement=1.0)          # пропал: прогноз 2 м -- ещё держится
+    assert [round(t['distance_m'], 1) for t in tr.held(min_distance=2.0)] == [2.0]
+    tr.update([], displacement=1.0)          # прогноз 1 м -- уже проехали, не держится
+    assert tr.held(min_distance=2.0) == [] and len(tr.held()) == 1

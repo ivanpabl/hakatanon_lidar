@@ -11,8 +11,28 @@ EvidenceTracker -- накопление свидетельства с учёто
 не больше EVIDENCE_CAP, и накопленное затухает с коэффициентом decay. Так объект
 вдали из 1-2 точек (меньше порога одного кадра) подтверждается за несколько кадров,
 а крупный объект вблизи -- так же быстро, как по "3 из 5".
+
+ЭГО-тест: трек хранит пары (пробег поезда, дистанция) последних EGO_OBS сопоставлений. Неподвижный
+в мире объект приближается на пройденный путь -- наклон d(дистанция)/d(пробег) = -1; артефакт,
+который едет вместе с поездом, держит дистанцию -- наклон ~0. Наклон -- медиана по парам
+(Тейл--Сен), решение -- только при пробеге >= ego_min_travel.
 """
+import numpy as np
+
 EVIDENCE_CAP = 1.5
+EGO_OBS = 20
+
+
+def theil_sen_slope(obs, min_dt=0.5, min_pairs=3):
+    """Медиана наклонов (d_j - d_i) / (t_j - t_i) по парам с |t_j - t_i| > min_dt; None -- пар мало."""
+    t = np.array([p[0] for p in obs], float)
+    d = np.array([p[1] for p in obs], float)
+    i, j = np.triu_indices(len(t), 1)
+    dt = t[j] - t[i]
+    ok = np.abs(dt) > min_dt
+    if ok.sum() < min_pairs:
+        return None
+    return float(np.median((d[j] - d[i])[ok] / dt[ok]))
 
 
 class Tracker:
@@ -21,8 +41,8 @@ class Tracker:
         self.confirm_window = confirm_window
         self.tracks = []
 
-    def update(self, objects, displacement=None, expected=None):
-        """Сопоставляет объекты кадра с треками и ставит каждому ob['confirmed']."""
+    def update(self, objects, displacement=None, expected=None, travel=None):
+        """Сопоставляет объекты кадра с треками и ставит каждому ob['confirmed']. travel не используется."""
         objects = [o for o in objects if not o.get('too_small')]
         for tr in self.tracks:
             tr['hist'].append(False)
@@ -56,7 +76,7 @@ class Tracker:
     def set_levels(self, levels):
         pass
 
-    def held(self):
+    def held(self, min_distance=None):
         return []
 
 
@@ -68,7 +88,11 @@ class EvidenceTracker:
     её, когда ось в следующем кадре длиннее; ложная вспышка на 1-3 кадра не должна удлиняться."""
 
     def __init__(self, threshold=2.2, decay=0.8, min_hits=3, gate_fwd=1.0, gate_rel=0.02,
-                 gate_lat=0.6, max_miss=10, hold=0, hold_min=5):
+                 gate_lat=0.6, max_miss=10, hold=0, hold_min=5, ego_check=False, ego_min_travel=4.0,
+                 ego_max_slope=-0.35):
+        self.ego_check = ego_check
+        self.ego_min_travel = ego_min_travel
+        self.ego_max_slope = ego_max_slope
         self.hold = hold
         self.hold_min = hold_min
         self.threshold = threshold
@@ -81,10 +105,12 @@ class EvidenceTracker:
         self.tracks = []
         self._next_id = 0
 
-    def update(self, objects, displacement=None, expected=None):
+    def update(self, objects, displacement=None, expected=None, travel=None):
         """objects -- все объекты кадра (и too_small); displacement -- путь поезда за кадр, м
         (None -- неизвестен: широкие ворота без прогноза); expected(d) -- минимум точек на
-        дальности d. Ставит ob['confirmed'] и ob['evidence']."""
+        дальности d; travel -- накопленный пробег поезда (None -- неизвестен или смещение кадра
+        неизвестно: ЭГО-тест не копит пары). Ставит ob['confirmed'], ob['evidence'],
+        ob['ego_slope'], ob['ego_carried']."""
         ds = displacement or 0.0
         slack = 0.0 if displacement is not None else 2.5
         for tr in self.tracks:
@@ -122,6 +148,15 @@ class EvidenceTracker:
             for k in ('height_m', 'low_m'):
                 if k in ob:
                     tr[k] = ob[k]
+            if travel is not None:
+                tr.setdefault('obs', []).append((travel, d))
+                del tr['obs'][:-EGO_OBS]
+            obs = tr.get('obs', [])
+            slope = None
+            if len(obs) >= 4 and max(p[0] for p in obs) - min(p[0] for p in obs) >= self.ego_min_travel:
+                slope = theil_sen_slope(obs)
+            ob['ego_slope'] = None if slope is None else round(slope, 3)
+            ob['ego_carried'] = bool(self.ego_check and slope is not None and slope > self.ego_max_slope)
             tr['alarm'] = False
             ob['track_id'] = tr['id']
             ob['evidence'] = round(tr['score'], 2)
@@ -143,8 +178,10 @@ class EvidenceTracker:
             if tr['id'] in levels:
                 tr['level'], tr['reason'] = levels[tr['id']]
 
-    def held(self):
+    def held(self, min_distance=None):
         """Треки, поднявшие тревогу в последнем кадре с объектом; пропущено 1..hold кадров.
-        distance_m -- прогноз с учётом пути поезда."""
+        distance_m -- прогноз с учётом пути поезда; ближе min_distance (поезд объект уже проехал
+        или он в мёртвой зоне у лидара) трек не держится."""
         return [tr for tr in self.tracks if tr.get('alarm') and tr['alarm_frames'] >= self.hold_min
-                and 1 <= tr['miss'] <= self.hold]
+                and 1 <= tr['miss'] <= self.hold
+                and (min_distance is None or tr['distance_m'] >= min_distance)]

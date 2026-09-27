@@ -40,7 +40,7 @@ class ObstacleDetector:
                  method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,
                  tracker='evidence', evidence_threshold=2.2, evidence_decay=0.8, far_axis=True,
                  edge_lines=True, far_half_width=0.7, far_top=1.5, far_from=20.0, alarm_hold=3,
-                 alarm_hold_min=5, path_hold=0):
+                 alarm_hold_min=5, path_hold=0, ego_check=True, ego_min_travel=4.0, ego_max_slope=-0.35):
         if method not in ('zone', 'background'):
             raise ValueError(method)
         if tracker not in ('hits', 'evidence'):
@@ -84,7 +84,8 @@ class ObstacleDetector:
         self._held_axis = None           # (fwd, cl, кадр, когда хвост измерен, путь поезда тогда)
         if tracker == 'evidence':
             self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits,
-                                            hold=alarm_hold, hold_min=alarm_hold_min)
+                                            hold=alarm_hold, hold_min=alarm_hold_min, ego_check=ego_check,
+                                            ego_min_travel=ego_min_travel, ego_max_slope=ego_max_slope)
             ego_motion = True
         else:
             self._tracker = Tracker(confirm_hits, confirm_window)
@@ -216,7 +217,8 @@ class ObstacleDetector:
                 (self.far_half_width is not None and abs(o['lateral_m']) > self.far_half_width)
                 or (self.far_top is not None and o['low_m'] > self.far_top)))
         self._tracker.update([o for o in objects if not o.get('edge_line')], self._displacement,
-                             lambda d: min_points_at(d, self.min_points_k, self.min_points_floor))
+                             lambda d: min_points_at(d, self.min_points_k, self.min_points_floor),
+                             travel=self._travel if self._displacement is not None else None)
         for o in objects:
             o.setdefault('confirmed', False)
             o['held'] = False
@@ -226,12 +228,13 @@ class ObstacleDetector:
                 o['rail_z_m'] = float(r)
         # объект с тревогой пропал на кадр-два (вдали на нём 2-3 точки): тревога держится
         # alarm_hold кадров по прогнозу трека, объект помечается held
-        for tr in self._tracker.held():
+        for tr in self._tracker.held(min_distance=self.near_cutoff):
             d = float(tr['distance_m'])
             objects.append({'distance_m': d, 'far_m': d, 'lateral_m': float(tr['lateral_m']),
                             'height_m': tr.get('height_m', 0.0), 'low_m': tr.get('low_m', 0.0), 'n_points': 0,
                             'too_small': False, 'edge_line': False, 'confirmed': True, 'held': True,
                             'evidence': round(tr['score'], 2), 'track_id': tr['id'],
+                            'ego_slope': None, 'ego_carried': False,
                             'level': tr.get('level', 'stop'), 'reason': tr.get('reason', 'in_gauge'),
                             'rail_z_m': float(self._tor_at(np.array([d]), self._bed)[0])})
         path_range = self._path_range if path_ok else None
