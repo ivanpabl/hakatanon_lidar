@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
-from bags import EMPTY_BAGS, RUNS            # noqa: E402
+from bags import EMPTY_BAGS, RUNS, read_problems            # noqa: E402
 
 HEADER = ('| тег | параметры | объекты организаторов | пустые СТОП/ВНИМ./unk, % | new_data СТОП/ВНИМ./unk, % '
           '| человек 170 м | куб 0,4 м | 56 м: кадр/дист. |\n|---|---|---|---|---|---|---|---|\n')
@@ -48,7 +48,10 @@ def row(tag, det):
     f56 = first_stop_56(alarms)
     m = lambda v: '-' if v is None else f'{v:.0f} м'
     empty = [r for r in alarms if r['bag'] in EMPTY_BAGS]
-    return (f'| {tag} | `{det}` | {fo} | {pct(shares(empty)) if empty else "-"} '
+    probs = [m for t in (tag, f'nd_{tag}', f'fo_{tag}') if (RUNS / f'alarms_{t}.csv').exists() or (RUNS / f'alarms_{t}_read.json').exists()
+             for m in read_problems(t, RUNS)]
+    name = tag + (f' НЕДОЧИТАНО: {"; ".join(probs)}' if probs else '')
+    return (f'| {name} | `{det}` | {fo} | {pct(shares(empty)) if empty else "-"} '
             f'| {pct(shares(nd)) if nd else "-"} | {m(approach_median(ap, "человек стоит", 170))} '
             f'| {m(approach_median(ap, "куб 0.4"))} | {"-" if f56 is None else f"{f56[0]}/{f56[1]:.1f}"} |')
 

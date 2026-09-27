@@ -49,7 +49,7 @@ case "$cmd" in
     [ -f "$BAG/metadata.yaml" ] || { echo "нет $BAG/metadata.yaml -- укажите каталог записи ros2 bag" >&2; exit 1; }
     NAME="$(basename "$BAG")"
     mkdir -p "$OUT_DIR"
-    docker run "${COMMON[@]}" "${NET[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" \
+    docker run "${COMMON[@]}" ${NET[@]+"${NET[@]}"} "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" \
         -e "TOPIC=${TOPIC:-}" -e "READ_AHEAD=${READ_AHEAD:-20}" -e "PLAY_DELAY=${PLAY_DELAY:-3}" \
         -e "LAUNCH_ARGS=${LAUNCH_ARGS:-}" -e "PROBE=${PROBE:-1}" \
         -v "$BAG:/bags/$NAME:ro" -v "$OUT_DIR:/out" \
@@ -69,7 +69,7 @@ case "$cmd" in
          python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test "$@"' _ "$@"
     ;;
   shell)
-    docker run "${COMMON[@]}" "${NET[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"
+    docker run "${COMMON[@]}" ${NET[@]+"${NET[@]}"} "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"
     ;;
   -h|--help|help|"") usage 0 ;;
   *) echo "неизвестная команда: $cmd" >&2; usage 1 ;;

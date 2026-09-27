@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bags import RUNS          # noqa: E402
+from bags import RUNS, read_problems          # noqa: E402
 
 GAP = 5
 NONE_SEG_S = 1.0
@@ -76,6 +76,15 @@ def label(ep, rows, seg):
     return 'unresolved'
 
 
+def sanity(n_rows, km, problems):
+    """Почему сводке нельзя верить (None -- можно): запись прочитана не вся или пробег вне ND_KM."""
+    if problems:
+        return 'запись прочитана не вся -- ' + '; '.join(problems)
+    if n_rows >= 11000 and not ND_KM[0] <= km <= ND_KM[1]:
+        return f'пробег {km:.1f} км вне {ND_KM[0]:.0f}-{ND_KM[1]:.0f} км'
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--tag', required=True)
@@ -105,12 +114,12 @@ def main():
         w.writerows(eps)
     km = sum(max(rows[k]['travel_m'] for k in ks) - min(rows[k]['travel_m'] for k in ks)
              for s in set(seg) for ks in [[k for k, v in enumerate(seg) if v == s]]) / 1000
-    reliable = not (len(rows) >= 11000 and not ND_KM[0] <= km <= ND_KM[1])
+    why = sanity(len(rows), km, read_problems(args.tag))
     c = Counter(e['label'] for e in eps)
     d = np.array([e['distance_m'] for e in eps]) if eps else np.array([])
     bins = [(0, 40), (40, 80), (80, 130), (130, 1e9)]
     lines = [f'{args.tag}: эпизодов СТОП {len(eps)}, доказанно ложных {c["false_proven"]}, не разрешено {c["unresolved"]}'
-             + ('' if reliable else f' -- НЕНАДЁЖНО: пробег {km:.1f} км вне {ND_KM[0]:.0f}-{ND_KM[1]:.0f} км'),
+             + ('' if why is None else f' -- НЕНАДЁЖНО: {why}'),
              f'пробег по одометрии {km:.1f} км, сегментов {len(set(seg))}',
              'по дистанции: ' + ', '.join(f'{lo:.0f}-{"" if hi > 1e8 else f"{hi:.0f}"} м: {int(((d >= lo) & (d < hi)).sum())}'
                                           for lo, hi in bins),

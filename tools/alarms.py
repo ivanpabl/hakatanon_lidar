@@ -128,11 +128,17 @@ def main():
     ap.add_argument('--all-objects', action='store_true', help='в objects.jsonl -- все объекты, не только stop/caution (для эталона cloud_with_fake_obj)')
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
+    for suffix in ('.csv', '_objects.jsonl', '_read.json'):      # не оставлять выход прошлого прогона с тем же тегом
+        (OUT / f'alarms_{args.tag}{suffix}').unlink(missing_ok=True)
     with Pool(min(len(args.bags), args.workers)) as pool:
         parts = pool.map(run_bag, [(b, args.corridor, args.minpts, args.method, json.loads(args.det),
                                     args.segments, args.seglen, args.parser, args.all_objects) for b in args.bags])
     rows = [r for p in parts for r in p[0]]
     obj_lines = [o for p in parts for o in p[1]]
+    (OUT / f'alarms_{args.tag}_read.json').write_text(json.dumps(
+        {'segments': args.segments,
+         'bags': {b: {'frames': len(p[0]), 'error': p[2][0] if p[2] else None} for b, p in zip(args.bags, parts)}},
+        ensure_ascii=False, indent=1), encoding='utf-8')
     if not rows:                       # запись не читается с первого кадра
         print('ни одного кадра:', '; '.join(e for p in parts for e in p[2]))
         return

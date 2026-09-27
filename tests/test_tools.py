@@ -7,10 +7,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'research'))
 
-from bags import EMPTY_BAGS, safe_messages          # noqa: E402
+from bags import EMPTY_BAGS, read_problems, safe_messages          # noqa: E402
 from eval_fake_obj import evaluate, group_x, summary_line          # noqa: E402
 from compare_row import approach_median, first_stop_56, shares          # noqa: E402
-from selflabel import episodes, label, segments          # noqa: E402
+from selflabel import episodes, label, sanity, segments          # noqa: E402
 
 
 def test_safe_messages_stops_on_read_error():
@@ -128,3 +128,53 @@ def test_label_false_proven_only_in_same_segment():
     assert label(ep, rows[:60], seg[:60]) == 'unresolved'
     rows2 = _rows(200, none_at=range(20, 40))              # сегмент рвётся до проезда X
     assert label(episodes([(10, 10, 1, 50.0, 'in_gauge')])[0], rows2, segments(rows2)) == 'unresolved'
+
+
+@pytest.mark.parametrize('network', ['', 'none'])
+def test_run_sh_shell_with_and_without_network(tmp_path, network):
+    """run.sh под set -u: пустой массив NET не должен ронять bash 3.2 (macOS)."""
+    import os
+    import subprocess
+    stub = tmp_path / 'docker'
+    stub.write_text('#!/bin/sh\necho "$@"\n')
+    stub.chmod(0o755)
+    env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', NETWORK=network)
+    root = Path(__file__).resolve().parent.parent
+    r = subprocess.run(['/bin/bash', str(root / 'run.sh'), 'shell', '-c', 'true'], env=env,
+                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stderr
+    assert ('--network none' in r.stdout) == (network == 'none')
+
+
+def _read_json(tmp_path, tag, data):
+    import json
+    (tmp_path / f'alarms_{tag}_read.json').write_text(json.dumps(data), encoding='utf-8')
+
+
+def test_read_problems_flags_truncated_and_missing(tmp_path):
+    _read_json(tmp_path, 'nd_t', {'segments': 0, 'bags': {'new_data': {'frames': 418, 'error': 'CorruptError: x'}}})
+    _read_json(tmp_path, 'fo_t', {'segments': 0, 'bags': {'cloud_with_fake_obj': {'frames': 1510, 'error': None}}})
+    _read_json(tmp_path, 'seg', {'segments': 8, 'bags': {'new_data': {'frames': 3200, 'error': None}}})
+    p = read_problems('nd_t', tmp_path)
+    assert len(p) == 1 and 'new_data' in p[0] and '418' in p[0] and '11271' in p[0]
+    assert read_problems('fo_t', tmp_path) == []
+    assert read_problems('seg', tmp_path) == []                      # отрезки -- кадров меньше по замыслу
+    assert read_problems('absent', tmp_path) == ['alarms_absent: нет сведений о чтении']
+    (tmp_path / 'alarms_old.csv').write_text('bag,frame\n' + 'new_data,0\n' * 418, encoding='utf-8')
+    assert any('418' in m for m in read_problems('old', tmp_path))    # прогон без _read.json: по CSV
+
+
+def test_compare_row_marks_truncated_run(tmp_path, monkeypatch):
+    import compare_row
+    monkeypatch.setattr(compare_row, 'RUNS', tmp_path)
+    _read_json(tmp_path, 't', {'segments': 0, 'bags': {'doubleT_obstacle': {'frames': 201, 'error': None}}})
+    _read_json(tmp_path, 'fo_t', {'segments': 0, 'bags': {'cloud_with_fake_obj': {'frames': 1510, 'error': None}}})
+    _read_json(tmp_path, 'nd_t', {'segments': 0, 'bags': {'new_data': {'frames': 418, 'error': 'CorruptError: x'}}})
+    tag_cell = compare_row.row('t', '{}').split('|')[1]
+    assert 'НЕДОЧИТАНО' in tag_cell and '418' in tag_cell
+
+
+def test_selflabel_sanity_unreliable_on_truncated_read():
+    assert sanity(11271, 13.0, []) is None
+    assert 'пробег' in sanity(11271, 9.7, [])
+    assert '418' in sanity(418, 0.4, ['new_data: прочитано 418 из 11271 кадров'])
