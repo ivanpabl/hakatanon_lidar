@@ -54,6 +54,9 @@ tunnel_od_detector:
       ego_max_slope: -0.35   #    Включён по итогам cloud_with_fake_obj (спека 4.4, docs/PLAN.md)
       confirm_hits: 3        # для evidence -- минимум кадров с объектом до тревоги
       confirm_window: 5      # только для hits
+      plausibility: true     # подтверждённый объект в дальней зоне, за которым НА ЕГО ВЫСОТЕ
+      plausible_min_dist: 60.0  #   идут точки (behind_n >= plausible_behind_n), -- поверхность,
+      plausible_behind_n: 2     #   задевшая коридор (пол на подъёме/стена), а не предмет: ВНИМАНИЕ, не СТОП
       max_path_age: 30       # кадров держать ось без пересчёта
       default_rail_offset: 0.5
       min_points_k: 12000.0  # ожидаемый минимум точек max(floor, k / d^2)

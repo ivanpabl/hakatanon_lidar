@@ -20,6 +20,7 @@ from ..geometry.rails import fit_path
 from . import background
 from .clustering import MIN_POINTS_FLOOR, MIN_POINTS_K, cluster_points, mark_edge_lines, min_points_at
 from .decision import axis_curvature, decide
+from .plausibility import CTX_HALF_WIDTH, Context, is_implausible, object_features
 from .tracking import EvidenceTracker, Tracker
 from .zone import RECT_DEFAULT, rect_zone, zone_mask
 
@@ -40,12 +41,17 @@ class ObstacleDetector:
                  method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,
                  tracker='evidence', evidence_threshold=2.2, evidence_decay=0.8, far_axis=True,
                  edge_lines=True, far_half_width=0.7, far_top=1.5, far_from=20.0, alarm_hold=3,
-                 alarm_hold_min=5, path_hold=0, ego_check=True, ego_min_travel=4.0, ego_max_slope=-0.35):
+                 alarm_hold_min=5, path_hold=0, ego_check=True, ego_min_travel=4.0, ego_max_slope=-0.35,
+                 features=True, plausibility=True, plausible_min_dist=60.0, plausible_behind_n=2):
         if method not in ('zone', 'background'):
             raise ValueError(method)
         if tracker not in ('hits', 'evidence'):
             raise ValueError(tracker)
         self.method = method
+        self.features = features
+        self.plausibility = plausibility
+        self.plausible_min_dist = plausible_min_dist
+        self.plausible_behind_n = plausible_behind_n
         self.far_axis = far_axis
         self.evidence_threshold = evidence_threshold
         self.edge_lines = edge_lines
@@ -182,6 +188,7 @@ class ObstacleDetector:
         m = (fwd > self.near_cutoff) & (fwd < self.max_range)
         fwd, x, z = fwd[m], x[m], z[m]
         lat = x - self._center_of_fwd(fwd)
+        all_pts = (fwd, lat, z)
         if self._ego is not None:
             e = fwd < EGO_S_RANGE[1] + self._ego._max_shift
             self.speed, self._displacement = self._ego.update(
@@ -189,7 +196,7 @@ class ObstacleDetector:
             self._travel += self._displacement or 0.0
         if self.method == 'zone':
             m = np.abs(lat) < self.half_width
-            fwd, lat, z = fwd[m], lat[m], z[m]
+            fwd, lat, z, x = fwd[m], lat[m], z[m], x[m]
             z_rel = z - self._tor_at(fwd, self._bed)
             m = zone_mask(lat, z_rel, self.zone)
         else:
@@ -202,7 +209,7 @@ class ObstacleDetector:
             thr = background.residual_threshold(fwd, self.bg_residual)
             m = in_zone & ((~unknown & (res > thr)) | (unknown & zone_mask(lat, z_rel, RECT_DEFAULT)))
 
-        objects = cluster_points(fwd[m], lat[m], z_rel[m])
+        objects = cluster_points(fwd[m], lat[m], z_rel[m], keep_idx=self.features)
         for o in objects:
             o['too_small'] = o['n_points'] < min_points_at(o['distance_m'], self.min_points_k, self.min_points_floor)
         rails_end = self._rail_prof[0][-1] if self._rail_prof is not None else 0.0
@@ -222,6 +229,12 @@ class ObstacleDetector:
         for o in objects:
             o.setdefault('confirmed', False)
             o['held'] = False
+        if self.features:
+            self._add_features(objects, all_pts, np.arctan2(z[m], np.hypot(x[m], fwd[m])))
+            if self.plausibility:
+                for o in objects:
+                    if 'behind_n' in o:
+                        o['implausible'] = is_implausible(o, self.plausible_min_dist, self.plausible_behind_n)
         if objects:
             rz = self._tor_at(np.array([o['distance_m'] for o in objects]), self._bed)
             for o, r in zip(objects, rz):
@@ -246,6 +259,8 @@ class ObstacleDetector:
         curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
         dec = decide(objects, path_available=path_ok, path_range=path_range, curvature=curvature,
                      pending_score=0.5 * self.evidence_threshold)
+        for o in objects:
+            o.pop('_idx', None)
         self._tracker.set_alarm({o['track_id'] for o in objects if o['level'] == 'stop' and 'track_id' in o})
         self._tracker.set_levels({o['track_id']: (o['level'], o['reason']) for o in objects
                                   if 'track_id' in o and not o['held']})
@@ -267,6 +282,18 @@ class ObstacleDetector:
             'travel_m': self._travel,
             'stamp': stamp,
         }
+
+    def _add_features(self, objects, all_pts, elev):
+        """Признаки правдоподобности (plausibility.object_features) объектам с треком."""
+        todo = [o for o in objects if 'track_id' in o and not o.get('edge_line')]
+        if not todo:
+            return
+        f, l, z = all_pts
+        c = np.abs(l) < CTX_HALF_WIDTH
+        f, l, z = f[c], l[c], z[c]
+        ctx = Context(f, l, z - self._tor_at(f, self._bed))
+        for o in todo:
+            o.update(object_features(o, elev[o['_idx']], ctx))
 
     def detect(self, x, y, z, refit_path=False, stamp=None) -> dict:
         """Единая точка входа. refit_path=True -- пересчитать путь в этом же вызове."""

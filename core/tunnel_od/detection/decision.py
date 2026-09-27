@@ -27,6 +27,8 @@ def object_level(obj, *, in_path, pending_score):
         return None, None
     if obj.get('confirmed'):
         if in_path and not obj.get('ego_carried'):
+            if obj.get('implausible'):
+                return 'caution', 'surface_behind'
             return 'stop', 'in_gauge'
         return 'caution', ('ego_carried' if in_path else 'beyond_path')
     if obj.get('hits', 0) >= 2 and obj.get('evidence', 0.0) >= pending_score:

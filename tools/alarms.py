@@ -34,7 +34,10 @@ CORRIDORS = {'rect': None, 'gauge': GAUGE_METRO}
 MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}
 
 OBJ_KEYS = ('track_id', 'distance_m', 'lateral_m', 'height_m', 'low_m', 'n_points', 'level', 'reason',
-            'ego_slope', 'evidence', 'held', 'too_small', 'rail_z_m')
+            'ego_slope', 'evidence', 'held', 'too_small', 'rail_z_m',
+            # признаки правдоподобности (detection/plausibility.py)
+            'far_m', 'lat_min_m', 'lat_max_m', 'hits', 'confirmed', 'implausible', 'rings', 'ext_beams',
+            'behind_n', 'behind_low_n', 'front_maxh', 'side_n', 'shell_n', 'wall_left_n', 'wall_right_n')
 
 
 def obj_record(o):

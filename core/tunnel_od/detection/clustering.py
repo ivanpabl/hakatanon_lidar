@@ -9,9 +9,9 @@ def min_points_at(distance_m, k=MIN_POINTS_K, floor=MIN_POINTS_FLOOR):
     return max(floor, k / max(distance_m, 1.0) ** 2)
 
 
-def cluster_points(fwd, lat, z_rel, fwd_gap=1.0, lat_gap=0.6):
+def cluster_points(fwd, lat, z_rel, fwd_gap=1.0, lat_gap=0.6, keep_idx=False):
     """Точки в зоне -> объекты: разрыв >fwd_gap по дальности или >lat_gap вбок
-    разделяет объекты."""
+    разделяет объекты. keep_idx -- у объекта '_idx': номера его точек во входных массивах."""
     if len(fwd) == 0:
         return []
     o = np.argsort(fwd)
@@ -20,14 +20,19 @@ def cluster_points(fwd, lat, z_rel, fwd_gap=1.0, lat_gap=0.6):
     for g in np.split(np.arange(len(fwd)), np.where(np.diff(fwd) > fwd_gap)[0] + 1):
         go = g[np.argsort(lat[g])]
         for h in np.split(go, np.where(np.diff(lat[go]) > lat_gap)[0] + 1):
-            objects.append({
+            ob = {
                 'distance_m': float(fwd[h].min()),
                 'far_m': float(fwd[h].max()),
                 'lateral_m': float(np.median(lat[h])),
+                'lat_min_m': float(lat[h].min()),
+                'lat_max_m': float(lat[h].max()),
                 'height_m': float(z_rel[h].max()),
                 'low_m': float(z_rel[h].min()),
                 'n_points': int(len(h)),
-            })
+            }
+            if keep_idx:
+                ob['_idx'] = o[h]
+            objects.append(ob)
     return objects
 
 
