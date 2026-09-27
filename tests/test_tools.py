@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'research'))
 
 from bags import EMPTY_BAGS, safe_messages          # noqa: E402
 from eval_fake_obj import evaluate, group_x, summary_line          # noqa: E402
+from compare_row import approach_median, first_stop_56, shares          # noqa: E402
 
 
 def test_safe_messages_stops_on_read_error():
@@ -70,3 +72,16 @@ def test_evaluate_stop_on_out_of_gauge_object_is_not_ok():
     rows, _ = evaluate(_ref(), frames, objs)
     assert rows[1]['level'] == 'stop' and not rows[1]['ok']
     assert 'СТОП вне габарита: 5' in summary_line('t', rows, [], 1)
+
+
+def test_compare_row_helpers():
+    rows = [{'bag': 'doubleT_obstacle', 'frame': str(k), 'status': s, 'distance_m': d}
+            for k, (s, d) in enumerate([('clear', ''), ('stop', '120.0'), ('stop', '56.2'), ('caution', ''), ('unknown', '')])]
+    assert shares(rows) == pytest.approx((40.0, 20.0, 20.0))
+    assert first_stop_56(rows) == (2, 56.2)
+    ap = [{'shape': 'человек стоит', 'start_m': '170', 'detected': '1', 'first_m': '160'},
+          {'shape': 'человек стоит', 'start_m': '170', 'detected': '1', 'first_m': '150'},
+          {'shape': 'человек стоит', 'start_m': '90', 'detected': '1', 'first_m': '85'},
+          {'shape': 'человек стоит', 'start_m': '170', 'detected': '0', 'first_m': ''}]
+    assert approach_median(ap, 'человек стоит', 170) == 155.0
+    assert approach_median(ap, 'куб 0.4') is None
