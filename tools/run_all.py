@@ -9,6 +9,7 @@
 Результат:
     results/metrics.html   дашборд метрик (tools/dashboard.py)
     results/demo.html      плеер: детектор по кадрам записей в 3D (tools/demo.py)
+    results/site/          сайт: главная + метрики + плеер (tools/site.py)
     runs/                  csv/json каждого шага, runs/logs/<шаг>.log -- их вывод
 
 Шаги метрик идут параллельно, число процессов подбирается по числу ядер (--jobs). Каждый процесс
@@ -179,6 +180,10 @@ def main():
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
+    if metrics.exists() and demo.exists():
+        s = Step('site', ['tools/site.py', '--metrics', str(metrics), '--demo', str(demo), '--out', str(args.out / 'site')], logs)
+        if not run_parallel([s], env):
+            failed.append(s.name)
 
     print(f'\nвсего {(time.time() - T0) / 60:.1f} мин')
     for p in (metrics, demo):

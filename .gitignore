@@ -25,4 +25,5 @@ ros2_ws/src/tunnel_od_preproc/build_host/
 # Windows: окружение run_all.bat, результаты run_all.py
 .venv-win/
 /results/
+/site/
 .DS_Store
