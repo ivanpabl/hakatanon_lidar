@@ -11,7 +11,7 @@ from tunnel_od import ObstacleDetector, parse_pointcloud2
 from tunnel_od.detection.decision import axis_curvature, decide, object_level, sight_distance
 from tunnel_od.detection.tracking import EvidenceTracker
 from tunnel_od.geometry.path import extend_path_by_walls, splice_far_axis
-from tunnel_od.pointcloud import COLUMN_HEIGHT, FrameRepeat, dedupe_rounded
+from tunnel_od.pointcloud import COLUMN_HEIGHT, FrameRepeat, dedupe_rounded, hesai_columns
 from tunnel_od.sim.lidar_sim import simulate_frame
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -268,6 +268,29 @@ def test_parse_empty_and_all_zero_unordered_cloud():
     data, step, fields = _cloud16(np.zeros(300), np.zeros(300), np.zeros(300))
     assert all(len(a) == 0 for a in parse_pointcloud2(data, step, fields))
     assert all(len(a) == 0 for a in dedupe_rounded(np.zeros(0, np.float32), np.zeros(0, np.float32), np.zeros(0, np.float32)))
+
+
+def test_hesai_columns_truth_table():
+    """Hesai dual-return -- только кратное 2*COLUMN_HEIGHT облако с полем timestamp
+    (fields=None -- запись по умолчанию, старый 26-байтный layout, тоже Hesai)."""
+    _, _, fields26 = _cloud_bytes(np.zeros(1), np.zeros(1), np.zeros(1))
+    _, _, fields16 = _cloud16(np.zeros(1), np.zeros(1), np.zeros(1))
+    assert hesai_columns(512, fields26) is True
+    assert hesai_columns(300, fields26) is False
+    assert hesai_columns(512, fields16) is False
+    assert hesai_columns(512, None) is True
+
+
+def test_parse_16_byte_512_point_cloud_dedupes_by_rounding_not_columns():
+    """16-байтное облако кратно 2*COLUMN_HEIGHT=256, но без timestamp -- это не Hesai
+    (синтетика организаторов), дубли снимает округление, а не пара столбцов."""
+    rng = np.random.default_rng(1)
+    base = rng.uniform(-20, 20, (312, 3)).astype(np.float32)
+    pts = np.vstack([base, base[:200]])                      # 512 точек: кратно 256, 200 дублей
+    assert len(pts) == 512 and len(pts) % (2 * COLUMN_HEIGHT) == 0
+    data, step, fields = _cloud16(pts[:, 0], pts[:, 1], pts[:, 2])
+    px, py, pz = parse_pointcloud2(data, step, fields)
+    assert len(px) == 312
 
 
 def test_frame_repeat_detects_bitwise_same_cloud():

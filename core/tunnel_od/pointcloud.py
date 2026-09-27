@@ -14,8 +14,11 @@ Layout в записях: x,y,z,intensity (float32), ring (uint16), timestamp (f
 Система координат: x -- вбок, вперёд = -y (не +y!), z -- вверх. Во всём пакете
 продольная координата fwd = -y, поперечная lat = x.
 
-Синтетика организаторов (cloud_with_fake_obj) -- 16-байтные точки x, y, z, intensity; облако может
-быть не из столбцов по 128. Тогда дубли снимаются запасным способом: одна точка на ячейку 1 см.
+Синтетика организаторов (cloud_with_fake_obj) -- 16-байтные точки x, y, z, intensity, без поля
+timestamp; это не Hesai-облако из столбцов, даже если число точек кратно 256 (замер на
+cloud_with_fake_obj, кадр 2: 307200 точек, из них парный дедуп -- 117781, округление -- 89343;
+объекты синтетики не dual-return пары, дедуп по столбцам их не снимает и оставляет мусор). Дубли
+снимаются запасным способом (hesai_columns=False): одна точка на ячейку 1 см.
 """
 import numpy as np
 
@@ -35,6 +38,18 @@ def xyz_views(buf, fields=None):
     return {k: buf[:, o:o + 4].view(np.float32)[:, 0] for k, o in offs.items()}
 
 
+def hesai_columns(n, fields) -> bool:
+    """Облако -- пары столбцов Hesai dual return: точек кратно 2*COLUMN_HEIGHT и есть поле
+    timestamp (fields=None -- запись без явных полей, это старый 26-байтный layout по
+    умолчанию, тоже Hesai). Иначе (в т.ч. синтетика организаторов) -- не Hesai, даже если
+    число точек случайно делится на 256: дедуп по столбцам тогда снимает не то."""
+    if n % (2 * COLUMN_HEIGHT) != 0:
+        return False
+    if fields is None:
+        return True
+    return any(f.name == 'timestamp' for f in fields)
+
+
 def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_return=True):
     """Байты PointCloud2 -> (x, y, z) без нулевых точек и дублей dual return.
     Без очистки дальше обрабатывалось бы в 3-5 раз больше точек, чем есть на самом деле."""
@@ -46,7 +61,7 @@ def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_ret
     valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & ((x != 0) | (y != 0) | (z != 0))
 
     n = len(x)
-    if dedupe_dual_return and n % (2 * COLUMN_HEIGHT) == 0:
+    if dedupe_dual_return and hesai_columns(n, fields):
         cols = lambda a: a.reshape(-1, 2, COLUMN_HEIGHT)
         xa, ya, za = cols(x), cols(y), cols(z)
         dup = ((np.abs(xa[:, 1] - xa[:, 0]) < DUAL_RETURN_DUP_M)
