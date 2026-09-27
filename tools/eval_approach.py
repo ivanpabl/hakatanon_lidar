@@ -143,7 +143,7 @@ def run_bag(job):
                     n_vis += info['rays_visible'] >= 0.5 * max(info['rays_geometric'], 1) and info['rays_geometric'] > 0
                     res = test.detect(*parse_pointcloud2(new, step, fields), refit_path=True, stamp=t)
                     front = front_of(kind, dims, d)
-                    conf = [o for o in res['objects'] if o['confirmed'] and not o.get('beyond_path')]
+                    conf = [o for o in res['objects'] if o.get('level') == 'stop']
                     near = match(conf, front)
                     if near:
                         n_hit += 1

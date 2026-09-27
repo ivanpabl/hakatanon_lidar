@@ -17,8 +17,8 @@ with open_cloud_bag(bag) as (r, c):
         res = det.detect(*xyz, refit_path=True, stamp=t / 1e9)
         if i == frame:
             break
-objs = [o for o in res['objects'] if o['confirmed']]
-print({k: res[k] for k in ('obstacle', 'distance_m', 'path_range_m')})
+objs = [o for o in res['objects'] if o.get('level') in ('stop', 'caution')]
+print({k: res[k] for k in ('status', 'obstacle', 'distance_m', 'caution_distance_m', 'sight_m', 'clear_to_m', 'path_range_m')})
 for o in objs:
     print('  ', {k: (round(v, 2) if isinstance(v, float) else v) for k, v in o.items()})
-render_frame(out, *xyz, det.track_path(), f'{bag} #{frame}: ' + ', '.join(f"{o['distance_m']:.0f}м/{o['lateral_m']:+.2f}" for o in objs))
+render_frame(out, *xyz, det.track_path(), f'{bag} #{frame}: ' + ', '.join(f"{o['level']} {o['distance_m']:.0f}м/{o['lateral_m']:+.2f}" for o in objs))
