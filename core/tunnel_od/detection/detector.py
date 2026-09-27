@@ -34,7 +34,7 @@ class ObstacleDetector:
     не оценить -- как method='zone' с прямоугольником RECT_DEFAULT."""
 
     def __init__(self, near_cutoff=2.0, max_range=250.0, half_width=1.0,
-                 clearance=0.15, height=2.0, confirm_hits=3, confirm_window=5,
+                 clearance=0.15, height=2.5, confirm_hits=3, confirm_window=5,
                  max_path_age=30, default_rail_offset=0.5, path_margin=0.0, zone=None,
                  min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR,
                  method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,

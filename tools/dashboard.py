@@ -38,6 +38,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bags import RUNS, ROOT, open_cloud_bag         # noqa: E402
 from bags import EMPTY_BAGS as EMPTY                # noqa: E402
 
+
+def zone_params():
+    """Прямоугольная зона детектора по умолчанию (half_width, clearance, height) -- для рисования."""
+    import inspect
+    from tunnel_od import ObstacleDetector
+    p = inspect.signature(ObstacleDetector.__init__).parameters
+    return {k: p[k].default for k in ('half_width', 'clearance', 'height')}
+
 TEMPLATE = ROOT / 'gui' / 'template.html'
 REFERENCE = ROOT / 'reference'
 OUT = ROOT / 'gui' / 'dashboard.html'
@@ -233,7 +241,8 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
     top = snap.rail_top_at(cf)
     rel = z - top                                    # высота над головкой рельса
     cen = snap.center_at(cf)
-    in_zone = (fwd > 2) & (np.abs(lat - cen) <= 1.0) & (rel >= 0.15) & (rel <= 2.0)
+    zp = zone_params()
+    in_zone = (fwd > 2) & (np.abs(lat - cen) <= zp['half_width']) & (rel >= zp['clearance']) & (rel <= zp['height'])
     if snap.path_range:
         in_zone &= fwd <= snap.path_range
     tag = np.zeros(len(fwd), np.uint8)               # 0 фон, 1 зона, 2 объект (подтверждён), 3 объект (нет)
@@ -306,7 +315,7 @@ def scene(frame, bag='doubleT_obstacle'):
             'axis': v['axis'], 'path_range_m': v['path_range_m'], 'rails_to_m': v['rails_to_m'],
             'obstacle': bool(res['obstacle']), 'distance_m': res['distance_m'], 'objects': v['objects'],
             'status': res['status'], 'clear_to_m': res['clear_to_m'], 'caution_distance_m': res['caution_distance_m'],
-            'zone': {'half_width': 1.0, 'clearance': 0.15, 'height': 2.0}}
+            'zone': zone_params()}
 
 
 def git_rev():

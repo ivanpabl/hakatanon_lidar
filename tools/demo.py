@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 
 from bags import ROOT, open_cloud_bag
-from dashboard import frame_view, git_rev, host
+from dashboard import frame_view, git_rev, host, zone_params
 from eval_injection import front_of
 
 TEMPLATE = ROOT / 'gui' / 'demo_template.html'
@@ -213,7 +213,7 @@ def main():
         print(f'{c["bag"]}: {len(f)} кадров, с тревогой {alarm}, разбор+проверка p50 {np.median(ms):.0f} мс{extra}')
 
     page = {'generated': date.today().isoformat(), 'commit': git_rev(), 'host': host(),
-            'zone': {'half_width': 1.0, 'clearance': 0.15, 'height': 2.0}, 'clips': data}
+            'zone': zone_params(), 'clips': data}
     html = TEMPLATE.read_text(encoding='utf-8').replace(
         '/*__DATA__*/null', json.dumps(page, ensure_ascii=False, separators=(',', ':')))
     args.out.parent.mkdir(parents=True, exist_ok=True)
