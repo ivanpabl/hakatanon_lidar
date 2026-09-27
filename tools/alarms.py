@@ -17,14 +17,15 @@ import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
     os.environ.setdefault(_v, '1')
 import csv
+import json
 import warnings
 from multiprocessing import Pool
 
 import numpy as np
 
-from tunnel_od import GAUGE_METRO, ObstacleDetector, parse_pointcloud2
+from tunnel_od import GAUGE_METRO, ObstacleDetector
 
-from bags import BAGS, RUNS as OUT, open_cloud_bag
+from bags import BAGS, RUNS as OUT, cloud_parser, open_cloud_bag
 GAP = 2
 
 
@@ -32,17 +33,35 @@ CORRIDORS = {'rect': None, 'gauge': GAUGE_METRO}
 MINPTS = {'on': {}, 'off': {'min_points_k': 0.0, 'min_points_floor': 1}}
 
 
+def _stream(reader, conn, segments, seglen):
+    """(номер кадра, t, сообщение): вся запись или segments отрезков по seglen кадров,
+    равномерно по времени (детектор перезапускается в начале каждого отрезка)."""
+    if not segments:
+        for i, (c, t, raw) in enumerate(reader.messages(connections=[conn])):
+            yield i, t, c, raw, i == 0
+        return
+    t0, dur = reader.start_time, reader.duration
+    for k in range(segments):
+        start = t0 + int(dur * (k + 0.5) / segments)
+        for j, (c, t, raw) in enumerate(reader.messages(connections=[conn], start=start)):
+            if j == seglen:
+                break
+            yield k * seglen + j, t, c, raw, j == 0
+
+
 def run_bag(job):
-    bag, corridor, minpts, method = job
+    bag, corridor, minpts, method, det_kwargs, segments, seglen, parser = job
     warnings.simplefilter('ignore')
-    det = ObstacleDetector(zone=CORRIDORS[corridor], method=method, **MINPTS[minpts])
+    parse_pointcloud2 = cloud_parser(parser)
+    make = lambda: ObstacleDetector(zone=CORRIDORS[corridor], method=method, **{**MINPTS[minpts], **det_kwargs})
     rows = []
     with open_cloud_bag(bag) as (reader, conn):
-        t0 = None
-        for i, (c, t, raw) in enumerate(reader.messages(connections=[conn])):
-            t0 = t if t0 is None else t0
+        t0 = reader.start_time
+        for i, t, c, raw, fresh in _stream(reader, conn, segments, seglen):
+            if fresh:
+                det = make()
             m = reader.deserialize(raw, c.msgtype)
-            res = det.detect(*parse_pointcloud2(m.data, m.point_step, m.fields), refit_path=True)
+            res = det.detect(*parse_pointcloud2(m.data, m.point_step, m.fields), refit_path=True, stamp=t / 1e9)
             conf = [o for o in res['objects'] if o['confirmed'] and not o['beyond_path']]
             near = min(conf, key=lambda o: o['distance_m']) if conf else None
             rows.append({'bag': bag, 'frame': i, 't_s': round((t - t0) / 1e9, 2), 'alarm': int(res['obstacle']),
@@ -72,10 +91,16 @@ def main():
     ap.add_argument('--minpts', default='on', choices=list(MINPTS), help='порог числа точек по дальности')
     ap.add_argument('--method', default='zone', choices=['zone', 'background'], help='zone -- точки в зоне; background -- остаток до фона тоннеля')
     ap.add_argument('--workers', type=int, default=2, help='параллельных процессов (каждый -- ядро и до ~0.5ГБ)')
+    ap.add_argument('--det', default='{}', help='доп. kwargs ObstacleDetector в JSON')
+    ap.add_argument('--segments', type=int, default=0, help='не вся запись, а столько отрезков (для длинной new_data)')
+    ap.add_argument('--seglen', type=int, default=400, help='кадров в отрезке')
+    ap.add_argument('--parser', default='python', choices=['python', 'cpp'],
+                    help='разбор облака: python -- parse_pointcloud2, cpp -- как C++-узел приёма (tunnel_od_preproc)')
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     with Pool(min(len(args.bags), args.workers)) as pool:
-        parts = pool.map(run_bag, [(b, args.corridor, args.minpts, args.method) for b in args.bags])
+        parts = pool.map(run_bag, [(b, args.corridor, args.minpts, args.method, json.loads(args.det),
+                                    args.segments, args.seglen, args.parser) for b in args.bags])
     rows = [r for p in parts for r in p]
     path = OUT / f'alarms_{args.tag}.csv'
     with open(path, 'w', newline='', encoding='utf-8') as f:
@@ -88,7 +113,7 @@ def main():
     tot = [0, 0, 0, 0.0]
     for bag, part in zip(args.bags, parts):
         a = np.array([r['alarm'] for r in part])
-        dur = part[-1]['t_s'] / 3600
+        dur = len(part) / 10.0 / 3600   # 10 Гц; по t_s нельзя: отрезки
         ep = episodes(a)
         d = [r['distance_m'] for r in part if r['alarm']]
         small = [r for r in part if r['alarm'] and r['n_points'] != '' and r['n_points'] <= 2]

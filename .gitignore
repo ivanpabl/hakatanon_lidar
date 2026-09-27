@@ -20,3 +20,9 @@ ros2_ws/log/
 
 # служебная папка Claude Code
 .claude/
+ros2_ws/src/tunnel_od_preproc/build_host/
+
+# Windows: окружение run_all.bat, результаты run_all.py
+.venv-win/
+/results/
+.DS_Store

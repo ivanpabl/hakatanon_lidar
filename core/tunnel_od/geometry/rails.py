@@ -48,20 +48,24 @@ def find_floor_bumps(x, y, z, return_z=False):
     ok = (fbin >= 0) & (fbin < n_f)
     xf, zf, fbin = xf[ok], zf[ok], fbin[ok]
 
-    order = np.lexsort((zf, fbin))
-    fb_s, z_s = fbin[order], zf[order]
+    # одна сортировка по (срез, высота): из неё и перцентиль среза, и максимум ячейки
+    zmin = zf.min()
+    order = np.argsort(fbin * 1000.0 + (zf - zmin), kind='stable')
+    fb_s, z_s, x_s = fbin[order], zf[order], xf[order]
     counts = np.bincount(fb_s, minlength=n_f)
     starts = np.concatenate([[0], np.cumsum(counts)[:-1]])
     zlo = np.full(n_f, np.nan)
-    for b in np.where(counts >= 50)[0]:
-        zlo[b] = np.percentile(z_s[starts[b]:starts[b] + counts[b]], 30)
-    keep = np.isfinite(zlo[fbin]) & (zf < zlo[fbin] + 0.9)
-    xf, zf, fbin = xf[keep], zf[keep], fbin[keep]
+    have = counts >= 50
+    zlo[have] = z_s[starts[have] + (counts[have] - 1) * 30 // 100]
+    keep = np.isfinite(zlo[fb_s]) & (z_s < zlo[fb_s] + 0.9)
+    xf, zf, fbin = x_s[keep], z_s[keep], fb_s[keep]
     row_ok = np.bincount(fbin, minlength=n_f) >= 30
 
     lbin = np.digitize(xf, _LAT_EDGES)
     profile = np.full(n_f * _N_LAT, -np.inf)
-    np.maximum.at(profile, fbin * _N_LAT + lbin, zf)
+    # точки идут по возрастанию высоты внутри среза: при повторе индекса остаётся
+    # последняя запись, то есть максимум ячейки (быстрее np.maximum.at в разы)
+    profile[fbin * _N_LAT + lbin] = zf
     profile = profile.reshape(n_f, _N_LAT)
     profile[np.isneginf(profile)] = np.nan
     valid = ~np.isnan(profile)

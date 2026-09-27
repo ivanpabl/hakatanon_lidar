@@ -1,0 +1,15 @@
+data/
+runs/
+venv/
+labeling/
+research/
+tools/
+.git/
+**/__pycache__
+**/*.egg-info
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+*.db3
+*.log
+ros2_ws/src/tunnel_od_preproc/build_host/

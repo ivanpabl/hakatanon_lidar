@@ -1,0 +1,4 @@
+# run_all.bat -- CRLF (cmd.exe путает метки при LF), скрипты для Linux/Docker -- LF и при checkout на Windows
+*.bat text eol=crlf
+*.sh text eol=lf
+docker/*.xml text eol=lf
