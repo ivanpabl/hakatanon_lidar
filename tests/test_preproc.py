@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
 sys.path.insert(0, str(ROOT / 'tools'))
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2          # noqa: E402
-from tunnel_od.pointcloud import COLUMN_HEIGHT                    # noqa: E402
+from tunnel_od.pointcloud import COLUMN_HEIGHT, dedupe_rounded    # noqa: E402
 from tunnel_od_preproc.build_host import ensure                   # noqa: E402
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -94,7 +94,12 @@ def test_parse_bitwise_equal_to_python(n, seed):
     data = legacy_cloud(x, y, z)
     py = parse_pointcloud2(data, 26, LEGACY_FIELDS)
     fmt = 'legacy_hesai' if n % 256 == 0 else 'auto'
-    assert bits_equal(py, native_legacy(data, fmt=fmt))
+    native = native_legacy(data, fmt=fmt)
+    if n % (2 * COLUMN_HEIGHT) != 0:
+        # облако не из столбцов парами -- C++ не запускает запасное удаление дублей (это делает
+        # конвейер снаружи: tools/bags.py cloud_parser('cpp'), ROS-нода), повторяем его здесь
+        native = dedupe_rounded(*native)
+    assert bits_equal(py, native)
 
 
 def test_parse_like_test_core():
