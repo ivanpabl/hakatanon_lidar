@@ -19,6 +19,7 @@
 #   READ_AHEAD, PLAY_DELAY  параметры плеера для play (очередь 20 кадров, старт через 3 с)
 #   LAUNCH_ARGS    доп. аргументы detector.launch.py для play, например "use_cpp_preproc:=false"
 #   PROBE          1 (по умолчанию) -- замер e2e-задержки latency_probe в play, 0 -- без него
+#   NETWORK        сеть контейнера для play/shell, например NETWORK=none -- проверка без интернета
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,8 +34,9 @@ BIG_FRAMES=(--shm-size=2g)
 NET_SYSCTL=(--sysctl net.core.rmem_max=134217728 --sysctl net.core.wmem_max=134217728)
 COMMON=(--rm -e "TUNNEL_OD_DDS=$DDS" -v "$CONFIG_DIR:/opt/tunnel_od/config:ro")
 [ -t 0 ] && [ -t 1 ] && COMMON+=(-it)
+NET=(); [ -n "${NETWORK:-}" ] && NET=(--network "$NETWORK")
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { awk 'NR > 1 && !/^#/ {exit} NR > 1' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 cmd="${1:-}"; [ $# -gt 0 ] && shift
 case "$cmd" in
@@ -47,7 +49,7 @@ case "$cmd" in
     [ -f "$BAG/metadata.yaml" ] || { echo "нет $BAG/metadata.yaml -- укажите каталог записи ros2 bag" >&2; exit 1; }
     NAME="$(basename "$BAG")"
     mkdir -p "$OUT_DIR"
-    docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" \
+    docker run "${COMMON[@]}" "${NET[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" \
         -e "TOPIC=${TOPIC:-}" -e "READ_AHEAD=${READ_AHEAD:-20}" -e "PLAY_DELAY=${PLAY_DELAY:-3}" \
         -e "LAUNCH_ARGS=${LAUNCH_ARGS:-}" -e "PROBE=${PROBE:-1}" \
         -v "$BAG:/bags/$NAME:ro" -v "$OUT_DIR:/out" \
@@ -67,7 +69,7 @@ case "$cmd" in
          python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test "$@"' _ "$@"
     ;;
   shell)
-    docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"
+    docker run "${COMMON[@]}" "${NET[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"
     ;;
   -h|--help|help|"") usage 0 ;;
   *) echo "неизвестная команда: $cmd" >&2; usage 1 ;;
