@@ -26,3 +26,4 @@ ros2_ws/src/tunnel_od_preproc/build_host/
 .venv-win/
 /results/
 .DS_Store
+tunnel_od_image.tar.gz

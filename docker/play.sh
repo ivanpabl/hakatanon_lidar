@@ -56,7 +56,14 @@ wait $PLAYER || echo ">>> ros2 bag play завершился с кодом $?"
 sleep 3            # дообработать последние кадры
 # SIGINT -- как Ctrl+C: launch останавливает узел, узел пишет итоговую сводку
 kill -INT $LAUNCH $PROBE_PID 2>/dev/null; wait $LAUNCH || true
-[ -n "$PROBE_PID" ] && { wait $PROBE_PID || true; }
+if [ -n "$PROBE_PID" ]; then
+    # SIGINT обёртке `ros2 run` до самого latency_probe не доходит (он оставался жить, и play.sh
+    # висел): сигнал -- бинарнику, через 5 с -- принудительно
+    pkill -INT -f 'lib/tunnel_od_preproc/latency_probe' 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 $PROBE_PID 2>/dev/null || break; sleep 0.5; done
+    pkill -KILL -f 'latency_probe' 2>/dev/null || true
+    wait $PROBE_PID 2>/dev/null || true
+fi
 trap - EXIT
 echo ">>> результат: $OUT/${NAME}_result.jsonl, итог: $OUT/${NAME}_stats.json"
 python3 - "$OUT/${NAME}_stats.json" "$OUT/${NAME}_e2e.json" <<'PY' || true
