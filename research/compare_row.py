@@ -47,7 +47,8 @@ def row(tag, det):
     pct = lambda t: '/'.join(f'{v:.1f}' for v in t)
     f56 = first_stop_56(alarms)
     m = lambda v: '-' if v is None else f'{v:.0f} м'
-    return (f'| {tag} | `{det}` | {fo} | {pct(shares([r for r in alarms if r["bag"] in EMPTY_BAGS]))} '
+    empty = [r for r in alarms if r['bag'] in EMPTY_BAGS]
+    return (f'| {tag} | `{det}` | {fo} | {pct(shares(empty)) if empty else "-"} '
             f'| {pct(shares(nd)) if nd else "-"} | {m(approach_median(ap, "человек стоит", 170))} '
             f'| {m(approach_median(ap, "куб 0.4"))} | {"-" if f56 is None else f"{f56[0]}/{f56[1]:.1f}"} |')
 

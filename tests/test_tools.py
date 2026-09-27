@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'research'))
 from bags import EMPTY_BAGS, safe_messages          # noqa: E402
 from eval_fake_obj import evaluate, group_x, summary_line          # noqa: E402
 from compare_row import approach_median, first_stop_56, shares          # noqa: E402
+from selflabel import episodes, label, segments          # noqa: E402
 
 
 def test_safe_messages_stops_on_read_error():
@@ -85,3 +86,45 @@ def test_compare_row_helpers():
           {'shape': 'человек стоит', 'start_m': '170', 'detected': '0', 'first_m': ''}]
     assert approach_median(ap, 'человек стоит', 170) == 155.0
     assert approach_median(ap, 'куб 0.4') is None
+
+
+def test_compare_row_missing_runs_show_dash(tmp_path, monkeypatch):
+    import compare_row
+    monkeypatch.setattr(compare_row, 'RUNS', tmp_path)                  # FAST=1: нет alarms_<tag>.csv
+    cells = [c.strip() for c in compare_row.row('t', '{}').split('|')]
+    assert cells[4] == '-' and cells[5] == '-'
+
+
+def _rows(n, dt=0.1, disp=1.0, none_at=()):
+    rows, travel = [], 0.0
+    for k in range(n):
+        d = None if k in none_at else disp
+        travel += d or 0.0
+        rows.append({'bag': 'new_data', 'frame': k, 't_s': k * dt, 'travel_m': travel, 'displacement_m': d})
+    return rows
+
+
+def test_segments_break_on_long_odometry_gap_and_restart():
+    assert len(set(segments(_rows(30, none_at=range(10, 15))))) == 1          # 0,5 с без смещения
+    seg = segments(_rows(40, none_at=range(10, 26)))                          # 1,6 с без смещения
+    assert seg[9] == seg[25] == 0 and seg[26] == 1
+    rows = _rows(10) + [dict(r, frame=100 + r['frame']) for r in _rows(10)]   # отрезок alarms.py --segments
+    assert segments(rows)[10] == 1
+
+
+def test_episodes_gap_rule():
+    st = lambda frames: [(f, f, 7, 50.0, 'in_gauge') for f in frames]
+    assert len(episodes(st([0, 1, 2, 8, 9]))) == 1        # пропущено 5 кадров (3..7) -- эпизод не рвётся
+    assert len(episodes(st([0, 1, 2, 9, 10]))) == 2       # пропущено 6
+    two = episodes(st([0, 1]) + [(f, f, 8, 30.0, 'in_gauge') for f in (0, 1)])
+    assert len(two) == 2                                   # разные треки -- разные эпизоды
+
+
+def test_label_false_proven_only_in_same_segment():
+    rows = _rows(200)                                      # 1 м за кадр
+    seg = segments(rows)
+    ep = episodes([(10, 10, 1, 50.0, 'in_gauge')])[0]     # X = 11 + 50 = 61; нужно travel >= 61 + 3 + 1 = 65
+    assert label(ep, rows, seg) == 'false_proven'
+    assert label(ep, rows[:60], seg[:60]) == 'unresolved'
+    rows2 = _rows(200, none_at=range(20, 40))              # сегмент рвётся до проезда X
+    assert label(episodes([(10, 10, 1, 50.0, 'in_gauge')])[0], rows2, segments(rows2)) == 'unresolved'
