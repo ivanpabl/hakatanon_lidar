@@ -117,7 +117,8 @@ def run_approach(job):
             tags.append(fv['tag'])
             offs.append(offs[-1] + len(fv['q']))
             frames.append({'i': i, 't': round((t - t0) / 1e9, 2), 'obstacle': bool(res['obstacle']),
-                           'distance_m': res['distance_m'], 'path_range_m': fv['path_range_m'],
+                           'distance_m': res['distance_m'], 'status': res['status'], 'clear_to_m': res['clear_to_m'],
+                           'caution_distance_m': res['caution_distance_m'], 'path_range_m': fv['path_range_m'],
                            'rails_to_m': fv['rails_to_m'], 'axis': [[round(p, 2) for p in q] for q in fv['axis']],
                            'objects': fv['objects'], 'n_zone': int(res['n_points']),
                            'parse_ms': round((b - a) * 1e3, 1), 'check_ms': round((e - b) * 1e3, 1),
@@ -167,7 +168,8 @@ def run_clip(job):
             tags.append(v['tag'])
             offs.append(offs[-1] + len(v['q']))
             frames.append({'i': i, 't': round((t - t0) / 1e9, 2), 'obstacle': bool(res['obstacle']),
-                           'distance_m': res['distance_m'], 'path_range_m': v['path_range_m'],
+                           'distance_m': res['distance_m'], 'status': res['status'], 'clear_to_m': res['clear_to_m'],
+                           'caution_distance_m': res['caution_distance_m'], 'path_range_m': v['path_range_m'],
                            'rails_to_m': v['rails_to_m'], 'axis': [[round(p, 2) for p in r] for r in v['axis']],
                            'objects': v['objects'], 'n_zone': int(res['n_points']),
                            'parse_ms': round((b - a) * 1e3, 1), 'check_ms': round((e - b) * 1e3, 1),

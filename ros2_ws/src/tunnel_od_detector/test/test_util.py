@@ -5,8 +5,9 @@ import math
 import numpy as np
 import pytest
 
-from tunnel_od_detector.util import (Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
-                                     required_fwd_range, to_jsonable)
+from tunnel_od_detector.util import (LEVEL_COLOR, Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
+                                     raw_hesai_format, raw_point_count, required_fwd_range, status_text,
+                                     to_jsonable, unordered_raw)
 
 
 def _target(self, near_cutoff=2.0, zone=None, method='zone', path_margin=10.0):
@@ -95,3 +96,26 @@ def test_default_crop_is_safe_for_core():
     lo, hi = required_fwd_range({})
     assert lo >= 2.0 - 1e-9 and hi <= 250.0 + 1e-9
     assert required_fwd_range({'max_range': 300.0})[1] == 300.0
+
+
+def test_unordered_raw_unknown_count():
+    assert unordered_raw(300) and not unordered_raw(512)
+    assert not unordered_raw(None) and not unordered_raw(0)
+    assert raw_point_count(300, None, canonical=False) == 300
+    assert raw_point_count(999, None, canonical=True) is None                       # meta не пришла
+    assert raw_point_count(999, {'parse': {'n_in': 300}}, canonical=True) == 300
+
+
+def test_unordered_raw_not_hesai_even_if_multiple_of_256():
+    # синтетика организаторов: 307200 точек без timestamp -- C++ дубли не снимал
+    assert unordered_raw(307200, hesai=False) and not unordered_raw(307200, hesai=True)
+    assert raw_hesai_format({'parse': {'format': 'legacy_hesai'}})
+    assert not raw_hesai_format({'parse': {'format': 'generic'}}) and not raw_hesai_format(None)
+
+
+def test_status_text():
+    assert status_text({'status': 'stop', 'distance_m': 56.3})[0] == 'СТОП 56 м'
+    assert status_text({'status': 'caution', 'caution_distance_m': 80.2})[0] == 'ВНИМАНИЕ 80 м'
+    assert status_text({'status': 'clear', 'clear_to_m': 143.4})[0] == 'СВОБОДНО до 143 м'
+    assert status_text({'status': 'unknown'})[0] == 'ПУТЬ НЕ ОПРЕДЕЛЁН'
+    assert set(LEVEL_COLOR) == {'stop', 'caution', None}

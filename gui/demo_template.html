@@ -62,6 +62,7 @@ header.top {
 .status.alarm { color: #ff8a8a; }
 .status.clear { color: var(--clear); }
 .status.nopath { color: var(--cand); }
+.status.caution { color: var(--cand); }
 .hud .big { font-size: 46px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
 .hud .big small { font-size: 22px; font-weight: 500; color: rgba(232, 238, 245, .7); margin-left: 4px; }
 .hud .big.dim { color: rgba(232, 238, 245, .28); }
@@ -357,6 +358,7 @@ function hud(fr) {
     ${fr.speed_mps != null ? `<dt>поезд</dt><dd>${num(fr.speed_mps * 3.6, 0)} км/ч${fr.travelled_m != null ? `, проехал ${num(fr.travelled_m, 0)} м` : ''}</dd>` : ''}
     <dt>кадр</dt><dd>${fr.i} · ${num(fr.t, 1)} с от начала</dd>
     <dt>ось пути</dt><dd>${fr.path_range_m ? `до ${num(fr.path_range_m, 0)} м${fr.rails_to_m ? `, рельсы до ${num(fr.rails_to_m, 0)} м` : ''}` : 'не найдена'}</dd>
+    ${fr.clear_to_m != null ? `<dt>проверено</dt><dd>свободно до ${num(fr.clear_to_m, 0)} м</dd>` : ''}
     <dt>в коридоре</dt><dd>${num(fr.n_zone)} ${plural(fr.n_zone, 'точка', 'точки', 'точек')}</dd>
     <dt>разбор</dt><dd>${num(fr.parse_ms, 0)} мс</dd>
     <dt>детектор</dt><dd>${num(fr.check_ms, 0)} мс, с пересчётом пути</dd>`;
@@ -368,7 +370,11 @@ function hud(fr) {
       <dl>${o ? `<dt>объект</dt><dd>${o.held ? 'в этом кадре не виден, тревога удерживается по треку' : `${o.n_points} ${plural(o.n_points, 'точка', 'точки', 'точек')}`}, ${num(Math.abs(o.lateral_m), 2)} м ${o.lateral_m < 0 ? 'влево' : 'вправо'} от оси</dd>` : ''}${common}</dl>`;
   } else {
     const cand = fr.objects.filter(x => !x.alarm).length;
-    $('#hud').innerHTML = `<span class="status ${fr.path_range_m ? 'clear' : 'nopath'}">${fr.path_range_m ? 'Путь свободен' : 'Путь не найден'}</span>
+    const st = fr.status || (fr.path_range_m ? 'clear' : 'unknown');
+    const head = st === 'caution' ? `<span class="status caution">Внимание: объект ${num(fr.caution_distance_m, 0)} м</span>`
+      : st === 'unknown' ? `<span class="status nopath">Путь не определён</span>`
+      : `<span class="status clear">Путь свободен${fr.clear_to_m != null ? ` до ${num(fr.clear_to_m, 0)} м` : ''}</span>`;
+    $('#hud').innerHTML = `${head}
       <div class="big dim">—<small>м</small></div>
       <p class="what">${cand ? `${cand} ${plural(cand, 'кандидат', 'кандидата', 'кандидатов')} копят подтверждение` : 'подтверждённых объектов нет'}</p>
       <dl>${common}</dl>`;

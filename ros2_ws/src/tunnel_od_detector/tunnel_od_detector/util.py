@@ -101,6 +101,44 @@ def required_fwd_range(det_kwargs):
     return lo, hi
 
 
+# ---------------------------------------------------------------- решение и входное облако
+
+COLUMN_PAIR = 256        # 2 x 128 каналов: облако из столбцов, дубли dual return снимает разбор
+
+LEVEL_COLOR = {'stop': (1.0, 0.1, 0.1, 0.9), 'caution': (1.0, 0.85, 0.1, 0.8), None: (0.6, 0.6, 0.6, 0.5)}
+
+
+def unordered_raw(n, hesai=True) -> bool:
+    """Исходное облако не из пар столбцов Hesai (синтетика организаторов): C++ дубли не снимал,
+    их снимает запасной способ (tunnel_od.pointcloud.dedupe_rounded). hesai=False -- облако
+    не Hesai (нет поля timestamp), даже если точек кратно 256. n неизвестно (None) -- не трогаем."""
+    return bool(n) and (not hesai or n % COLUMN_PAIR != 0)
+
+
+def raw_point_count(n_msg, meta, canonical):
+    """Число точек исходного облака: из сообщения или, за C++-приёмом, из его meta (parse.n_in)."""
+    if canonical:
+        return ((meta or {}).get('parse') or {}).get('n_in')
+    return n_msg
+
+
+def raw_hesai_format(meta) -> bool:
+    """C++-приём распознал исходное облако как Hesai из столбцов (meta parse.format)."""
+    return ((meta or {}).get('parse') or {}).get('format') == 'legacy_hesai'
+
+
+def status_text(result):
+    """Строка решения для RViz и логов и её цвет."""
+    s = result.get('status')
+    if s == 'stop':
+        return f"СТОП {float(result['distance_m']):.0f} м", (1.0, 0.2, 0.2)
+    if s == 'caution':
+        return f"ВНИМАНИЕ {float(result['caution_distance_m']):.0f} м", (1.0, 0.85, 0.1)
+    if s == 'unknown':
+        return 'ПУТЬ НЕ ОПРЕДЕЛЁН', (0.7, 0.7, 0.7)
+    return f"СВОБОДНО до {float(result.get('clear_to_m') or 0.0):.0f} м", (0.3, 1.0, 0.3)
+
+
 # ---------------------------------------------------------------- JSON
 
 def to_jsonable(obj, _depth=0):

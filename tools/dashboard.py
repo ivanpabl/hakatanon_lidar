@@ -240,11 +240,11 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
     tag[in_zone] = 1
     objects = []
     for o in res['objects']:
-        if o['too_small'] and not o['confirmed']:
+        if o.get('level') is None and o['too_small']:
             continue
         near, far = o['distance_m'], o.get('far_m', o['distance_m'])
         sel = in_zone & (fwd >= near - 0.05) & (fwd <= far + 0.05) & (np.abs(lat - cen - o['lateral_m']) < 0.8)
-        alarm = bool(o['confirmed'] and not o['beyond_path'])
+        alarm = o.get('level') == 'stop'
         tag[sel] = 2 if alarm else 3
         box = None
         if sel.any():
@@ -258,6 +258,7 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
         if box is not None:
             objects.append({'distance_m': near, 'far_m': far, 'lateral_m': o['lateral_m'], 'height_m': o['height_m'],
                             'n_points': int(o['n_points']), 'confirmed': bool(o['confirmed']), 'alarm': alarm,
+                            'level': o.get('level'), 'reason': o.get('reason'),
                             'edge_line': bool(o.get('edge_line')), 'held': bool(o.get('held')), 'box': box})
     objects.sort(key=lambda o: (not o['alarm'], o['distance_m']))
 
@@ -304,6 +305,7 @@ def scene(frame, bag='doubleT_obstacle'):
             'points': base64.b64encode(v['q'].tobytes()).decode(), 'tags': base64.b64encode(v['tag'].tobytes()).decode(),
             'axis': v['axis'], 'path_range_m': v['path_range_m'], 'rails_to_m': v['rails_to_m'],
             'obstacle': bool(res['obstacle']), 'distance_m': res['distance_m'], 'objects': v['objects'],
+            'status': res['status'], 'clear_to_m': res['clear_to_m'], 'caution_distance_m': res['caution_distance_m'],
             'zone': {'half_width': 1.0, 'clearance': 0.15, 'height': 2.0}}
 
 
