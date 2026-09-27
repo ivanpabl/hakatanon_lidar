@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2
+from tunnel_od.detection.decision import axis_curvature, decide, object_level, sight_distance
 from tunnel_od.detection.tracking import EvidenceTracker
 from tunnel_od.geometry.path import extend_path_by_walls, splice_far_axis
 from tunnel_od.pointcloud import COLUMN_HEIGHT, FrameRepeat, dedupe_rounded
@@ -277,3 +278,70 @@ def test_frame_repeat_detects_bitwise_same_cloud():
     assert rep.check(a)
     assert not rep.check(b)
     assert rep.check(np.frombuffer(b, np.uint8))             # numpy-массив (rosbags) и bytes -- одно и то же
+
+
+def _o(d, **kw):
+    o = {'distance_m': d, 'confirmed': False, 'beyond_path': False, 'held': False, 'edge_line': False,
+         'hits': 0, 'evidence': 0.0}
+    o.update(kw)
+    return o
+
+
+def _decide(objs, path=True, path_range=150.0, curvature=0.0):
+    return decide(objs, path_available=path, path_range=path_range if path else None, curvature=curvature,
+                  pending_score=1.1)
+
+
+def test_object_level_table_and_reason_order():
+    lv = lambda o, in_path=True: object_level(o, in_path=in_path, pending_score=1.1)
+    assert lv(_o(50, confirmed=True)) == ('stop', 'in_gauge')
+    assert lv(_o(50, confirmed=True), in_path=False) == ('caution', 'beyond_path')
+    assert lv(_o(50, confirmed=True, ego_carried=True)) == ('caution', 'ego_carried')
+    assert lv(_o(50, confirmed=True, ego_carried=True), in_path=False) == ('caution', 'beyond_path')
+    assert lv(_o(50, hits=2, evidence=1.1)) == ('caution', 'pending')
+    assert lv(_o(50, hits=1, evidence=5.0)) == (None, None)
+    assert lv(_o(50, hits=3, evidence=1.0)) == (None, None)
+    assert lv(_o(50, edge_line=True, hits=5, evidence=5.0)) == (None, None)
+    assert lv(_o(50, held=True, level='stop', reason='in_gauge'), in_path=False) == ('stop', 'in_gauge')
+
+
+def test_decide_status_priority():
+    assert _decide([_o(50, confirmed=True), _o(80, confirmed=True, beyond_path=True)])['status'] == 'stop'
+    held = _o(50, confirmed=True, held=True, level='stop', reason='in_gauge')
+    assert _decide([held], path=False)['status'] == 'stop'                       # stop > unknown
+    assert _decide([_o(80, confirmed=True, beyond_path=True)], path=False)['status'] == 'unknown'
+    assert _decide([_o(80, confirmed=True, beyond_path=True)], path_range=60.0)['status'] == 'caution'
+    assert _decide([_o(80, hits=1)])['status'] == 'clear'
+
+
+def test_decide_distances():
+    r = _decide([_o(70, confirmed=True), _o(40, confirmed=True), _o(30, confirmed=True, beyond_path=True)])
+    assert r['distance_m'] == 40 and r['caution_distance_m'] == 30
+    r = _decide([_o(80, hits=2, evidence=2.0)])
+    assert r['distance_m'] is None and r['caution_distance_m'] == 80
+
+
+def test_sight_and_clear_to():
+    r = _decide([], path=False)
+    assert r['sight_m'] == 0.0 and r['clear_to_m'] == 0.0
+    assert _decide([], path_range=250.0)['sight_m'] == 200.0
+    assert _decide([], path_range=143.0)['sight_m'] == 143.0
+    assert _decide([], path_range=250.0, curvature=1 / 300)['sight_m'] == pytest.approx(60.0)   # sqrt(8*300*1.5)
+    assert _decide([], path_range=250.0, curvature=1 / 6000)['sight_m'] == 200.0                # |k| < 1/5000
+    r = _decide([_o(40, confirmed=True)], path_range=150.0)
+    assert r['clear_to_m'] == 40 and r['sight_m'] == 150.0
+    assert sight_distance(None, 0.0) == 0.0
+
+
+def test_decide_clear_to_never_negative():
+    held = _o(-2.0, confirmed=True, held=True, level='stop', reason='in_gauge')
+    r = _decide([held])
+    assert r['status'] == 'stop' and r['clear_to_m'] == 0.0
+
+
+def test_axis_curvature_of_arc():
+    R = 300.0
+    f = np.arange(2.0, 150.0, 1.0)
+    assert axis_curvature(f, f ** 2 / (2 * R)) == pytest.approx(1 / R, rel=1e-3)
+    assert axis_curvature(f, 0.01 * f) == pytest.approx(0.0, abs=1e-9)
+    assert axis_curvature(np.arange(2.0, 45.0, 1.0), np.zeros(43)) == 0.0         # до 45 м: на 40-120 мало точек
