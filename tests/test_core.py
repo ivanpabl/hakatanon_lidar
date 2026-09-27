@@ -368,3 +368,34 @@ def test_axis_curvature_of_arc():
     assert axis_curvature(f, f ** 2 / (2 * R)) == pytest.approx(1 / R, rel=1e-3)
     assert axis_curvature(f, 0.01 * f) == pytest.approx(0.0, abs=1e-9)
     assert axis_curvature(np.arange(2.0, 45.0, 1.0), np.zeros(43)) == 0.0         # до 45 м: на 40-120 мало точек
+
+
+def test_detector_status_fields_clear_and_stop():
+    det = ObstacleDetector()
+    res = _run(det, [{}] * 3)
+    assert res['status'] == 'clear' and not res['obstacle']
+    assert 100 < res['clear_to_m'] <= 200 and res['sight_m'] >= res['clear_to_m']
+    assert res['travel_m'] == pytest.approx(0.0, abs=1.0)
+    res = _run(det, [{'obstacle_forward': 30.0, 'obstacle_radius': 0.35}] * 4)
+    assert res['status'] == 'stop' and res['obstacle'] is True
+    assert res['clear_to_m'] == pytest.approx(res['distance_m'])
+    stop = [o for o in res['objects'] if o['level'] == 'stop']
+    assert stop and all(o['reason'] == 'in_gauge' for o in stop)
+    assert all('rail_z_m' in o for o in res['objects'])
+
+
+def test_detector_unknown_without_path():
+    det = ObstacleDetector()
+    x, y, z, *_ = simulate_frame()
+    res = det.check_frame(x, y, z)                    # путь ещё не считался
+    assert res['status'] == 'unknown' and not res['obstacle']
+    assert res['sight_m'] == 0.0 and res['clear_to_m'] == 0.0
+
+
+def test_held_object_inherits_level():
+    det = ObstacleDetector()
+    _run(det, [{}] * 3)
+    _run(det, [{'obstacle_forward': 30.0, 'obstacle_radius': 0.35}] * 8)
+    res = _run(det, [{}])
+    held = [o for o in res['objects'] if o.get('held')]
+    assert held and held[0]['level'] == 'stop' and held[0]['reason'] == 'in_gauge' and 'track_id' in held[0]

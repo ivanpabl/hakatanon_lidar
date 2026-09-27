@@ -46,9 +46,14 @@ class Tracker:
             del tr['hist'][:-self.confirm_window]
         self.tracks = [tr for tr in self.tracks if any(tr['hist'])]
         for ob in objects:
-            ob['confirmed'] = sum(ob.pop('_track')['hist']) >= self.confirm_hits
+            hist = ob.pop('_track')['hist']
+            ob['hits'] = sum(hist)
+            ob['confirmed'] = ob['hits'] >= self.confirm_hits
 
     def set_alarm(self, track_ids):
+        pass
+
+    def set_levels(self, levels):
         pass
 
     def held(self):
@@ -120,6 +125,7 @@ class EvidenceTracker:
             tr['alarm'] = False
             ob['track_id'] = tr['id']
             ob['evidence'] = round(tr['score'], 2)
+            ob['hits'] = tr['hits']
             ob['confirmed'] = tr['score'] >= self.threshold and tr['hits'] >= self.min_hits
         self.tracks = [tr for tr in self.tracks
                        if tr['miss'] <= self.max_miss and tr['distance_m'] > -5.0 and tr['score'] > 0.05]
@@ -130,6 +136,12 @@ class EvidenceTracker:
             if tr['miss'] == 0 and tr['id'] in track_ids:
                 tr['alarm'] = True
                 tr['alarm_frames'] = tr.get('alarm_frames', 0) + 1
+
+    def set_levels(self, levels):
+        """{track_id: (level, reason)} объектов этого кадра -- их наследует удержанный объект (held)."""
+        for tr in self.tracks:
+            if tr['id'] in levels:
+                tr['level'], tr['reason'] = levels[tr['id']]
 
     def held(self):
         """Треки, поднявшие тревогу в последнем кадре с объектом; пропущено 1..hold кадров.

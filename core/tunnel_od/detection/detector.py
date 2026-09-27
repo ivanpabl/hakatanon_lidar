@@ -1,5 +1,6 @@
 """ObstacleDetector -- связывает шаги обработки кадра: путь -> полотно -> зона ->
-объекты -> подтверждение -> решение о тревоге. Ничего не знает про ROS 2: на вход
+объекты -> подтверждение -> решение о тревоге -- решение -- detection/decision.py
+(status: stop | unknown | caution | clear). Ничего не знает про ROS 2: на вход
 массивы x, y, z одного кадра (см. tunnel_od.pointcloud.parse_pointcloud2).
 
     det = ObstacleDetector()
@@ -18,6 +19,7 @@ from ..geometry.path import TrackPath, extend_path_by_walls, splice_far_axis
 from ..geometry.rails import fit_path
 from . import background
 from .clustering import MIN_POINTS_FLOOR, MIN_POINTS_K, cluster_points, mark_edge_lines, min_points_at
+from .decision import axis_curvature, decide
 from .tracking import EvidenceTracker, Tracker
 from .zone import RECT_DEFAULT, rect_zone, zone_mask
 
@@ -45,6 +47,7 @@ class ObstacleDetector:
             raise ValueError(tracker)
         self.method = method
         self.far_axis = far_axis
+        self.evidence_threshold = evidence_threshold
         self.edge_lines = edge_lines
         self.far_half_width = far_half_width
         self.far_top = far_top
@@ -217,6 +220,10 @@ class ObstacleDetector:
         for o in objects:
             o.setdefault('confirmed', False)
             o['held'] = False
+        if objects:
+            rz = self._tor_at(np.array([o['distance_m'] for o in objects]), self._bed)
+            for o, r in zip(objects, rz):
+                o['rail_z_m'] = float(r)
         # объект с тревогой пропал на кадр-два (вдали на нём 2-3 точки): тревога держится
         # alarm_hold кадров по прогнозу трека, объект помечается held
         for tr in self._tracker.held():
@@ -224,18 +231,28 @@ class ObstacleDetector:
             objects.append({'distance_m': d, 'far_m': d, 'lateral_m': float(tr['lateral_m']),
                             'height_m': tr.get('height_m', 0.0), 'low_m': tr.get('low_m', 0.0), 'n_points': 0,
                             'too_small': False, 'edge_line': False, 'confirmed': True, 'held': True,
-                            'evidence': round(tr['score'], 2)})
+                            'evidence': round(tr['score'], 2), 'track_id': tr['id'],
+                            'level': tr.get('level', 'stop'), 'reason': tr.get('reason', 'in_gauge'),
+                            'rail_z_m': float(self._tor_at(np.array([d]), self._bed)[0])})
         path_range = self._path_range if path_ok else None
         limit = (path_range if path_range is not None else 0.0) + self.path_margin
         for o in objects:
             # удержанный объект поднимал тревогу в пределах оси и с тех пор только приблизился;
             # короткая ось в этом кадре (её дальность скачет на 50-200 м) тревогу не снимает
             o['beyond_path'] = o['distance_m'] > limit and not o['held']
-        confirmed = [o for o in objects if o['confirmed'] and not o['beyond_path']]
-        self._tracker.set_alarm({o['track_id'] for o in confirmed if 'track_id' in o})
+        curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
+        dec = decide(objects, path_available=path_ok, path_range=path_range, curvature=curvature,
+                     pending_score=0.5 * self.evidence_threshold)
+        self._tracker.set_alarm({o['track_id'] for o in objects if o['level'] == 'stop' and 'track_id' in o})
+        self._tracker.set_levels({o['track_id']: (o['level'], o['reason']) for o in objects
+                                  if 'track_id' in o and not o['held']})
         return {
-            'obstacle': bool(confirmed),
-            'distance_m': min(o['distance_m'] for o in confirmed) if confirmed else None,
+            'status': dec['status'],
+            'obstacle': dec['status'] == 'stop',
+            'distance_m': dec['distance_m'],
+            'caution_distance_m': dec['caution_distance_m'],
+            'sight_m': dec['sight_m'],
+            'clear_to_m': dec['clear_to_m'],
             'n_points': int(m.sum()),
             'path_available': path_ok,
             'gauge_m': self._track_gauge,
@@ -244,6 +261,7 @@ class ObstacleDetector:
             'objects': objects,
             'speed_mps': self.speed,
             'displacement_m': self._displacement,
+            'travel_m': self._travel,
             'stamp': stamp,
         }
 
