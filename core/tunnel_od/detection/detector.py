@@ -46,8 +46,21 @@ class ObstacleDetector:
                  alarm_hold_min=5, path_hold=0, ego_check=True, ego_min_travel=4.0, ego_max_slope=-0.35,
                  features=True, plausibility=True, plausible_min_dist=60.0, plausible_behind_n=2,
                  persist_hits=6, persist_slope=(-1.25, -0.75), persist_edge_margin=0.25, min_sight_m=30.0,
-                 sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25):
+                 sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25,
+                 persist_min_top_m=0.0, front_lift_caution_m=None, front_lift_max_low_m=2.0,
+                 stop_confirm_far_m=None):
+        """Правила против ложных СТОП (fp_autopsy R1-R3), по умолчанию ВЫКЛЮЧЕНЫ:
+        persist_min_top_m    R1: подтверждение по устойчивому треку (persist) только при верхе объекта
+                             (height_m) >= этого; 0 -- выкл. Рекомендуется 0.5.
+        front_lift_caution_m R2: front_maxh >= low_m + это и low_m < front_lift_max_low_m -> caution
+                             (reason front_lift) вместо stop; None -- выкл. Рекомендуется 0.1.
+        stop_confirm_far_m   R3: СТОП на d >= этого только если трек был СТОП и в прошлом кадре,
+                             иначе caution (reason far_unconfirmed); None -- выкл. Рекомендуется 30."""
         self.min_sight_m = min_sight_m
+        self.front_lift_caution_m = front_lift_caution_m
+        self.front_lift_max_low_m = front_lift_max_low_m
+        self.stop_confirm_far_m = stop_confirm_far_m
+        self._prev_stop_ids = set()
         if method not in ('zone', 'background'):
             raise ValueError(method)
         if tracker not in ('hits', 'evidence'):
@@ -98,7 +111,8 @@ class ObstacleDetector:
                                             ego_min_travel=ego_min_travel, ego_max_slope=ego_max_slope,
                                             persist_hits=persist_hits, persist_slope=tuple(persist_slope),
                                             persist_max_lat=(None if persist_edge_margin is None
-                                                             else max(hw for _, _, hw in self.zone) - persist_edge_margin))
+                                                             else max(hw for _, _, hw in self.zone) - persist_edge_margin),
+                                            persist_min_top=persist_min_top_m)
             ego_motion = True
         else:
             self._tracker = Tracker(confirm_hits, confirm_window)
@@ -264,7 +278,10 @@ class ObstacleDetector:
             o['beyond_path'] = o['distance_m'] > limit and not o['held']
         curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
         dec = decide(objects, path_available=path_ok, path_range=path_range, curvature=curvature,
-                     pending_score=0.5 * self.evidence_threshold, min_sight_m=self.min_sight_m)
+                     pending_score=0.5 * self.evidence_threshold, min_sight_m=self.min_sight_m,
+                     front_lift_m=self.front_lift_caution_m, front_lift_max_low_m=self.front_lift_max_low_m,
+                     stop_confirm_far_m=self.stop_confirm_far_m, prev_stop_ids=self._prev_stop_ids)
+        self._prev_stop_ids = dec['stop_ids']
         for o in objects:
             o.pop('_idx', None)
         self._tracker.set_alarm({o['track_id'] for o in objects if o['level'] == 'stop' and 'track_id' in o})
@@ -306,6 +323,7 @@ class ObstacleDetector:
 
     def _unknown_frame(self, path_ok, stamp):
         """Результат той же структуры для пустого/крошечного кадра: габарит не проверить."""
+        self._prev_stop_ids = set()
         return {
             'status': 'unknown',
             'obstacle': False,

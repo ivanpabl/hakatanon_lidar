@@ -89,8 +89,10 @@ class EvidenceTracker:
 
     def __init__(self, threshold=2.2, decay=0.8, min_hits=3, gate_fwd=1.0, gate_rel=0.02,
                  gate_lat=0.6, max_miss=10, hold=0, hold_min=5, ego_check=False, ego_min_travel=4.0,
-                 ego_max_slope=-0.35, persist_hits=0, persist_slope=(-1.25, -0.75), persist_max_d=None, persist_max_lat=None):
+                 ego_max_slope=-0.35, persist_hits=0, persist_slope=(-1.25, -0.75), persist_max_d=None, persist_max_lat=None,
+                 persist_min_top=0.0):
         self.persist_max_lat = persist_max_lat
+        self.persist_min_top = persist_min_top  # persist не подтверждает объект с верхом ниже (0 -- выкл)
         self.persist_hits = persist_hits
         self.persist_slope = persist_slope
         self.persist_max_d = persist_max_d
@@ -168,6 +170,7 @@ class EvidenceTracker:
             ob['persistent'] = bool(self.persist_hits and tr['hits'] >= self.persist_hits and slope is not None
                                     and self.persist_slope[0] <= slope <= self.persist_slope[1]
                                     and (self.persist_max_d is None or d <= self.persist_max_d)
+                                    and (not self.persist_min_top or ob.get('height_m', np.inf) >= self.persist_min_top)
                                     and (self.persist_max_lat is None
                                          or max(abs(ob.get('lat_min_m', ob['lateral_m'])),
                                                 abs(ob.get('lat_max_m', ob['lateral_m']))) <= self.persist_max_lat))
