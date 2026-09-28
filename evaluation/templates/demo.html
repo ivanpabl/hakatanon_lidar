@@ -189,7 +189,7 @@ const ALARM_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden=
 function b64(s) { const bin = atob(s), n = bin.length, out = new Uint8Array(n); for (let i = 0; i < n; i++) out[i] = bin.charCodeAt(i); return out; }
 
 $('#meta').textContent = D.generated ? `собрано ${D.generated.split('-').reverse().join('.')}${D.commit ? ' · ' + D.commit : ''}` : '';
-if (!D.clips.length) { $('#stage').insertAdjacentHTML('beforeend', '<div class="nogl">Нет данных. Запустите <code>python tools/demo.py</code>.</div>'); return; }
+if (!D.clips.length) { $('#stage').insertAdjacentHTML('beforeend', '<div class="nogl">Нет данных. Запустите <code>python -m evaluation demo</code>.</div>'); return; }
 
 // --- отрывки: точки декодируются один раз
 const clips = D.clips.map(c => ({ ...c, q: new Int16Array(b64(c.points).buffer), tg: b64(c.tags) }));

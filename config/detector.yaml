@@ -67,7 +67,7 @@ tunnel_od_preproc:
     crop_fwd_min: 2.0
     crop_fwd_max: 250.0
     apply_mount_tf: false    # поворот облака по /tf_static base_link -> лидар; меняет вход ядра --
-                             # включать только после прогона tools/alarms.py и eval_approach.py
+                             # включать только после прогона python -m evaluation alarms и eval_approach.py
     base_frame: base_link
     speed_topic: ""          # S1: TwistStamped / Odometry -> train_speed_mps в результате (в детекции не используется)
     speed_type: auto         # auto | twist | odometry

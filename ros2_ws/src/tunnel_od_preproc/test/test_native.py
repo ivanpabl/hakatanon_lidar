@@ -1,5 +1,5 @@
 """Библиотека tunnel_od_preproc из Python (ctypes) против parse_pointcloud2 -- в образе.
-На реальных записях то же проверяют tests/test_preproc.py и tools/check_preproc.py."""
+На реальных записях то же проверяют tests/test_preproc.py и python -m evaluation preproc."""
 import numpy as np
 import pytest
 

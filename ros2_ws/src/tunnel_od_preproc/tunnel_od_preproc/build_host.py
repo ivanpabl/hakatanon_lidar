@@ -1,4 +1,4 @@
-"""Сборка libtunnel_od_canonical на машине разработчика без ROS 2 (для pytest и tools/).
+"""Сборка libtunnel_od_canonical на машине разработчика без ROS 2 (для pytest и evaluation/).
 В образе Docker библиотеку собирает colcon, это не нужно.
 
     from tunnel_od_preproc.build_host import ensure

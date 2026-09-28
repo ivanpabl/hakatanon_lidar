@@ -1,6 +1,6 @@
 // Разбор в каноническое облако: форматы, оси, дубли dual return, обрезка.
 // Совпадение с parse_pointcloud2 (Python) на реальных кадрах -- tests/test_preproc.py
-// и tools/check_preproc.py.
+// и python -m evaluation preproc.
 #include <gtest/gtest.h>
 
 #include <cmath>

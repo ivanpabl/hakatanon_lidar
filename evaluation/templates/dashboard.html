@@ -489,7 +489,7 @@ function qApproach() {
   const box = $('#q-approach'), ap = Q.approach;
   if (!ap) return box.remove();
   head(box, 'Дальность первого подтверждения при подъезде',
-    `Синтетический объект неподвижен, поезд едет к нему; медиана по ${ap.windows} окнам движения (4–15 м/с) из реальных записей, <code>tools/eval_approach.py</code>.`);
+    `Синтетический объект неподвижен, поезд едет к нему; медиана по ${ap.windows} окнам движения (4–15 м/с) из реальных записей, <code>python -m evaluation approach</code>.`);
   legend(box, [['', 'var(--was)', 'исходная версия'], ['', 'var(--now)', 'текущая версия'], ['hollow', 'transparent', 'не найден ни в одном окне']]);
   const starts = ap.starts.filter(x => x >= 130), shapes = ap.shapes.filter(x => x !== 'куб 0.2');
   const w = W(box), narrow = w < 700;
@@ -631,7 +631,7 @@ function qNd() {
 function sParse() {
   const box = $('#s-parse'), p = S.parse;
   if (!p) return box.remove();
-  head(box, 'Разбор кадра: Python → C++', 'Среднее по 30 кадрам каждой записи, <code>tools/check_preproc.py</code>. Разбор включает удаление пустых лучей и дублей dual return.');
+  head(box, 'Разбор кадра: Python → C++', 'Среднее по 30 кадрам каждой записи, <code>python -m evaluation preproc</code>. Разбор включает удаление пустых лучей и дублей dual return.');
   legend(box, [['', 'var(--was)', 'Python, parse_pointcloud2'], ['', 'var(--now)', 'C++, tunnel_od_preproc']]);
   const rows = [...p].sort((a, b) => b.mb - a.mb || b.python - a.python);
   const w = W(box), lw = w < 520 ? 150 : 230, rh = 30, h = rows.length * rh + 30;
@@ -659,7 +659,7 @@ function sLat() {
   const box = $('#s-lat'), e = S.e2e;
   if (!e || !e.latency_ms) return box.remove();
   const v = e.latency_ms, n = v.length;
-  head(box, 'Задержка в узле детектора по кадрам', `Прогон <code>./run.sh play</code>, запись <code>${e.bag}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц, Docker. От приёма облака узлом до публикации результата.`);
+  head(box, 'Задержка в узле детектора по кадрам', `Прогон <code>docker compose up play</code>, запись <code>${e.bag}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц, Docker. От приёма облака узлом до публикации результата.`);
   stats(box, [
     { v: `${e.processed}/${e.received}`, k: 'кадров обработано', d: `потерь ${e.received - e.processed}` },
     { v: num(e.latency_ms_p50, 0), u: 'мс', k: 'p50' },
@@ -720,7 +720,7 @@ function rBit() {
   const box = $('#r-bit'), b = R.bitwise;
   if (!b) return box.remove();
   const N = b.reduce((x, r) => x + r.result_identical, 0), T = b.reduce((x, r) => x + r.frames, 0);
-  head(box, `Результат совпадает побитно: ${N} из ${T} кадров`, 'Для каждого кадра сравниваются облако после C++-разбора и весь результат <code>detect</code> против исходного Python-пути. <code>tools/check_preproc.py</code>.');
+  head(box, `Результат совпадает побитно: ${N} из ${T} кадров`, 'Для каждого кадра сравниваются облако после C++-разбора и весь результат <code>detect</code> против исходного Python-пути. <code>python -m evaluation preproc</code>.');
   legend(box, [['sq', 'var(--good)', 'облако и результат совпали'], ['sq', 'var(--alarm)', 'расхождение']]);
   const w = W(box), lw = w < 480 ? 130 : Math.min(w * .45, 12 + 6.6 * Math.max(...b.map(r => r.bag.length))), rh = 20, n = Math.max(...b.map(r => r.frames)), cw = Math.min(14, (w - lw - 40) / n), h = b.length * rh + 4;
   const g = svgIn(box, w, h, 'Побитное совпадение по кадрам');
@@ -762,7 +762,7 @@ function rFlow() {
   t(g, cx + 12, 196, 'каноническое облако', { class: 'ink b' });
   t(g, cx + 12, 213, narrow ? 'x, y, z' : 'x, y, z, /tunnel_od/cloud', { class: 'ink2', 'font-size': 12 });
   t(g, cx + 12, 248, narrow ? '→ детектор' : '→ детектор и /input_diagnostics', { class: 'ink2', 'font-size': 12 });
-  note(box, 'Контракт v1, полученный из записи (<code>tools/to_contract_v1.py</code>), даёт то же облако для детектора, что и исходный кадр.');
+  note(box, 'Контракт v1, полученный из записи (<code>python -m evaluation contract</code>), даёт то же облако для детектора, что и исходный кадр.');
 }
 
 const MCOLS = ['format', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
@@ -790,7 +790,7 @@ function rMatrix() {
   const recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
   const gaps = recs.reduce((x, r) => x + (r.gaps || 0), 0);
   head(box, 'Проверка входного потока на соответствие контракту',
-    `<code>tools/input_report.py</code>, все кадры: ${num(recs.length)} ${plural(recs.length, 'запись', 'записи', 'записей')} организаторов (${num(frames - inp.filter(r => r.bag.startsWith('contract_v1')).reduce((x, r) => x + r.frames, 0))} кадров) и запись в формате контракта v1. Тот же код работает в узле и публикует <code>/tunnel_od/input_diagnostics</code>.`);
+    `<code>python -m evaluation input</code>, все кадры: ${num(recs.length)} ${plural(recs.length, 'запись', 'записи', 'записей')} организаторов (${num(frames - inp.filter(r => r.bag.startsWith('contract_v1')).reduce((x, r) => x + r.frames, 0))} кадров) и запись в формате контракта v1. Тот же код работает в узле и публикует <code>/tunnel_od/input_diagnostics</code>.`);
   stats(box, [
     { v: `${recs.filter(r => r.stamp_year && r.stamp_year < 2020).length} из ${recs.length}`, k: 'записей с часами в 2000 году' },
     { v: `${recs.filter(r => r.levels.M1 === 'warn').length} из ${recs.length}`, k: 'с нулями вместо NaN' },
@@ -845,7 +845,7 @@ function mTable() {
   ];
   $('#m-table').innerHTML = '<table class="mtable"><thead><tr><th>Пункт</th><th>Требование контракта</th><th>Нарушено в записях</th><th>Что это ломает в алгоритме</th></tr></thead><tbody>' +
     rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="viol">${r[2]}</td><td>${r[3]}</td></tr>`).join('') + '</tbody></table>' +
-    '<p class="note">Столбец «Нарушено» посчитан <code>tools/input_report.py</code> по всем кадрам записей. Запись в формате контракта v1 проходит все шесть пунктов.</p>';
+    '<p class="note">Столбец «Нарушено» посчитан <code>python -m evaluation input</code> по всем кадрам записей. Запись в формате контракта v1 проходит все шесть пунктов.</p>';
 }
 
 /* =====================================================================
@@ -884,7 +884,7 @@ function scene() {
   const sc = D.scene, wrap = $('#scene-wrap'), canvas = $('#gl');
   const hud = $('#hud');
   if (!sc) {
-    wrap.insertAdjacentHTML('beforeend', '<div class="nogl">3D-сцена не собрана: нужна запись doubleT_obstacle в data/. Запустите <code>python tools/dashboard.py</code>.</div>');
+    wrap.insertAdjacentHTML('beforeend', '<div class="nogl">3D-сцена не собрана: нужна запись doubleT_obstacle в data/. Запустите <code>python -m evaluation dashboard</code>.</div>');
     hud.remove(); return;
   }
   const alarmObj = sc.objects.find(o => o.alarm);
