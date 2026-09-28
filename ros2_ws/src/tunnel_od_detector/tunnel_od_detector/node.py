@@ -17,7 +17,14 @@
 Кадры обрабатываются в отдельном потоке. Колбэк подписки только кладёт сообщение в
 очередь на max_pending кадров; если она полна, самый старый кадр отбрасывается
 (счётчик dropped_stale, предупреждение в лог). Так задержка не растёт без предела,
-даже если детектор надолго не успевает.
+даже если детектор надолго не успевает. Догон (catch_up: auto): если в очереди ждёт
+несколько кадров (стартовый всплеск ros2 bag play), берётся самый свежий, остальные
+отбрасываются (dropped_catchup).
+
+Защита по входу (input_guard.py): watchdog -- нет облаков дольше watchdog_timeout_s --
+в /tunnel_od/result и маркер RViz идёт снимок `node_state: fault`, `reason: no_lidar_data`
+(status unknown), пока данные не возобновятся; прогрев -- первые warmup_frames кадров до
+построения оси -- `node_state: warmup` (status unknown вместо clear).
 
 Путь (update_path, ~80 мс) по умолчанию пересчитывается в отдельном процессе по самому
 свежему кадру (refit_mode: async, см. path_worker.py) -- тогда задержка кадра = разбор +
@@ -43,7 +50,8 @@ from visualization_msgs.msg import MarkerArray
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 from tunnel_od.pointcloud import FrameRepeat, dedupe_rounded, hesai_columns
 
-from .markers import build_markers
+from .input_guard import Warmup, Watchdog, annotate, catch_up_enabled, fault_result, take_latest
+from .markers import build_markers, build_state_markers
 from .util import (Stats, build_detector_kwargs, canonical_xyz, dumps, limit_alarms, percentile,
                    raw_hesai_format, raw_point_count, unordered_raw)
 
@@ -83,6 +91,11 @@ class DetectorNode(Node):
         self.max_pending = max(1, int(p('max_pending', 2)))
         self.parse_backend = str(p('parse_backend', 'auto')).lower()
         self.skip_repeated = bool(p('skip_repeated', True))
+        self.catch_up = catch_up_enabled(p('catch_up', 'auto'), self.max_pending)
+        self._watchdog = Watchdog(float(p('watchdog_timeout_s', 0.5)), float(p('watchdog_grace_s', 2.0)),
+                                  t_start=time.monotonic())
+        self._warmup = Warmup(int(p('warmup_frames', 3)))
+        self._last_header = None
         p('detector_json', '')
         self._parse = self._make_parser()
         self._repeat = FrameRepeat()
@@ -122,6 +135,7 @@ class DetectorNode(Node):
         self._t_start = time.monotonic()
         self._t_period = self._t_start
         self._result_fh = open(self.result_file, 'w', encoding='utf-8') if self.result_file else None
+        self._file_lock = threading.Lock()
 
         if self.canonical_input:
             self.create_subscription(String, self.meta_topic, self._on_meta,
@@ -133,6 +147,10 @@ class DetectorNode(Node):
             self._discover_timer = self.create_timer(0.5, self._discover)
             self.get_logger().info(f'топик не задан: жду первый топик типа {CLOUD_TYPE}')
         self.create_timer(self.stats_period, self._print_period)
+        self.create_timer(self._watchdog.period_s(), self._watchdog_tick)
+        self.get_logger().info(f'защита по входу: watchdog {self._watchdog.timeout_s:.2f} с '
+                               f'(до первого кадра {self._watchdog.grace_s:.1f} с), прогрев {self._warmup.min_frames} '
+                               f'кадр(ов), догон очереди {"вкл" if self.catch_up else "выкл"}')
         self._worker = threading.Thread(target=self._work_loop, name='detector', daemon=True)
         self._worker.start()
 
@@ -206,6 +224,10 @@ class DetectorNode(Node):
         dropped = False
         with self._lock:
             self.stats.on_receive(_stamp_sec(msg.header))
+            self._last_header = msg.header
+            recovered = self._watchdog.on_frame(t_recv)
+            if recovered:
+                self._warmup.reset()   # после провала входа ось надо построить заново
             if len(self._pending) >= self.max_pending:
                 self._pending.popleft()
                 self.stats.dropped += 1
@@ -215,6 +237,8 @@ class DetectorNode(Node):
         if dropped:
             self.get_logger().warning(f'детектор не успевает: отброшен кадр (всего {self.stats.dropped})',
                                       throttle_duration_sec=5.0)
+        if recovered:
+            self.get_logger().info('данные от лидара возобновились: прогрев заново')
 
     def _on_meta(self, msg):
         try:
@@ -235,12 +259,22 @@ class DetectorNode(Node):
             if not self._event.wait(0.2):
                 continue
             while True:
+                skipped = 0
                 with self._lock:
-                    item = self._pending.popleft() if self._pending else None
+                    if self.catch_up:
+                        item, skipped = take_latest(self._pending)
+                        self.stats.dropped += skipped
+                        self.stats.dropped_catchup += skipped
+                    else:
+                        item = self._pending.popleft() if self._pending else None
                     if item is None:
                         self._event.clear()
                 if item is None:
                     break
+                if skipped:
+                    self.get_logger().warning(f'догон: пропущено {skipped} старых кадр(ов) из очереди, '
+                                              f'обрабатывается самый свежий (всего отброшено {self.stats.dropped})',
+                                              throttle_duration_sec=5.0)
                 try:
                     self._process(*item)
                 except Exception as e:
@@ -269,8 +303,7 @@ class DetectorNode(Node):
             with self._lock:
                 self.stats.on_processed(out['latency_ms'], 0.0, out.get('obstacle'), out.get('distance_m'))
             self._frame += 1
-            if self._result_fh:
-                self._result_fh.write(text + '\n')
+            self._write_result(text)
             return
         x, y, z = self._parse(msg)
         if self._parse_kind != 'python':
@@ -332,6 +365,14 @@ class DetectorNode(Node):
             if meta and meta.get('source_ts_ns'):
                 out['e2e_ms'] = (time.time_ns() - int(meta['source_ts_ns'])) * 1e-6
                 self._e2e.append(out['e2e_ms'])
+        with self._lock:
+            warming = self._warmup.update(res.get('path_available'))
+            if warming:
+                self.stats.warmup_frames += 1
+        annotate(out, warming)
+        res['node_state'], res['reason'] = out['node_state'], out['reason']   # подпись в RViz
+        if warming:
+            res['status'] = out['status']
         out['latency_ms'] = (time.monotonic() - t_recv) * 1e3
         text = dumps(out)
         self._last_out = out
@@ -342,8 +383,7 @@ class DetectorNode(Node):
 
         if self.fitter:
             self.fitter.submit(getattr(self.det, '_frame', self._frame), x, y, z)
-        if self._result_fh:
-            self._result_fh.write(text + '\n')
+        self._write_result(text)
         if self.publish_markers and (self._frame - 1) % self.markers_every == 0:
             try:
                 self.pub_markers.publish(build_markers(res, self.det.track_path(), self.det, msg.header,
@@ -359,6 +399,41 @@ class DetectorNode(Node):
                 f'объектов stop {n_stop}, ось до {pr if pr is None else round(pr)} м, '
                 f'свободно до {res.get("clear_to_m") or 0:.0f} м, задержка {out["latency_ms"]:.0f} мс')
 
+    def _write_result(self, text):
+        if self._result_fh:
+            with self._file_lock:
+                self._result_fh.write(text + '\n')
+
+    def _watchdog_tick(self):
+        """Таймер: нет облаков дольше watchdog_timeout_s -- снимок fault в результат и RViz,
+        пока данные не возобновятся (решение -- input_guard.Watchdog)."""
+        now = time.monotonic()
+        with self._lock:
+            fault, age, changed = self._watchdog.check(now)
+            if fault:
+                self._watchdog.snapshots += 1
+                self.stats.fault_snapshots += 1
+                self.stats.fault_episodes = self._watchdog.episodes
+            header = self._last_header
+        if not fault:
+            return
+        last = self._last_out or {}
+        out = fault_result(age, self._watchdog.timeout_s, frame=last.get('frame'), topic=self.topic,
+                           stamp=last.get('stamp'))
+        text = dumps(out)
+        self.pub_result.publish(String(data=text))
+        self._write_result(text)
+        if self.publish_markers and header is not None:
+            try:
+                self.pub_markers.publish(build_state_markers(out, header))
+            except Exception as e:
+                self.get_logger().warning(f'маркер состояния не построен: {e}', throttle_duration_sec=10.0)
+        if changed:
+            self.get_logger().warning(f'НЕТ ДАННЫХ от лидара {age:.1f} с (порог {self._watchdog.timeout_s:.2f} с): '
+                                      f'статус fault, пока облака не возобновятся')
+        else:
+            self.get_logger().warning(f'нет данных от лидара уже {age:.1f} с', throttle_duration_sec=5.0)
+
     def _print_period(self):
         now = time.monotonic()
         dt, self._t_period = now - self._t_period, now
@@ -367,8 +442,9 @@ class DetectorNode(Node):
             s = self.stats
             line = (f'{p["processed"] / dt:.1f} кадр/с (принято {p["received"] / dt:.1f}/с), '
                     f'задержка p50 {percentile(p["latency"], 50) or 0:.0f} / p95 {percentile(p["latency"], 95) or 0:.0f} мс; '
-                    f'всего: принято {s.received}, обработано {s.processed}, отброшено {s.dropped}, '
-                    f'пропуски по stamp {s.stamp_gaps}, ошибок {s.errors}, кадров с тревогой {s.alarm_frames}')
+                    f'всего: принято {s.received}, обработано {s.processed}, отброшено {s.dropped} '
+                    f'(догон {s.dropped_catchup}), пропуски по stamp {s.stamp_gaps}, ошибок {s.errors}, '
+                    f'кадров с тревогой {s.alarm_frames}, провалов входа {s.fault_episodes}')
         if p['received'] or p['processed']:
             self.get_logger().info(line)
 
@@ -378,6 +454,7 @@ class DetectorNode(Node):
         s.update({'topic': self.topic, 'refit_mode': self.refit_mode, 'refit_every': self.refit_every,
                   'path_fits_async': self.fitter.fits if self.fitter else None,
                   'wall_s': time.monotonic() - self._t_start, 'max_pending': self.max_pending,
+                  'catch_up': self.catch_up, 'watchdog_timeout_s': self._watchdog.timeout_s,
                   'canonical_input': self.canonical_input})
         if self.canonical_input:
             with self._lock:

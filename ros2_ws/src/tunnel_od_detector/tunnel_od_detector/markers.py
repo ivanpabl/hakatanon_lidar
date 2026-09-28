@@ -121,3 +121,21 @@ def build_markers(result, track, det, header, max_objects=30):
         sub.text = f'path axis {float(path_range):.0f} m'
         arr.markers.append(sub)
     return arr
+
+
+def build_state_markers(result, header):
+    """Маркеры без кадра (watchdog: нет данных от лидара): всё прежнее стирается, остаётся
+    одна подпись состояния (status_text) перед лидаром."""
+    arr = MarkerArray()
+    clear = Marker()
+    clear.header = header
+    clear.ns = NS
+    clear.id = -1
+    clear.action = Marker.DELETEALL
+    arr.markers.append(clear)
+    text, rgb = status_text(result)
+    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, LABEL_SIZE_M), ns=NS_TEXT)
+    label.pose.position = _pt(0.0, -8.0, 3.0)
+    label.text = text
+    arr.markers.append(label)
+    return arr

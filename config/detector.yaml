@@ -7,6 +7,10 @@ tunnel_od_detector:
     qos_reliability: reliable
     qos_depth: 5
     max_pending: 2
+    catch_up: auto
+    watchdog_timeout_s: 0.5
+    watchdog_grace_s: 2.0
+    warmup_frames: 3
     parse_backend: auto
     publish_markers: true
     marker_max_objects: 30

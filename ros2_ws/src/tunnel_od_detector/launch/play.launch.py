@@ -18,8 +18,9 @@ metadata.yaml записи: единственный топик sensor_msgs/msg/
    первые 1-2 с записи пачкой, и узел их отбрасывает.
 4. Плеер закончил -- через 3 с (дообработать последние кадры) запуск останавливается; узел при
    остановке пишет итог. Страховка: длительность записи / rate + 60 с.
---read-ahead-queue-size 20: по умолчанию плеер Humble читает вперёд 1000 сообщений (вся запись,
-3-5 ГБ в памяти, ~20 с тишины на старте).
+--read-ahead-queue-size (read_ahead:=, по умолчанию 20): по умолчанию плеер Humble читает вперёд
+1000 сообщений (вся запись, 3-5 ГБ в памяти, ~20 с тишины на старте). Кадры стартового всплеска,
+которые узел не успел взять, он отбрасывает в пользу самого свежего (catch_up, dropped_catchup).
 """
 import os
 import tempfile
@@ -35,6 +36,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from tunnel_od_detector.bag import bag_info
+from tunnel_od_detector.input_guard import DEFAULT_READ_AHEAD, play_args
 
 HERE = Path(__file__).resolve().parent
 RVIZ_CONFIG = os.environ.get('TUNNEL_OD_RVIZ', '/opt/tunnel_od/config/tunnel_od.rviz')
@@ -67,15 +69,14 @@ def _actions(context):
         actions.append(Node(package='rviz2', executable='rviz2', output='log',
                             arguments=['-d', RVIZ_CONFIG, '-f', frame]))
 
-    play_cmd = ['ros2', 'bag', 'play', bag, '--rate', str(rate), '--read-ahead-queue-size', '20',
-                '--disable-keyboard-controls', '--start-paused'] + (['--loop'] if loop else [])
+    qos_file = None
     if info['best_effort']:
         fd, qos_file = tempfile.mkstemp(prefix='tunnel_od_qos_', suffix='.yaml')
         with os.fdopen(fd, 'w') as fh:   # формат ros2bag.api.interpret_dict_as_qos_profile (Humble)
             fh.write(f'"{topic}":\n  history: keep_last\n  depth: 10\n  reliability: reliable\n'
                      '  durability: volatile\n')
-        play_cmd += ['--qos-profile-overrides-path', qos_file]
         actions.append(LogInfo(msg=f'[tunnel_od] {topic} записан с QoS best_effort -- плеер публикует reliable'))
+    play_cmd = play_args(bag, rate=rate, read_ahead=lc('read_ahead'), loop=loop, start_paused=True, qos_file=qos_file)
     player = ExecuteProcess(cmd=play_cmd, output='screen', name='player')
     resume = ExecuteProcess(cmd=['ros2', 'service', 'call', '/rosbag2_player/resume',
                                  'rosbag2_interfaces/srv/Resume'], output='log', name='resume')
@@ -104,6 +105,7 @@ def generate_launch_description():
             'топик PointCloud2 в записи ("" -- единственный, при нескольких /lidar_points)'),
         arg('out', '/out', 'куда писать результат и итог'),
         arg('start_delay', '6.0', 'через сколько секунд снять плеер с паузы'),
+        arg('read_ahead', str(DEFAULT_READ_AHEAD), 'ros2 bag play --read-ahead-queue-size (очередь чтения плеера, сообщений)'),
         arg('probe', 'true', 'замер e2e-задержки (latency_probe) -> <out>/<запись>_e2e.json'),
         arg('rviz', 'false', 'открыть RViz2 (нужен образ viz и экран)'),
         arg('loop', 'false', 'проигрывать запись по кругу (для показа), без остановки'),

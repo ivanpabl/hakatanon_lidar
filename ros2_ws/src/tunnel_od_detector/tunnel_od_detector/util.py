@@ -126,8 +126,13 @@ def raw_hesai_format(meta) -> bool:
 def status_text(result):
     """Строка решения для RViz и логов и её цвет. Латиница: шрифт RViz не рисует кириллицу."""
     s = result.get('status')
+    state = result.get('node_state')
+    if state == 'fault':
+        return f"NO LIDAR DATA {float(result.get('since_last_cloud_s') or 0.0):.1f} s", (1.0, 0.2, 0.2)
     if s == 'stop':
         return f"STOP {float(result['distance_m']):.0f} m", (1.0, 0.2, 0.2)
+    if state == 'warmup':
+        return 'WARMING UP', (0.6, 0.7, 1.0)
     if s == 'caution':
         return f"CAUTION {float(result['caution_distance_m']):.0f} m", (1.0, 0.85, 0.1)
     if s == 'unknown':
@@ -228,6 +233,10 @@ class Stats:
         self.received = 0
         self.processed = 0
         self.dropped = 0
+        self.dropped_catchup = 0
+        self.fault_snapshots = 0
+        self.fault_episodes = 0
+        self.warmup_frames = 0
         self.errors = 0
         self.alarm_frames = 0
         self.stamp_gaps = 0
@@ -270,6 +279,10 @@ class Stats:
             'received': self.received,
             'processed': self.processed,
             'dropped_stale': self.dropped,
+            'dropped_catchup': self.dropped_catchup,
+            'fault_snapshots': self.fault_snapshots,
+            'fault_episodes': self.fault_episodes,
+            'warmup_frames': self.warmup_frames,
             'stamp_gaps': self.stamp_gaps,
             'errors': self.errors,
             'alarm_frames': self.alarm_frames,
