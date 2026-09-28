@@ -66,7 +66,6 @@ uint32_t type_size(uint8_t type)
   }
 }
 
-// Граница обрезки в float так, чтобы условие в float было не уже условия в double.
 float round_down(double v)
 {
   float f = static_cast<float>(v);
@@ -82,9 +81,9 @@ float round_up(double v)
 }
 
 constexpr double kRadToDeg = 57.29577951308232;
-constexpr uint32_t kAzSampleEvery = 127;    // азимут -- по каждой 127-й точке (127 и 128 взаимно просты)
+constexpr uint32_t kAzSampleEvery = 127;
 
-}  // namespace
+}
 
 const char * to_string(Format f)
 {
@@ -197,8 +196,8 @@ struct Ctx
   const ParseOptions * opt;
   Format format;
   Axes axes;
-  bool organized;      // contract_v1 с height == 128: строки = ring, обход по столбцам
-  bool dedupe;         // legacy: дубли по соседнему столбцу пары
+  bool organized;
+  bool dedupe;
   double stamp_s;
   float crop_lo, crop_hi;
 };
@@ -211,10 +210,6 @@ struct Acc
   uint64_t n_az = 0;
 };
 
-// Один проход по кадру без ветвлений на каждую точку (пустых лучей 40-60%, и ветвление
-// "есть отражение" предсказывается плохо). Выход пишется всегда, а счётчик растёт только
-// для оставленных точек -- поэтому ёмкость выхода не меньше числа точек входа.
-// kStats -- собирать статистику для проверки потока; kCrop -- резать по дальности.
 template<bool kStats, bool kCrop>
 void run(const Ctx & x, ParseStats * st, Acc & a, float * ox, float * oy, float * oz, size_t stride)
 {
@@ -236,27 +231,22 @@ void run(const Ctx & x, ParseStats * st, Acc & a, float * ox, float * oy, float 
   const Axes axes = rot.enabled ? rot.out_axes : x.axes;
   const bool rep = axes == Axes::Rep103;
   const float lo = x.crop_lo, hi = x.crop_hi;
-  
-  // счётчики -- в локальных переменных: через указатели компилятор не держит их в регистрах
+
   uint64_t c_n_nonfinite = 0, c_n_zero = 0, c_pairs_both_valid = 0, c_pairs_coincident = 0, c_n_dup = 0, c_ring_mismatch = 0, c_n_second = 0, c_n_second_valid = 0, c_n_second_coincident = 0, c_n_cropped = 0;
   uint64_t l_n_out = 0, l_guard = 0, l_valid = 0, l_n_az = 0;
   double l_t_min = a.t_min, l_t_max = a.t_max, l_az_min = a.az_min, l_az_max = a.az_max;
   double l_az360_min = a.az360_min, l_az360_max = a.az360_max, l_sum_c = 0, l_sum_s = 0;
-  // contract: первое отражение предыдущего столбца той же строки (проверка M2)
   float prev_col[kColumnHeight][3] = {};
   bool prev_ok[kColumnHeight] = {false};
-  bool first_valid[kColumnHeight] = {false};    // legacy: есть ли отражение в первом столбце пары
+  bool first_valid[kColumnHeight] = {false};
   uint32_t az_countdown = 1;
 
-  // Кадр -- последовательность отрезков с постоянным шагом: столбцы по 128 точек
-  // (legacy и generic с height == 1; contract_v1 -- столбец матрицы 128 x W с шагом
-  // row_step) или строки облака (прочие height > 1).
   size_t n_seg, seg_len;
   if (x.organized) {n_seg = W; seg_len = kColumnHeight;}
   else if (H == 1) {n_seg = (n + kColumnHeight - 1) / kColumnHeight; seg_len = kColumnHeight;}
   else {n_seg = H; seg_len = W;}
 
-  size_t k = 0;      // номер точки в порядке обхода
+  size_t k = 0;
   for (size_t sgi = 0; sgi < n_seg; ++sgi) {
     const uint8_t * p;
     size_t step, len;
@@ -275,7 +265,6 @@ void run(const Ctx & x, ParseStats * st, Acc & a, float * ox, float * oy, float 
         c_n_zero += finite & zero;
       }
       if (dedupe_seg) {
-        // parse_pointcloud2: |x1-x0|, |y1-y0|, |z1-z0| < 0.01 в float32, по сырым значениям
         const uint8_t * q = p - pair_back;
         const float qx = load_f32(q + xo), qy = load_f32(q + yo), qz = load_f32(q + zo);
         const bool dup = (std::fabs(px - qx) < kDualReturnDupM) & (std::fabs(py - qy) < kDualReturnDupM) &
@@ -310,15 +299,14 @@ void run(const Ctx & x, ParseStats * st, Acc & a, float * ox, float * oy, float 
         }
       }
 
-      // оси: вход -> (поворот) -> оси ядра
       if (rot.enabled) {
         const double u = px, v = py, w = pz;
         px = static_cast<float>(rot.m[0] * u + rot.m[1] * v + rot.m[2] * w);
         py = static_cast<float>(rot.m[3] * u + rot.m[4] * v + rot.m[5] * w);
         pz = static_cast<float>(rot.m[6] * u + rot.m[7] * v + rot.m[8] * w);
       }
-      const float cx = rep ? py : px;         // REP-103: влево y -> x ядра
-      const float cy = rep ? -px : py;        //          вперёд x -> -y ядра
+      const float cx = rep ? py : px;
+      const float cy = rep ? -px : py;
       const float fwd = -cy;
 
       l_guard += valid & (fwd > kFloorGuardNear) & (fwd < kFloorGuardFar) &
@@ -333,9 +321,6 @@ void run(const Ctx & x, ParseStats * st, Acc & a, float * ox, float * oy, float 
 
       if (kStats) {
         c_n_cropped += valid & !keep;
-        // Остальное -- по выборке точек: порядок каналов, время точек, азимут (сектор и
-        // его середина для M5 и проверки осей). Полностью по каждой точке это ещё +5 мс
-        // на кадре 23 МБ, а для проверки контракта выборки хватает (~1 точка на столбец).
         if (--az_countdown == 0) {
           az_countdown = kAzSampleEvery;
           if (have_ring) {
@@ -413,7 +398,7 @@ size_t run_any(const Ctx & x, bool crop, ParseStats * st, uint64_t * guard_count
   return a.n_out;
 }
 
-}  // namespace
+}
 
 size_t parse_cloud(
   const uint8_t * data, const CloudDesc & cloud, const Layout & layout,
@@ -438,7 +423,6 @@ size_t parse_cloud(
   x.axes = axes;
   x.stamp_s = stamp_s;
   x.organized = fmt == Format::ContractV1 && cloud.height == kColumnHeight;
-  // как в parse_pointcloud2: только если облако -- целое число пар столбцов по 128
   const size_t n = cloud.n_points();
   const bool contiguous = cloud.height == 1 ||
     cloud.row_step == static_cast<size_t>(cloud.width) * cloud.point_step;
@@ -453,7 +437,6 @@ size_t parse_cloud(
   size_t n_out = run_any(x, opt.crop.enabled, st, &guard, out_x, out_y, out_z, out_stride);
   bool guard_hit = false;
   if (opt.crop.enabled && guard < kFloorGuardMin) {
-    // мало точек пола: ядро возьмёт перцентиль по всем точкам -- не режем
     guard_hit = true;
     if (st) {local = ParseStats();}
     n_out = run_any(x, false, st, &guard, out_x, out_y, out_z, out_stride);
@@ -473,4 +456,4 @@ size_t parse_cloud(
   return n_out;
 }
 
-}  // namespace tunnel_od
+}

@@ -1,12 +1,12 @@
 """Библиотека tunnel_od_preproc из Python (ctypes) против parse_pointcloud2 -- в образе.
-На реальных записях то же проверяют tests/test_preproc.py и tools/check_preproc.py."""
+На реальных записях то же проверяют tests/test_preproc.py и python -m evaluation preproc."""
 import numpy as np
 import pytest
 
 from tunnel_od_preproc import native
 
 pytest.importorskip('tunnel_od')
-from tunnel_od import parse_pointcloud2      # noqa: E402
+from tunnel_od import parse_pointcloud2
 
 pytestmark = pytest.mark.skipif(not native.available(), reason=f'нет библиотеки: {native.load_error}')
 H = 128

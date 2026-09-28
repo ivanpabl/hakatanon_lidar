@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метрики детектора</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --page: #eef1f4; --surface: #ffffff; --surface-2: #f5f7f9;
+  --ink: #0d1520; --ink-2: #4a5663; --muted: #717c88;
+  --grid: #e3e7eb; --axis: #c3cad2; --border: rgba(13, 21, 32, .10);
+  --now: #2a78d6; --was: #8a949f; --track: #1baf7a;
+  --alarm: #d03b3b; --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #8a5a00;
+  --ok-bg: rgba(12, 163, 12, .09); --warn-bg: rgba(250, 178, 25, .16);
+  --radius: 10px;
+  --font: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0c1016; --surface: #131920; --surface-2: #18202a;
+    --ink: #eef2f6; --ink-2: #aab5c0; --muted: #7d8894;
+    --grid: #222b35; --axis: #34404c; --border: rgba(255, 255, 255, .08);
+    --now: #3987e5; --was: #5d6874; --track: #199e70;
+    --good-ink: #2fbf2f; --warn-ink: #fab219;
+    --ok-bg: rgba(12, 163, 12, .14); --warn-bg: rgba(250, 178, 25, .12);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0c1016; --surface: #131920; --surface-2: #18202a;
+  --ink: #eef2f6; --ink-2: #aab5c0; --muted: #7d8894;
+  --grid: #222b35; --axis: #34404c; --border: rgba(255, 255, 255, .08);
+  --now: #3987e5; --was: #5d6874; --track: #199e70;
+  --good-ink: #2fbf2f; --warn-ink: #fab219;
+  --ok-bg: rgba(12, 163, 12, .14); --warn-bg: rgba(250, 178, 25, .12);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 400 16px/1.5 var(--font); -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; border-radius: 4px; }
+
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+nav.rail {
+  position: sticky; top: 0; height: 100vh; padding: 28px 20px 20px 24px;
+  display: flex; flex-direction: column; gap: 24px; border-right: 1px solid var(--border);
+}
+.brand { font-weight: 600; font-size: 15px; line-height: 1.3; }
+.brand small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 6px; }
+.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rail li a {
+  display: block; padding: 7px 10px 7px 12px; border-radius: 6px; text-decoration: none;
+  color: var(--ink-2); font-size: 15px; border-left: 2px solid transparent;
+}
+.rail li a:hover { background: var(--surface-2); color: var(--ink); }
+.rail li a[aria-current="true"] { color: var(--ink); border-left-color: var(--now); background: var(--surface-2); font-weight: 500; }
+.rail .foot { margin-top: auto; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; }
+.kbd { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+button.ghost {
+  font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer; align-self: flex-start;
+}
+button.ghost:hover { color: var(--ink); background: var(--surface-2); }
+
+main { min-width: 0; }
+section.slide { padding: 56px 48px 64px; max-width: 1240px; scroll-margin-top: 0; }
+section.slide + section.slide { border-top: 1px solid var(--border); }
+.slide > header { margin-bottom: 28px; max-width: 760px; }
+h2 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 0 0 10px; }
+h3 { font-size: 18px; line-height: 1.3; font-weight: 600; margin: 0 0 4px; }
+.lede { color: var(--ink-2); font-size: 17px; margin: 0; }
+.sub { color: var(--ink-2); font-size: 14px; margin: 0 0 16px; }
+.note { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+code, .code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .88em; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px 20px; min-width: 0; }
+.grid { display: grid; gap: 20px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.span2 { grid-column: span 2; }
+
+#scene-wrap {
+  position: relative; height: min(78vh, 760px); min-height: 460px; border-radius: 14px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 38%, #111a26 0%, #070a0f 70%); color: #e8eef5;
+}
+#gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#gl:active { cursor: grabbing; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 12px; color: rgba(232, 238, 245, .72); text-shadow: 0 1px 2px #000; }
+.lbl.obj { font-size: 14px; color: #fff; font-weight: 600; padding: 4px 9px; background: rgba(208, 40, 80, .92); border-radius: 6px; text-shadow: none; transform: translate(-50%, calc(-100% - 10px)); box-shadow: 0 0 18px rgba(255, 46, 97, .55); }
+.lbl.obj::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: rgba(208, 40, 80, .92); }
+.lbl.cand { color: #fab219; }
+.hud {
+  position: absolute; background: rgba(10, 14, 20, .78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, .08); border-radius: 10px; padding: 14px 16px;
+}
+.hud.main { top: 16px; left: 16px; max-width: 330px; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; color: #ff8a8a; }
+.status svg { flex: none; }
+.hud .big { font-size: 46px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin: 6px 0 2px; }
+.hud .big small { font-size: 22px; font-weight: 500; color: rgba(232, 238, 245, .7); margin-left: 4px; }
+.hud .what { color: rgba(232, 238, 245, .75); font-size: 14px; margin: 0 0 10px; }
+.hud dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+.hud dt { color: rgba(232, 238, 245, .55); }
+.hud dd { margin: 0; font-variant-numeric: tabular-nums; }
+.hud.legend { left: 16px; bottom: 16px; padding: 10px 14px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 16px; max-width: calc(100% - 32px - 290px); }
+.sw { display: inline-flex; align-items: center; gap: 7px; color: rgba(232, 238, 245, .82); }
+.sw i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw i.ln { width: 16px; height: 3px; border-radius: 2px; }
+.sw i.neon { width: 11px; height: 11px; border-radius: 2px; background: rgba(var(--c), .35); border: 1px solid rgb(var(--c)); box-shadow: 0 0 8px rgba(var(--c), .8); }
+.hud.views { right: 16px; bottom: 16px; padding: 6px; display: flex; gap: 4px; }
+.hud.views button {
+  font: inherit; font-size: 13px; color: rgba(232, 238, 245, .82); background: none; border: 0; border-radius: 6px; padding: 7px 11px; cursor: pointer;
+}
+.hud.views button:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.hud.views button[aria-pressed="true"] { background: rgba(57, 135, 229, .28); color: #fff; }
+.hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(232, 238, 245, .5); }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(232, 238, 245, .7); }
+
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
+.summary > div { padding: 22px 28px 8px 0; }
+.summary > div + div { padding-left: 28px; border-left: 1px solid var(--border); }
+.summary h3 { font-size: 20px; margin-bottom: 18px; }
+.fig { margin: 0 0 24px; }
+.fig .v { font-size: 44px; line-height: 1.02; font-weight: 600; letter-spacing: -.025em; }
+.fig .v .u { font-size: .5em; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 3px; }
+.fig .was { display: inline-block; font-size: 15px; color: var(--muted); margin-left: 10px; letter-spacing: 0; font-weight: 400; vertical-align: 6px; }
+.fig .was s { text-decoration-thickness: 1px; }
+.fig .k { color: var(--ink-2); font-size: 15px; line-height: 1.4; margin-top: 6px; max-width: 30ch; }
+
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--font); }
+svg.chart text { fill: var(--muted); font-size: 12px; }
+svg.chart text.ink { fill: var(--ink); }
+svg.chart text.ink2 { fill: var(--ink-2); }
+svg.chart text.b { font-weight: 600; }
+svg.chart .gridl { stroke: var(--grid); stroke-width: 1; }
+svg.chart .base { stroke: var(--axis); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 0 0 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend i.sq { border-radius: 2px; }
+.legend i.hollow { background: none !important; border: 2px solid var(--was); width: 11px; height: 11px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 4px 0 16px; }
+.stat .v { font-size: 26px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
+.stat .v .u { font-size: .6em; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+.stat .k { font-size: 13px; color: var(--ink-2); }
+.stat .d { font-size: 13px; color: var(--muted); }
+.hit { fill: transparent; }
+
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; max-width: 300px; padding: 8px 11px; border-radius: 8px;
+  background: var(--ink); color: var(--page); font-size: 13px; line-height: 1.4; opacity: 0; transition: opacity .08s;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+#tip.on { opacity: 1; }
+#tip b { font-weight: 600; }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--ink-2); font-size: 13px; padding: 8px 10px; border-bottom: 1px solid var(--axis); vertical-align: bottom; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.matrix td.c { font-size: 13px; padding: 7px 4px; }
+.matrix td:first-child { font-size: 13px; min-width: 140px; }
+.cell { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 6px; white-space: nowrap; }
+.cell.ok { background: var(--ok-bg); color: var(--good-ink); }
+.cell.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.cell.unknown { color: var(--muted); }
+.cell svg { flex: none; }
+tr.contract td { border-top: 2px solid var(--axis); }
+.mtable td:first-child { font-weight: 600; white-space: nowrap; }
+.mtable td { line-height: 1.45; }
+.mtable td:nth-child(2) { color: var(--ink-2); }
+.mtable .viol { color: var(--ink); }
+
+.flow text { font-size: 13px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+
+.method dl { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px 24px; margin: 0; }
+.method dt { color: var(--ink-2); }
+.method dd { margin: 0; min-width: 0; }
+.cmd { display: block; margin: 4px 0; padding: 7px 10px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+.src { font-size: 13px; color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .g3 { grid-template-columns: 1fr 1fr; }
+  .summary { grid-template-columns: 1fr; }
+  .summary > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); }
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  nav.rail {
+    position: sticky; top: 0; z-index: 20; height: auto; padding: 10px 16px; flex-direction: row; align-items: center;
+    border-right: 0; border-bottom: 1px solid var(--border); background: var(--page); overflow-x: auto; gap: 12px;
+  }
+  .brand, .rail .foot { display: none; }
+  .rail ol { flex-direction: row; }
+  .rail li a { white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; border-radius: 4px; padding: 6px 10px; }
+  .rail li a[aria-current="true"] { border-bottom-color: var(--now); }
+  section.slide { padding: 36px 16px 44px; }
+  .g2, .g3 { grid-template-columns: 1fr; }
+  .span2 { grid-column: auto; }
+  h2 { font-size: 27px; }
+  .fig .v { font-size: 36px; }
+  .panel { padding: 18px 16px; }
+  #scene-wrap { height: 72vh; min-height: 420px; }
+  .hud.main { max-width: calc(100% - 32px); padding: 10px 12px; }
+  .hud .big { font-size: 34px; }
+  .hud dl, .hint { display: none; }
+  .hud.legend { max-width: calc(100% - 32px); bottom: 64px; }
+  .method dl { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .method dd { margin-bottom: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Разделы">
+    <div class="brand">Препятствия в тоннеле по 3D-лидару<small id="stamp"></small></div>
+    <ol id="nav"></ol>
+    <div class="foot">
+      <span><span class="kbd">↑</span> <span class="kbd">↓</span> — между разделами</span>
+      <button class="ghost" id="theme" type="button">Тема: авто</button>
+    </div>
+  </nav>
+  <main id="main">
+
+    <section class="slide" id="scene" data-title="Сцена">
+      <header>
+        <h2>Что видит детектор</h2>
+        <p class="lede" id="scene-lede">Реальный кадр записи с препятствием на пути: облако лидара, ось пути, коридор проверки и найденный объект.</p>
+      </header>
+      <div id="scene-wrap">
+        <canvas id="gl" aria-label="Трёхмерное облако точек кадра с найденным препятствием"></canvas>
+        <div id="labels"></div>
+        <div class="hud main" id="hud"></div>
+        <div class="hint">Перетаскивание — вращение, колесо — масштаб, Shift или правая кнопка — сдвиг</div>
+        <div class="hud legend" id="scene-legend">
+          <span class="sw"><i style="background:linear-gradient(90deg,#1c5cab,#9ec5f4)"></i>облако, цвет — высота над рельсом</span>
+          <span class="sw"><i class="ln" style="background:#1baf7a"></i>ось по рельсам</span>
+          <span class="sw"><i class="ln" style="background:#7fd6b4"></i>ось по стенам</span>
+          <span class="sw"><i class="ln" style="background:#3987e5"></i>коридор проверки</span>
+          <span class="sw"><i class="neon" style="--c:255,46,97"></i>препятствие, тревога</span>
+          <span class="sw"><i class="neon" style="--c:255,176,32"></i>кандидат без подтверждения</span>
+        </div>
+        <div class="hud views" role="group" aria-label="Вид">
+          <button type="button" data-view="cab">Из кабины</button>
+          <button type="button" data-view="obj">К объекту</button>
+          <button type="button" data-view="top">Сверху</button>
+          <button type="button" data-view="side">Сбоку</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="summary" data-title="Итог">
+      <header>
+        <h2>Итог в цифрах</h2>
+        <p class="lede">«Было» указано только там, где исходная версия реально измерена тем же инструментом.</p>
+      </header>
+      <div class="summary" id="summary-blocks"></div>
+    </section>
+
+    <section class="slide" id="quality" data-title="Качество">
+      <header>
+        <h2>Качество детекции</h2>
+        <p class="lede">Реальный объект, синтетические объекты при подъезде поезда и ложные тревоги на записях, которые не использовались при подборе.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel span2" id="q-strip"></div>
+        <div class="panel span2" id="q-approach"></div>
+        <div class="panel" id="q-err"></div>
+        <div class="panel" id="q-empty"></div>
+        <div class="panel span2" id="q-nd"></div>
+      </div>
+    </section>
+
+    <section class="slide" id="speed" data-title="Скорость">
+      <header>
+        <h2>Скорость приёма</h2>
+        <p class="lede">C++-узел <code>tunnel_od_preproc</code> разбирает облако вместо Python, детектор получает готовое каноническое облако.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel" id="s-parse"></div>
+        <div class="panel" id="s-lat"></div>
+        <div class="panel span2" id="s-budget"></div>
+      </div>
+    </section>
+
+    <section class="slide" id="robust" data-title="Надёжность приёма">
+      <header>
+        <h2>Корректность и устойчивость к чужим данным</h2>
+        <p class="lede">Решение проверят на неизвестных тоннелях. Узел приёма принимает разные форматы, сводит их к одному облаку и проверяет поток на соответствие контракту.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel" id="r-bit"></div>
+        <div class="panel" id="r-flow"></div>
+        <div class="panel span2" id="r-matrix"></div>
+      </div>
+    </section>
+
+    <section class="slide" id="input" data-title="Входные данные">
+      <header>
+        <h2>Контракт на входные данные</h2>
+        <p class="lede">Что обязательно требуется от поставщика облака, что нарушено в выданных записях и к чему это приводит в алгоритме. Подробно — <code>docs/INPUT_FORMAT.md</code>.</p>
+      </header>
+      <div class="panel"><div class="tbl-wrap" id="m-table"></div></div>
+    </section>
+
+    <section class="slide method" id="method" data-title="Методика">
+      <header>
+        <h2>Методика замеров</h2>
+        <p class="lede">Откуда каждая цифра и как её воспроизвести.</p>
+      </header>
+      <div class="panel" id="method-body"></div>
+    </section>
+
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+'use strict';
+const D = DATA || {};
+const Q = D.quality || {}, S = D.speed || {}, R = D.robust || {};
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+
+function num(v, d = 0) {
+  if (v == null || !isFinite(v)) return '—';
+  const s = Math.abs(v).toFixed(d).split('.');
+  s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '−' : '') + s.join(',');
+}
+const pct = (v, d = 1) => num(v, d) + ' %';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const BAGS = {
+  doubleT_obstacle: 'doubleT_obstacle', doubleT_platform: 'doubleT_platform', roundT_doubleT: 'roundT_doubleT',
+  roundT_pressureGate_roundT: 'roundT_pressureGate_roundT', roundT_squareT_pressureGate_squareT: 'roundT_squareT_pressureGate_squareT',
+  squareT_platform_squareT_switch: 'squareT_platform_squareT_switch', new_data: 'new_data',
+  'contract_v1/doubleT_platform': 'contract_v1 / doubleT_platform'
+};
+const bagName = b => BAGS[b] || b;
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+
+function s(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function t(parent, x, y, text, attrs = {}) { const e = s('text', { x, y, ...attrs }, parent); e.textContent = text; return e; }
+function svgIn(box, w, h, label) {
+  const g = s('svg', { class: 'chart', viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': label });
+  box.appendChild(g);
+  return g;
+}
+const lin = (d0, d1, r0, r1) => v => r0 + (v - d0) / (d1 - d0) * (r1 - r0);
+function head(box, title, sub) {
+  box.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = title; box.appendChild(h);
+  if (sub) { const p = document.createElement('p'); p.className = 'sub'; p.innerHTML = sub; box.appendChild(p); }
+}
+function legend(box, items) {
+  const d = document.createElement('div'); d.className = 'legend';
+  d.innerHTML = items.map(([cls, color, text]) => `<span><i class="${cls || ''}" style="background:${color}"></i>${text}</span>`).join('');
+  box.appendChild(d);
+}
+function stats(box, items) {
+  const d = document.createElement('div'); d.className = 'stats';
+  d.innerHTML = items.map(i => `<div class="stat"><div class="v">${i.v}${i.u ? `<span class="u">${i.u}</span>` : ''}</div>` +
+    `<div class="k">${i.k}</div>${i.d ? `<div class="d">${i.d}</div>` : ''}</div>`).join('');
+  box.appendChild(d);
+}
+function note(box, html) { const p = document.createElement('p'); p.className = 'note'; p.innerHTML = html; box.appendChild(p); }
+const W = box => Math.max(300, Math.round(box.clientWidth - (box.classList.contains('panel') ? parseFloat(getComputedStyle(box).paddingLeft) * 2 : 0)));
+const ICON = {
+  ok: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.4l2.6 2.6L11 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.8l5.6 10H1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 5.6v3M7 10.3v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  unknown: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  alarm: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.8 12H1.2z" fill="currentColor"/><path d="M8 6v3.4M8 11.4v.1" stroke="#1a0b0b" stroke-width="1.7" stroke-linecap="round"/></svg>'
+};
+
+const tip = $('#tip');
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.classList.add('on');
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  tip.style.left = Math.max(8, left) + 'px'; tip.style.top = Math.max(8, top) + 'px';
+}
+const hideTip = () => tip.classList.remove('on');
+document.addEventListener('pointermove', e => {
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (el) showTip(el.getAttribute('data-tip'), e.clientX, e.clientY);
+  else if (!e.target.closest || !e.target.closest('[data-tipzone]')) hideTip();
+});
+document.addEventListener('scroll', hideTip, { passive: true });
+
+function summary() {
+  const box = $('#summary-blocks');
+  const ob = Q.obstacle, em = Q.empty, ap = Q.approach, er = Q.dist_err;
+  const cell = (shape, start) => ap && ap.cells.find(c => c.shape === shape && c.start === start);
+  const p170 = cell('человек стоит', 170), p220 = cell('человек стоит', 220);
+  const parse = S.parse || [], e2e = S.e2e || {};
+  const big = parse.filter(p => p.mb === 23), small = parse.filter(p => p.mb !== 23);
+  const avg = (a, k) => a.reduce((x, p) => x + p[k], 0) / (a.length || 1);
+  const bit = R.bitwise || [], inp = R.input || [];
+  const bitN = bit.reduce((x, b) => x + b.result_identical, 0), bitT = bit.reduce((x, b) => x + b.frames, 0);
+  const contract = inp.find(r => r.bag.startsWith('contract_v1'));
+  const recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
+  const was = v => `<span class="was">было <s>${v}</s></span>`;
+  const f = (v, u, k, w) => `<div class="fig"><div class="v">${v}${u ? `<span class="u">${u}</span>` : ''}${w ? was(w) : ''}</div><div class="k">${k}</div></div>`;
+  const blocks = [];
+  blocks.push(`<div><h3>Качество</h3>` +
+    (ob ? f(`${ob.after.reduce((a, b) => a + b, 0)} из ${ob.after.length}`, '', `кадров с тревогой у реального объекта на ${num(ob.distance_m, 0)} м, запись <code>doubleT_obstacle</code>`, ob.before.reduce((a, b) => a + b, 0)) : '') +
+    (p170 ? f(num(p170.after.median, 0), 'м', `первое подтверждение человека при подъезде со 170 м; со 220 м — ${num(p220.after.median, 0)} м`, `${num(p170.before.median, 0)} м`) : '') +
+    (em ? f(pct(em.after), '', `кадров с ложной тревогой на пустых записях`, pct(em.before)) : '') +
+    `</div>`);
+  blocks.push(`<div><h3>Скорость</h3>` +
+    (big.length ? f(num(avg(big, 'cpp'), 1), 'мс', `разбор кадра 23 МБ в C++; кадр 8 МБ — ${num(avg(small, 'cpp'), 1)} мс вместо ${num(avg(small, 'python'), 1)}`, `${num(avg(big, 'python'), 1)} мс`) : '') +
+    (e2e.received ? f(`${e2e.processed} из ${e2e.received}`, '', `кадров 8 МБ при 10 Гц в Docker обработано, потерь ${e2e.received - e2e.processed}`) : '') +
+    (e2e.e2e_ms_p95 ? f(num(e2e.e2e_ms_p95, 0), 'мс', `задержка p95 от публикации кадра до публикации результата; в узле детектора — ${num(e2e.latency_ms_p95, 0)} мс`) : '') +
+    `</div>`);
+  blocks.push(`<div><h3>Надёжность приёма</h3>` +
+    (bitT ? f(`${bitN} из ${bitT}`, '', `кадров из ${bit.length} записей: результат детектора после переделки приёма совпадает побитно`) : '') +
+    f('3 → 1', '', 'формата входа: Hesai, контракт v1 и произвольный x, y, z — одно и то же облако для детектора') +
+    (contract ? f(`${contract.violations.length}`, '', `нарушений контракта в записи формата v1; в выданных записях — ${recs[0] ? recs[0].violations.length : '—'} из 6 пунктов M`) : '') +
+    `</div>`);
+  box.innerHTML = blocks.join('');
+}
+
+function qStrip() {
+  const box = $('#q-strip'), ob = Q.obstacle;
+  if (!ob) return box.remove();
+  const nb = ob.before.reduce((a, b) => a + b, 0), na = ob.after.reduce((a, b) => a + b, 0), n = ob.after.length;
+  head(box, `Реальный объект на ${num(ob.distance_m, 0)} м: тревога в ${na} кадрах из ${n}`,
+    `Запись <code>doubleT_obstacle</code>, каждая клетка — один кадр (10 Гц, ${num(n / 10, 1)} с). Исходная версия теряла объект в ${n - nb} кадрах.`);
+  legend(box, [['sq', 'var(--alarm)', 'тревога у объекта'], ['sq', 'var(--grid)', 'тревоги нет']]);
+  const w = W(box), lw = w < 560 ? 92 : 150, gap = 1, cw = (w - lw) / n, rh = 26, h = 2 * rh + 12 + 30;
+  const g = svgIn(box, w, h, 'Кадры с тревогой у объекта: исходная и текущая версии');
+  [['исходная', ob.before, nb], ['текущая', ob.after, na]].forEach(([name, vals, cnt], r) => {
+    const y = r * (rh + 12);
+    t(g, 0, y + 17, name, { class: r ? 'ink b' : 'ink2' });
+    if (lw > 100) t(g, lw - 12, y + 17, `${cnt}/${n}`, { class: 'ink2', 'text-anchor': 'end' });
+    vals.forEach((v, i) => {
+      s('rect', { x: lw + i * cw, y, width: Math.max(1, cw - gap), height: rh, rx: cw > 4 ? 1.5 : 0,
+        fill: v ? 'var(--alarm)' : 'var(--grid)',
+        'data-tip': `<b>Кадр ${i}</b> · ${num(i / 10, 1)} с<br>${name}: ${v ? `тревога на ${num(ob.distance_m, 0)} м` : 'тревоги нет'}` }, g);
+    });
+  });
+  const ya = 2 * rh + 12 + 16;
+  for (let i = 0; i <= n; i += 50) t(g, lw + Math.min(i, n - 1) * cw + cw / 2, ya, `${i}`, { 'text-anchor': 'middle' });
+  t(g, lw - 12, ya, 'кадр', { 'text-anchor': 'end' });
+}
+
+function qApproach() {
+  const box = $('#q-approach'), ap = Q.approach;
+  if (!ap) return box.remove();
+  head(box, 'Дальность первого подтверждения при подъезде',
+    `Синтетический объект неподвижен, поезд едет к нему; медиана по ${ap.windows} окнам движения (4–15 м/с) из реальных записей, <code>python -m evaluation approach</code>.`);
+  legend(box, [['', 'var(--was)', 'исходная версия'], ['', 'var(--now)', 'текущая версия'], ['hollow', 'transparent', 'не найден ни в одном окне']]);
+  const starts = ap.starts.filter(x => x >= 130), shapes = ap.shapes.filter(x => x !== 'куб 0.2');
+  const w = W(box), narrow = w < 700;
+  const cols = narrow ? 1 : starts.length, lw = 118, pw = (w - (narrow ? 0 : lw)) / cols, rh = 30, top = 26, ph = top + shapes.length * rh + 30;
+  const rows = narrow ? starts.length : 1;
+  const g = svgIn(box, w, rows * (ph + (narrow ? 16 : 0)), 'Дальность первого подтверждения по фигурам и дальности старта');
+  const sname = v => v.replace('куб 0.', 'куб 0,').replace(/(\d)$/, '$1 м');
+  starts.forEach((st, k) => {
+    const ox = narrow ? lw : lw + k * pw, oy = narrow ? k * (ph + 16) : 0, iw = (narrow ? w - lw : pw) - 22;
+    const x = lin(0, 230, ox, ox + iw);
+    t(g, ox, oy + 14, `старт ${st} м`, { class: 'ink b' });
+    const y0 = oy + top, y1 = y0 + shapes.length * rh;
+    [0, 50, 100, 150, 200].forEach(v => { s('line', { x1: x(v), x2: x(v), y1: y0, y2: y1, class: 'gridl' }, g); t(g, x(v), y1 + 16, v, { 'text-anchor': 'middle' }); });
+    s('line', { x1: x(st), x2: x(st), y1: y0 - 4, y2: y1, stroke: 'var(--axis)', 'stroke-width': 2 }, g);
+    if (k === starts.length - 1 || narrow) t(g, ox + iw, y1 + 16, 'м', { 'text-anchor': 'start', dx: 8 });
+    shapes.forEach((sh, r) => {
+      const c = ap.cells.find(c => c.shape === sh && c.start === st), cy = y0 + r * rh + rh / 2;
+      if (k === 0 || narrow) t(g, ox - 14, cy + 4, sname(sh), { class: 'ink2', 'text-anchor': 'end' });
+      const b = c.before, a = c.after;
+      const tipTxt = `<b>${sname(sh)}, старт ${st} м</b><br>исходная: ${b.median ? num(b.median, 0) + ' м' : 'не найден'} (${b.found} из ${b.n})` +
+        `<br>текущая: ${a.median ? num(a.median, 0) + ' м' : 'не найден'} (${a.found} из ${a.n})`;
+      const xb = b.median ? x(b.median) : x(0), xa = a.median ? x(a.median) : x(0);
+      if (a.median && b.median) s('line', { x1: xb, x2: xa, y1: cy, y2: cy, stroke: 'var(--axis)', 'stroke-width': 2 }, g);
+      else if (a.median) s('line', { x1: x(0), x2: xa, y1: cy, y2: cy, stroke: 'var(--grid)', 'stroke-width': 2 }, g);
+      if (b.median) s('circle', { cx: xb, cy, r: 5, fill: 'var(--was)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+      else s('circle', { cx: x(0), cy, r: 4.5, fill: 'none', stroke: 'var(--was)', 'stroke-width': 2 }, g);
+      if (a.median) {
+        s('circle', { cx: xa, cy, r: 6, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+        const lbl = t(g, xa + (xa > x(st) - 30 ? -10 : 10), cy - 9, num(a.median, 0), { class: 'ink b', 'text-anchor': xa > x(st) - 30 ? 'end' : 'start' });
+        if (a.found < a.n) lbl.textContent += `  · ${a.found}/${a.n}`;
+      }
+      s('rect', { x: ox - lw * (k === 0 || narrow ? 1 : 0), y: cy - rh / 2, width: (k === 0 || narrow ? lw : 0) + iw, height: rh, class: 'hit', 'data-tip': tipTxt }, g);
+    });
+  });
+  note(box, 'Подписи — медиана текущей версии, м; «3/6» — найден в трёх окнах из шести. Со 220 м исходная версия не нашла ни одного объекта.');
+}
+
+function qErr() {
+  const box = $('#q-err'), er = Q.dist_err;
+  if (!er) return box.remove();
+  head(box, 'Ошибка дистанции при первом подтверждении', `${er.values.length} ${plural(er.values.length, 'подтверждение', 'подтверждения', 'подтверждений')} синтетических объектов, текущая версия. Доля случаев с ошибкой не больше заданной.`);
+  stats(box, [{ v: num(er.median * 100, 0), u: 'см', k: 'медиана' }, { v: num(er.p95, 2), u: 'м', k: '95 % случаев — не больше' }]);
+  const w = W(box), h = 230, l = 40, r = 16, tp = 10, b = 30;
+  const g = svgIn(box, w, h, 'Распределение ошибки дистанции');
+  g.setAttribute('data-tipzone', '');
+  const lo = 0.01, hi = 2;
+  const x = v => l + (Math.log10(Math.max(lo, Math.min(hi, v))) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (w - l - r);
+  const y = lin(0, 1, h - b, tp);
+  [0, .25, .5, .75, 1].forEach(v => { s('line', { x1: l, x2: w - r, y1: y(v), y2: y(v), class: v ? 'gridl' : 'base' }, g); t(g, l - 8, y(v) + 4, `${v * 100}%`, { 'text-anchor': 'end' }); });
+  [[0.01, '≤1 см'], [0.03, '3 см'], [0.1, '10 см'], [0.3, '30 см'], [1, '1 м'], [2, '2 м']].forEach(([v, lb]) => t(g, x(v), h - b + 18, lb, { 'text-anchor': 'middle' }));
+  const vals = er.values, n = vals.length;
+  let d = `M${x(lo)},${y(0)}`;
+  vals.forEach((v, i) => { d += `H${x(v)}V${y((i + 1) / n)}`; });
+  d += `H${w - r}`;
+  s('path', { d, fill: 'none', stroke: 'var(--now)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, g);
+  [[er.median, .5, 'медиана'], [er.p95, .95, '95 %']].forEach(([v, q, lb]) => {
+    s('line', { x1: x(v), x2: x(v), y1: y(q), y2: h - b, stroke: 'var(--ink-2)', 'stroke-width': 1 }, g);
+    s('circle', { cx: x(v), cy: y(q), r: 4.5, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    t(g, x(v) + (q > .9 ? -8 : 8), y(q) - 8, lb, { class: 'ink2', 'text-anchor': q > .9 ? 'end' : 'start' });
+  });
+  const cross = s('line', { y1: tp, y2: h - b, stroke: 'var(--axis)', 'stroke-width': 1, visibility: 'hidden' }, g);
+  const hit = s('rect', { x: l, y: tp, width: w - l - r, height: h - b - tp, class: 'hit' }, g);
+  hit.addEventListener('pointermove', e => {
+    const pt = g.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(g.getScreenCTM().inverse());
+    const v = Math.pow(10, Math.log10(lo) + (p.x - l) / (w - l - r) * (Math.log10(hi) - Math.log10(lo)));
+    const k = vals.filter(u => u <= v).length;
+    cross.setAttribute('x1', p.x); cross.setAttribute('x2', p.x); cross.setAttribute('visibility', 'visible');
+    const vt = v < 1 ? num(v * 100, v < 0.1 ? 1 : 0) + ' см' : num(v, 2) + ' м';
+    showTip(`Ошибка не больше <b>${vt}</b><br>${num(100 * k / n, 0)} % подтверждений (${k} из ${n})`, e.clientX, e.clientY);
+  });
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+
+function qEmpty() {
+  const box = $('#q-empty'), em = Q.empty, nd = Q.nd_segments;
+  if (!em) return box.remove();
+  head(box, 'Ложные тревоги на пустых записях', `Доля кадров с тревогой, пять записей без препятствий, ${num(em.frames)} кадров. На них подбирались настройки.`);
+  legend(box, [['sq', 'var(--was)', 'исходная'], ['sq', 'var(--now)', 'текущая']]);
+  const rows = [{ bag: 'все пять записей', before: em.before, after: em.after, total: true }, ...em.bags];
+  const w = W(box), lw = Math.min(230, w * .42), bh = 9, rh = 2 * bh + 2 + 16, h = rows.length * rh + 26;
+  const g = svgIn(box, w, h, 'Доля кадров с тревогой по записям');
+  const max = Math.max(...rows.map(r => Math.max(r.before, r.after)));
+  const x = lin(0, Math.ceil(max / 10) * 10, lw, w - 44);
+  rows.forEach((r, i) => {
+    const y = i * rh + 4;
+    const maxc = Math.floor((lw - 14) / 6.4);
+    t(g, lw - 10, y + bh + 5, r.total || r.bag.length <= maxc ? r.bag : r.bag.slice(0, maxc - 1) + '…', { class: r.total ? 'ink b' : 'ink2', 'text-anchor': 'end' });
+    [['before', 'var(--was)', 'исходная'], ['after', 'var(--now)', 'текущая']].forEach(([k, c, nm], j) => {
+      const yy = y + j * (bh + 2), v = r[k];
+      s('rect', { x: lw, y: yy, width: Math.max(2, x(v) - lw), height: bh, rx: 2, fill: c }, g);
+      t(g, x(v) + 6, yy + bh - 1, pct(v), { class: j ? 'ink' : '', 'font-size': 11 });
+    });
+    s('rect', { x: 0, y: y - 4, width: w, height: rh, class: 'hit',
+      'data-tip': `<b>${esc(r.bag)}</b>${r.frames ? `, ${num(r.frames)} кадров` : ''}<br>исходная: ${pct(r.before)}<br>текущая: ${pct(r.after)}` }, g);
+    if (r.total) s('line', { x1: 0, x2: w, y1: y + rh - 7, y2: y + rh - 7, class: 'gridl' }, g);
+  });
+  s('line', { x1: lw, x2: lw, y1: 0, y2: rows.length * rh, class: 'base' }, g);
+  if (nd) note(box, `Отложенная запись <code>new_data</code>, 8 отрезков по 400 кадров: ${pct(nd.before.pct)} → <b>${pct(nd.after.pct)}</b> кадров, ${num(nd.before.per_hour)} → <b>${num(nd.after.per_hour)}</b> эпизодов в час.`);
+}
+
+function qNd() {
+  const box = $('#q-nd'), nd = Q.nd_full;
+  if (!nd) return box.remove();
+  head(box, 'Ложные тревоги на всей отложенной записи new_data',
+    `${num(nd.frames)} кадров, ${num(nd.minutes, 1)} мин. Запись не использовалась при подборе. Столбец — кадры с тревогой за 10 с (из 100).`);
+  stats(box, [
+    { v: pct(nd.pct), k: 'кадров с тревогой' },
+    { v: num(nd.episodes), k: 'эпизодов тревоги' },
+    { v: num(nd.per_hour), k: 'эпизодов в час' },
+    { v: num(nd.distance_median, 0), u: 'м', k: 'медиана дистанции тревоги' }
+  ]);
+  const w = W(box), h = 190, l = 34, r = 8, tp = 22, b = 28, v = nd.per_100, n = v.length;
+  const g = svgIn(box, w, h, 'Кадры с тревогой по времени на записи new_data');
+  const bw = (w - l - r) / n, max = Math.max(20, Math.ceil(Math.max(...v) / 10) * 10);
+  const y = lin(0, max, h - b, tp), x = i => l + i * bw;
+  const zones = [[2500, 3000], [9500, 10000]].map(([a, z]) => ({ a, z, cnt: v.slice(a / 100, z / 100).reduce((p, q) => p + q, 0) }));
+  zones.forEach(zn => {
+    s('rect', { x: x(zn.a / 100), y: tp - 18, width: (zn.z - zn.a) / 100 * bw, height: h - b - tp + 18, fill: 'var(--surface-2)' }, g);
+    const right = x(zn.a / 100) > w * .6;
+    t(g, right ? x(zn.z / 100) - 4 : x(zn.a / 100) + 4, tp - 6, w < 560 ? `${zn.cnt} кадров` : `кадры ${num(zn.a)}–${num(zn.z)}: ${zn.cnt}`, { class: 'ink2', 'font-size': 11, 'text-anchor': right ? 'end' : 'start' });
+  });
+  [0, max / 2, max].forEach(u => { s('line', { x1: l, x2: w - r, y1: y(u), y2: y(u), class: u ? 'gridl' : 'base' }, g); t(g, l - 6, y(u) + 4, u, { 'text-anchor': 'end' }); });
+  v.forEach((c, i) => {
+    if (c) s('rect', { x: x(i) + .5, y: y(c), width: Math.max(1, bw - 1.5), height: y(0) - y(c), rx: Math.min(2, bw / 3), fill: 'var(--alarm)' }, g);
+    const m0 = i * 100 / 600;
+    s('rect', { x: x(i), y: tp, width: bw, height: h - b - tp, class: 'hit',
+      'data-tip': `<b>${Math.floor(m0)}:${String(Math.round((m0 % 1) * 60)).padStart(2, '0')}</b>, кадры ${num(i * 100)}–${num(i * 100 + 99)}<br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} с тревогой` }, g);
+  });
+  for (let m = 0; m <= nd.minutes; m += 2) t(g, l + m * 6 * bw, h - b + 17, `${m}`, { 'text-anchor': 'middle' });
+  t(g, w - r, h - b + 17, 'мин', { 'text-anchor': 'end' });
+  const inZones = zones.reduce((p, z) => p + z.cnt, 0);
+  note(box, `Половина тревог (${inZones} из ${nd.alarm_frames} кадров) — на двух участках. Отрезки для сравнения версий их почти не задели, поэтому цифра по отрезкам (${Q.nd_segments ? num(Q.nd_segments.after.per_hour) : '—'} эпизодов в час) оптимистична. Исходную версию на всей записи не прогоняли — сравнения здесь нет.`);
+}
+
+function sParse() {
+  const box = $('#s-parse'), p = S.parse;
+  if (!p) return box.remove();
+  head(box, 'Разбор кадра: Python → C++', 'Среднее по 30 кадрам каждой записи, <code>python -m evaluation preproc</code>. Разбор включает удаление пустых лучей и дублей dual return.');
+  legend(box, [['', 'var(--was)', 'Python, parse_pointcloud2'], ['', 'var(--now)', 'C++, tunnel_od_preproc']]);
+  const rows = [...p].sort((a, b) => b.mb - a.mb || b.python - a.python);
+  const w = W(box), lw = w < 520 ? 150 : 230, rh = 30, h = rows.length * rh + 30;
+  const g = svgIn(box, w, h, 'Время разбора кадра по записям');
+  const x = lin(0, 24, lw, w - 60);
+  [0, 5, 10, 15, 20].forEach(v => { s('line', { x1: x(v), x2: x(v), y1: 0, y2: rows.length * rh, class: v ? 'gridl' : 'base' }, g); t(g, x(v), rows.length * rh + 16, v, { 'text-anchor': 'middle' }); });
+  t(g, x(24), rows.length * rh + 16, 'мс', { 'text-anchor': 'middle' });
+  rows.forEach((r, i) => {
+    const cy = i * rh + rh / 2;
+    const nm = r.bag.length > 24 && lw < 200 ? r.bag.slice(0, 20) + '…' : r.bag;
+    t(g, lw - 12, cy - 2, nm, { class: 'ink2', 'text-anchor': 'end' });
+    t(g, lw - 12, cy + 11, `${r.mb} МБ`, { 'text-anchor': 'end', 'font-size': 11 });
+    s('line', { x1: x(r.cpp), x2: x(r.python), y1: cy, y2: cy, stroke: 'var(--axis)', 'stroke-width': 2 }, g);
+    s('circle', { cx: x(r.python), cy, r: 5, fill: 'var(--was)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    s('circle', { cx: x(r.cpp), cy, r: 6, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    t(g, x(r.python) + 10, cy + 4, `×${num(r.python / r.cpp, 1)}`, { class: 'ink b' });
+    s('rect', { x: 0, y: cy - rh / 2, width: w, height: rh, class: 'hit',
+      'data-tip': `<b>${esc(r.bag)}</b>, кадр ${r.mb} МБ<br>Python: ${num(r.python, 1)} мс<br>C++: ${num(r.cpp, 1)} мс, в ${num(r.python / r.cpp, 1)} раза быстрее<br>после обрезки 2–250 м остаётся ${num(r.kept_after_crop * 100, 0)} % точек` }, g);
+  });
+  const d = S.deser;
+  if (d) note(box, `Кроме того, узел детектора больше не десериализует кадр 23 МБ в Python: −${num(d.p50, 1)} мс на кадр (p95 −${num(d.p95, 1)} мс). Раньше это время не попадало в замер. Источник — <code>research/ingest_timing.py</code>.`);
+}
+
+function sLat() {
+  const box = $('#s-lat'), e = S.e2e;
+  if (!e || !e.latency_ms) return box.remove();
+  const v = e.latency_ms, n = v.length;
+  head(box, 'Задержка в узле детектора по кадрам', `Прогон <code>docker compose up play</code>, запись <code>${e.bag}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц, Docker. От приёма облака узлом до публикации результата.`);
+  stats(box, [
+    { v: `${e.processed}/${e.received}`, k: 'кадров обработано', d: `потерь ${e.received - e.processed}` },
+    { v: num(e.latency_ms_p50, 0), u: 'мс', k: 'p50' },
+    { v: num(e.latency_ms_p95, 0), u: 'мс', k: 'p95' }
+  ]);
+  const w = W(box), h = 190, l = 34, r = 10, tp = 16, b = 28, bin = 4, hi = 120;
+  const bins = new Array(hi / bin).fill(0);
+  v.forEach(u => { bins[Math.min(bins.length - 1, Math.floor(u / bin))]++; });
+  const g = svgIn(box, w, h, 'Гистограмма задержки по кадрам');
+  const x = lin(0, hi, l, w - r), max = Math.ceil(Math.max(...bins) / 20) * 20, y = lin(0, max, h - b, tp);
+  [0, max / 2, max].forEach(u => { s('line', { x1: l, x2: w - r, y1: y(u), y2: y(u), class: u ? 'gridl' : 'base' }, g); t(g, l - 6, y(u) + 4, u, { 'text-anchor': 'end' }); });
+  bins.forEach((c, i) => {
+    if (c) s('rect', { x: x(i * bin) + 1, y: y(c), width: x(bin) - x(0) - 2, height: y(0) - y(c), rx: 2, fill: 'var(--now)' }, g);
+    s('rect', { x: x(i * bin), y: tp, width: x(bin) - x(0), height: h - b - tp, class: 'hit',
+      'data-tip': `<b>${i * bin}–${(i + 1) * bin} мс</b><br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} из ${n}` }, g);
+  });
+  [[e.latency_ms_p50, 'p50', -1], [e.latency_ms_p95, 'p95', 1]].forEach(([u, lb, side]) => {
+    s('line', { x1: x(u), x2: x(u), y1: tp - 4, y2: h - b, stroke: 'var(--ink)', 'stroke-width': 1.5 }, g);
+    t(g, x(u) + 5 * side, tp + 6, lb, { class: 'ink', 'text-anchor': side < 0 ? 'end' : 'start' });
+  });
+  for (let u = 0; u < hi; u += 20) t(g, x(u), h - b + 17, u, { 'text-anchor': 'middle' });
+  t(g, x(hi), h - b + 17, 'мс', { 'text-anchor': 'end' });
+  note(box, `Хвост до ${num(Math.max(...v), 0)} мс — кадры, на которые пришёлся пересчёт пути в соседнем процессе.`);
+}
+
+function sBudget() {
+  const box = $('#s-budget'), e = S.e2e;
+  if (!e || !e.e2e_ms_p95) return box.remove();
+  head(box, 'Бюджет кадра: 100 мс при 10 Гц', 'Полная задержка — от публикации облака плеером до публикации результата детектора, p95. Меряется по времени публикации сообщений DDS.');
+  const w = W(box), h = 132, l = 0, r = 14;
+  const g = svgIn(box, w, h, 'Задержка p95 относительно периода кадра');
+  const x = lin(0, 100, l, w - r);
+  const rows = [
+    ['e2e', 'полная, публикация кадра → публикация результата', e.e2e_ms_p50, e.e2e_ms_p95],
+    ['node', 'в узле детектора, приём → публикация', e.latency_ms_p50, e.latency_ms_p95]
+  ];
+  if (e.preproc_ms_p95) rows.push(['pre', 'разбор в C++-узле приёма', e.preproc_ms_p50, e.preproc_ms_p95]);
+  const rh = 36;
+  rows.forEach(([k, name, p50, p95], i) => {
+    const y = 8 + i * rh;
+    s('rect', { x: x(0), y, width: x(100) - x(0), height: 12, rx: 3, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+    s('rect', { x: x(0), y, width: x(p95) - x(0), height: 12, rx: 3, fill: 'var(--now)', opacity: i ? .72 : 1 }, g);
+    s('line', { x1: x(p50), x2: x(p50), y1: y - 2, y2: y + 14, stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    t(g, x(p95) + 8, y + 11, `${num(p95, 0)} мс`, { class: 'ink b' });
+    t(g, x(0), y + 28, name, { class: 'ink2' });
+    s('rect', { x: 0, y: y - 6, width: w, height: rh, class: 'hit', 'data-tip': `<b>${name}</b><br>p50 ${num(p50, 1)} мс · p95 ${num(p95, 1)} мс` }, g);
+  });
+  s('line', { x1: x(100), x2: x(100), y1: 0, y2: rows.length * rh, stroke: 'var(--ink-2)', 'stroke-width': 1.5 }, g);
+  t(g, x(100), rows.length * rh + 12, '100 мс', { class: 'ink2', 'text-anchor': 'end' });
+  g.setAttribute('viewBox', `0 0 ${w} ${rows.length * rh + 18}`);
+  note(box, 'Светлая засечка на полосе — медиана. Запас до следующего кадра на p95 — почти половина периода.');
+}
+
+function rBit() {
+  const box = $('#r-bit'), b = R.bitwise;
+  if (!b) return box.remove();
+  const N = b.reduce((x, r) => x + r.result_identical, 0), T = b.reduce((x, r) => x + r.frames, 0);
+  head(box, `Результат совпадает побитно: ${N} из ${T} кадров`, 'Для каждого кадра сравниваются облако после C++-разбора и весь результат <code>detect</code> против исходного Python-пути. <code>python -m evaluation preproc</code>.');
+  legend(box, [['sq', 'var(--good)', 'облако и результат совпали'], ['sq', 'var(--alarm)', 'расхождение']]);
+  const w = W(box), lw = w < 480 ? 130 : Math.min(w * .45, 12 + 6.6 * Math.max(...b.map(r => r.bag.length))), rh = 20, n = Math.max(...b.map(r => r.frames)), cw = Math.min(14, (w - lw - 40) / n), h = b.length * rh + 4;
+  const g = svgIn(box, w, h, 'Побитное совпадение по кадрам');
+  b.forEach((r, i) => {
+    const y = i * rh;
+    const nm = r.bag.length * 6.6 > lw - 12 ? r.bag.slice(0, Math.floor((lw - 20) / 6.6)) + '…' : r.bag;
+    t(g, lw - 10, y + 13, nm, { class: 'ink2', 'text-anchor': 'end', 'font-size': 12 });
+    for (let k = 0; k < r.frames; k++) {
+      const ok = k < r.result_identical && k < r.parse_bitwise;
+      s('rect', { x: lw + k * cw, y: y + 3, width: cw - 2, height: rh - 6, rx: 2, fill: ok ? 'var(--good)' : 'var(--alarm)', opacity: ok ? .85 : 1 }, g);
+    }
+    t(g, lw + r.frames * cw + 6, y + 13, `${r.result_identical}/${r.frames}`, { class: 'ink' });
+    s('rect', { x: 0, y, width: w, height: rh, class: 'hit', 'data-tip': `<b>${esc(r.bag)}</b><br>облако побитно: ${r.parse_bitwise} из ${r.frames}<br>результат detect: ${r.result_identical} из ${r.frames}` }, g);
+  });
+  const tt = R.tests;
+  if (tt) stats(box, [{ v: tt.gtest, k: 'тестов gtest' }, { v: tt.pytest ?? '—', k: 'тестов pytest' }, { v: 'все', k: 'зелёные' }]);
+}
+
+function rFlow() {
+  const box = $('#r-flow');
+  head(box, 'Три формата входа → одно облако', 'Формат определяется по полям, <code>height</code> и <code>width</code>, а не по размеру кадра.');
+  const w = W(box), narrow = w < 470, h = 262;
+  const g = svgIn(box, w, h, 'Схема приёма облака');
+  g.classList.add('flow');
+  const ins = [['legacy_hesai', 'текущие записи Hesai'], ['contract_v1', 'REP-103, 128 строк, return_id'], ['generic', 'произвольный x, y, z']];
+  const bw = narrow ? w * .44 : w * .38, bx = 0, cx = w * (narrow ? .54 : .5), cw2 = w - cx;
+  ins.forEach(([a, b2], i) => {
+    const y = 14 + i * 64;
+    s('rect', { x: bx, y, width: bw, height: 48, rx: 8, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+    t(g, bx + 12, y + 20, a, { class: 'ink b' });
+    t(g, bx + 12, y + 37, narrow && b2.length > 22 ? b2.slice(0, 20) + '…' : b2, { class: 'ink2', 'font-size': 12 });
+    s('path', { d: `M${bx + bw},${y + 24} C${bx + bw + 30},${y + 24} ${cx - 30},104 ${cx},104`, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 1.5 }, g);
+  });
+  s('rect', { x: cx, y: 74, width: cw2, height: 60, rx: 8, fill: 'var(--now)' }, g);
+  t(g, cx + 12, 98, 'tunnel_od_preproc', { style: 'fill:#fff;font-weight:600' });
+  t(g, cx + 12, 118, narrow ? 'C++: оси, дубли, NaN' : 'C++: оси, дубли, NaN, 2–250 м', { style: 'fill:rgba(255,255,255,.88);font-size:12px' });
+  s('line', { x1: cx + cw2 / 2, x2: cx + cw2 / 2, y1: 134, y2: 176, stroke: 'var(--axis)', 'stroke-width': 1.5 }, g);
+  s('rect', { x: cx, y: 176, width: cw2, height: 48, rx: 8, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+  t(g, cx + 12, 196, 'каноническое облако', { class: 'ink b' });
+  t(g, cx + 12, 213, narrow ? 'x, y, z' : 'x, y, z, /tunnel_od/cloud', { class: 'ink2', 'font-size': 12 });
+  t(g, cx + 12, 248, narrow ? '→ детектор' : '→ детектор и /input_diagnostics', { class: 'ink2', 'font-size': 12 });
+  note(box, 'Контракт v1, полученный из записи (<code>python -m evaluation contract</code>), даёт то же облако для детектора, что и исходный кадр.');
+}
+
+const MCOLS = ['format', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
+function shortCell(r, k) {
+  const lv = r.levels[k];
+  if (k === 'format') return (r.format || '').split('/')[0];
+  if (k === 'M1') return lv === 'ok' ? '128 строк' : `нули ${num(r.zero_share * 100, 0)}\u00a0%`;
+  if (k === 'M2') return lv === 'ok' ? 'return_id' : 'нет return_id';
+  if (k === 'M3') return lv === 'ok' ? 'TF есть' : 'нет TF';
+  if (k === 'M4') {
+    if (lv === 'ok') return `часы ${r.stamp_year}`;
+    const parts = [];
+    if (r.stamp_year && r.stamp_year < 2020) parts.push(`${r.stamp_year}\u00a0г.`);
+    if (r.gaps) parts.push(`${r.gaps}\u00a0${plural(r.gaps, 'разрыв', 'разрыва', 'разрывов')}`);
+    return parts.join(', ');
+  }
+  if (k === 'M5') return `${num(r.sector_deg, 0)}°`;
+  if (k === 'M6') return lv === 'ok' ? 'есть' : 'нет';
+  return lv;
+}
+function rMatrix() {
+  const box = $('#r-matrix'), inp = R.input;
+  if (!inp) return box.remove();
+  const frames = inp.reduce((x, r) => x + r.frames, 0);
+  const recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
+  const gaps = recs.reduce((x, r) => x + (r.gaps || 0), 0);
+  head(box, 'Проверка входного потока на соответствие контракту',
+    `<code>python -m evaluation input</code>, все кадры: ${num(recs.length)} ${plural(recs.length, 'запись', 'записи', 'записей')} организаторов (${num(frames - inp.filter(r => r.bag.startsWith('contract_v1')).reduce((x, r) => x + r.frames, 0))} кадров) и запись в формате контракта v1. Тот же код работает в узле и публикует <code>/tunnel_od/input_diagnostics</code>.`);
+  stats(box, [
+    { v: `${recs.filter(r => r.stamp_year && r.stamp_year < 2020).length} из ${recs.length}`, k: 'записей с часами в 2000 году' },
+    { v: `${recs.filter(r => r.levels.M1 === 'warn').length} из ${recs.length}`, k: 'с нулями вместо NaN' },
+    { v: `${recs.filter(r => r.levels.M3 === 'warn').length} из ${recs.length}`, k: 'без TF лидара' },
+    { v: num(gaps), k: `${plural(gaps, 'разрыв', 'разрыва', 'разрывов')} в штампах` },
+    { v: '0', k: 'нарушений в контракте v1' }
+  ]);
+  const titles = { format: 'формат', M1: 'M1 облако', M2: 'M2 отражения', M3: 'M3 TF', M4: 'M4 время', M5: 'M5 сектор', M6: 'M6 датчик' };
+  let html = '<div class="tbl-wrap"><table class="matrix"><thead><tr><th>Запись</th><th class="num">Кадров</th>' +
+    MCOLS.map(k => `<th>${titles[k]}</th>`).join('') + '</tr></thead><tbody>';
+  inp.forEach(r => {
+    const isC = r.bag.startsWith('contract_v1');
+    html += `<tr class="${isC ? 'contract' : ''}"><td>${esc(bagName(r.bag)).replace(/_/g, '_<wbr>')}</td><td class="num">${num(r.frames)}</td>` +
+      MCOLS.map(k => {
+        const lv = r.levels[k] || 'unknown';
+        return `<td class="c"><span class="cell ${lv}" data-tip="<b>${k === 'format' ? 'Формат' : k}</b>, ${esc(r.bag)}<br>${esc(r.messages[k] || '')}">${ICON[lv] || ICON.unknown}${esc(shortCell(r, k))}</span></td>`;
+      }).join('') + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  box.insertAdjacentHTML('beforeend', html);
+  note(box, 'M5 у <code>doubleT_obstacle</code> — полный оборот (сектор около 240°, кадр 23 МБ): это не нарушение, но облако втрое больше. Галочка — требование выполнено, треугольник — нарушено.');
+}
+
+function mTable() {
+  const inp = R.input || [], recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
+  const n = recs.length, cnt = f => recs.filter(f).length;
+  const zs = recs.map(r => r.zero_share * 100), gaps = recs.reduce((x, r) => x + (r.gaps || 0), 0);
+  const gapRecs = cnt(r => r.gaps > 0), pairs = recs.map(r => r.pair_share * 100);
+  const rng = a => a.length ? `${num(Math.min(...a), 0)}–${num(Math.max(...a), 0)} %` : '—';
+  const rows = [
+    ['M1', 'Упорядоченное облако: 128 строк по <code>ring</code>, пустой луч — NaN',
+      `${cnt(r => r.levels.M1 === 'warn')} из ${n}: <code>height = 1</code>, пустые лучи нулями — ${rng(zs)} точек`,
+      'Структура угадывается: дубли удаляются, только если кадр кратен 256 точкам. Нули неотличимы от точки на датчике. Вставка объектов лучами датчика требует полного облака.'],
+    ['M2', 'Single return или поле <code>return_id</code>',
+      `${cnt(r => r.levels.M2 === 'warn')} из ${n}: dual return без <code>return_id</code>, соседние столбцы совпадают в ${rng(pairs)} пар`,
+      'Если столбцы сдвинутся, дубли останутся: объект получит вдвое больше точек. Порог <code>12000 / d²</code> и вклад в свидетельство откалиброваны без дублей — подтверждение ускорится, появятся ложные тревоги.'],
+    ['M3', 'REP-103 и <code>/tf_static</code> лидара: высота, смещение от оси, тангаж, крен',
+      `${cnt(r => r.levels.M3 === 'warn')} из ${n}: TF нет, оси «вперёд = −y»`,
+      'Облако в REP-103 без адаптера повёрнуто на 90°: рельсы не найдены, тревог нет. Тангаж неизвестен — полотно оценивается в каждом кадре (на 80 м дно на 1,3 м ниже). Смещение неизвестно — на стрелках выбирается чужая пара рельсов.'],
+    ['M4', 'Часы PTP/GPS, монотонные штампы, шаг 100 ± 1 мс, время точки',
+      `${cnt(r => r.stamp_year < 2020)} из ${n}: штамп в 2000 году; ${num(gaps)} ${plural(gaps, 'разрыв', 'разрыва', 'разрывов')} в штампах в ${gapRecs} ${plural(gapRecs, 'записи', 'записях', 'записях')}`,
+      'Результат не сопоставить с журналом поезда и видео, задержку по штампу не посчитать. Разрывы 0,4–1,1 с ломают оценку скорости <code>EgoMotion</code> и прогноз трека.'],
+    ['M5', 'Постоянный сектор не меньше ±50°, 10 Гц',
+      `выполнено; <code>doubleT_obstacle</code> — полный оборот, ${num((recs.find(r => r.bag === 'doubleT_obstacle') || {}).sector_deg, 0)}°`,
+      'Треть точек полного оборота лежит позади и отбрасывается, кадр 23 МБ вместо 8. Параметры по кадрам (затухание, <code>confirm_hits</code>, <code>LAG</code>) рассчитаны на 10 Гц.'],
+    ['M6', 'Описание датчика: модель, режим отражений, таблица каналов',
+      `${cnt(r => r.levels.M6 === 'warn')} из ${n}: описания нет`,
+      'Углы каналов восстанавливаются по самому кадру медианой. Порог точек <code>12000 / d²</code> подогнан под 128 каналов и шаг 0,1°: для другого датчика его нужно пересчитать.']
+  ];
+  $('#m-table').innerHTML = '<table class="mtable"><thead><tr><th>Пункт</th><th>Требование контракта</th><th>Нарушено в записях</th><th>Что это ломает в алгоритме</th></tr></thead><tbody>' +
+    rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="viol">${r[2]}</td><td>${r[3]}</td></tr>`).join('') + '</tbody></table>' +
+    '<p class="note">Столбец «Нарушено» посчитан <code>python -m evaluation input</code> по всем кадрам записей. Запись в формате контракта v1 проходит все шесть пунктов.</p>';
+}
+
+function method() {
+  const e = S.e2e || {};
+  const src = D.sources || {}, fromRef = Object.keys(src).filter(k => src[k] === 'baseline'), fromRuns = Object.keys(src).filter(k => src[k] === 'runs');
+  const parseHere = src['check_preproc.json'] === 'runs';
+  const stand = D.host
+    ? `e2e в Docker${parseHere ? '' : ' и замер разбора'} — ${esc(D.bench || '')}. Прогоны качества${parseHere ? ' и замер разбора' : ''} — ${esc(D.host)}. Все процессы numpy в один поток.`
+    : `${esc(D.bench || '')}. Все процессы numpy в один поток.`;
+  const files = list => list.map(f => `<code>${esc(f)}</code>`).join(', ');
+  $('#method-body').innerHTML = `<dl>
+    <dt>Стенд</dt><dd>${stand}</dd>
+    <dt>Задержка</dt><dd>Задержка e2e берётся по времени публикации сообщений DDS (<code>source_timestamp</code>): плеер опубликовал облако → детектор опубликовал результат. Штамп <code>header.stamp</code> в записях — 2000 год, от него задержку не посчитать. Задержка узла — от приёма облака до публикации результата.</dd>
+    <dt>Версии</dt><dd>«Исходная» — коммит <code>ae38df6</code>, «текущая» — настройки по умолчанию (<code>config/detector.yaml</code>). Обе прогнаны одними и теми же инструментами.</dd>
+    <dt>Ложные тревоги</dt><dd>Эпизод — серия кадров с тревогой, разрыв до двух кадров не прерывает эпизод. Пустые записи использовались при подборе, <code>new_data</code> — нет.</dd>
+    <dt>Дальность</dt><dd>Объект вставляется в реальные кадры лучами настоящего датчика, с тенью. Поезд едет к нему со скоростью, оценённой по сцене. Объект ставится на ось, найденную детектором: ошибка оси в эту оценку не попадает.</dd>
+    <dt>Воспроизведение</dt><dd>
+      <code class="cmd">python -m evaluation all</code>
+      <code class="cmd">BAG=data/Датасет/archive/for_hackathon/doubleT_platform docker compose up play</code>
+      <code class="cmd">python -m evaluation preproc</code>
+      <code class="cmd">python -m evaluation input</code>
+      <code class="cmd">python -m evaluation alarms --tag P_ev_f20 && python -m evaluation approach --tag P_ev_f20</code>
+      <code class="cmd">python -m evaluation dashboard</code>
+    </dd>
+    <dt>Сборка страницы</dt><dd class="src">Сгенерировано ${esc(D.generated || '')}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}${D.sources ? `. Прогон на этой машине (<code>output/runs</code>): ${files(fromRuns) || '—'}. Эталон (<code>evaluation/baseline.json</code>): ${files(fromRef) || '—'}` : ', из файлов <code>output/runs</code>: alarms_*.csv, approach_*.csv, check_preproc.json, input_report.json, smoke/*'}. Число тестов pytest — ${esc((R.tests || {}).pytest_src || '')}.</dd>
+  </dl>`;
+}
+
+function scene() {
+  const sc = D.scene, wrap = $('#scene-wrap'), canvas = $('#gl');
+  const hud = $('#hud');
+  if (!sc) {
+    wrap.insertAdjacentHTML('beforeend', '<div class="nogl">3D-сцена не собрана: нужна запись doubleT_obstacle в data/. Запустите <code>python -m evaluation dashboard</code>.</div>');
+    hud.remove(); return;
+  }
+  const alarmObj = sc.objects.find(o => o.alarm);
+  const ob = Q.obstacle, na = ob ? ob.after.reduce((a, b) => a + b, 0) : null;
+  hud.innerHTML = alarmObj ? `
+    <span class="status">${ICON.alarm}Тревога: препятствие на пути</span>
+    <div class="big">${num(sc.distance_m, 1)}<small>м</small></div>
+    <p class="what">до ближайшего подтверждённого объекта</p>
+    <dl>
+      <dt>запись</dt><dd>${esc(sc.bag)}, кадр ${sc.frame}</dd>
+      <dt>объект</dt><dd>${alarmObj.n_points} ${plural(alarmObj.n_points, 'точка', 'точки', 'точек')}, ${num(Math.abs(alarmObj.lateral_m), 2)} м ${alarmObj.lateral_m < 0 ? 'влево' : 'вправо'} от оси</dd>
+      <dt>ось пути</dt><dd>известна до ${num(sc.path_range_m, 0)} м, рельсы до ${num(sc.rails_to_m, 0)} м</dd>
+      ${na != null ? `<dt>по записи</dt><dd>тревога в ${na} кадрах из ${ob.after.length}</dd>` : ''}
+    </dl>` : `<span class="status" style="color:#9fe0a8">Путь свободен</span><dl><dt>запись</dt><dd>${esc(sc.bag)}, кадр ${sc.frame}</dd></dl>`;
+
+  const gl = canvas.getContext('webgl', { antialias: true }) || canvas.getContext('experimental-webgl');
+  if (!gl) {
+    wrap.insertAdjacentHTML('beforeend', '<div class="nogl">Браузер не дал WebGL — 3D-сцена недоступна. Остальные разделы работают.</div>');
+    return;
+  }
+
+  const raw = Uint8Array.from(atob(sc.points), c => c.charCodeAt(0));
+  const q = new Int16Array(raw.buffer), N = q.length / 3;
+  const tags = Uint8Array.from(atob(sc.tags), c => c.charCodeAt(0));
+  const axis = sc.axis;
+  const axF0 = axis[0][2], axStep = axis.length > 1 ? axis[1][2] - axis[0][2] : 1;
+  const railAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return axis[i][1]; };
+  const cenAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return axis[i][0]; };
+  const ramp = [[0x1c, 0x5c, 0xab], [0x2a, 0x78, 0xd6], [0x55, 0x98, 0xe7], [0x86, 0xb6, 0xef], [0xcd, 0xe2, 0xfb]];
+  const rampAt = u => { u = Math.max(0, Math.min(1, u)) * (ramp.length - 1); const i = Math.min(ramp.length - 2, Math.floor(u)), f = u - i; return ramp[i].map((c, k) => (c + (ramp[i + 1][k] - c) * f) / 255); };
+
+  const bgPos = [], bgCol = [], bgSize = [];
+  const hiPos = [], hiCol = [], hiSize = [];
+  for (let i = 0; i < N; i++) {
+    const lat = q[3 * i] / 100, z = q[3 * i + 1] / 100, f = q[3 * i + 2] / 100, tg = tags[i];
+    if (tg >= 2) {
+      hiPos.push(lat, z, -f);
+      if (tg === 2) hiCol.push(1, .45, .6, 1); else hiCol.push(1, .78, .3, 1);
+      hiSize.push(tg === 2 ? .22 : .14);
+      continue;
+    }
+    const rel = z - railAt(Math.max(2, f));
+    let c = tg === 1 ? [.93, .96, 1] : rampAt((rel + 0.4) / 5.5);
+    const fade = tg === 1 ? 0 : Math.min(.55, Math.max(0, (f - 30) / 360));
+    c = c.map(v => v * (1 - fade) + 0.04 * fade);
+    bgPos.push(lat, z, -f); bgCol.push(c[0], c[1], c[2], 1); bgSize.push(tg === 1 ? .07 : .035);
+  }
+
+  const lnPos = [], lnCol = [];
+  const seg = (a, b, c) => { lnPos.push(...a, ...b); lnCol.push(...c, ...c); };
+  const z0 = sc.zone, railEnd = sc.rails_to_m || 0;
+  const P = (i, dl, dz) => [axis[i][0] + dl, axis[i][1] + dz, -axis[i][2]];
+  for (let i = 0; i + 1 < axis.length; i++) {
+    const onRails = axis[i][2] <= railEnd;
+    seg(P(i, 0, 0.02), P(i + 1, 0, 0.02), onRails ? [.106, .686, .478, 1] : [.5, .84, .71, .9]);
+    const cc = [.22, .53, .9, .55];
+    for (const dl of [-z0.half_width, z0.half_width]) for (const dz of [z0.clearance, z0.height]) seg(P(i, dl, dz), P(i + 1, dl, dz), cc);
+    if (Math.round(axis[i][2]) % 10 === 0) {
+      const rc = [.22, .53, .9, .28];
+      seg(P(i, -z0.half_width, z0.clearance), P(i, z0.half_width, z0.clearance), rc);
+      seg(P(i, -z0.half_width, z0.height), P(i, z0.half_width, z0.height), rc);
+      seg(P(i, -z0.half_width, z0.clearance), P(i, -z0.half_width, z0.height), rc);
+      seg(P(i, z0.half_width, z0.clearance), P(i, z0.half_width, z0.height), rc);
+    }
+  }
+
+  const neonTri = [], neonTriCol = [], neonLn = [], neonLnCol = [];
+  const NEON = { alarm: [1, .18, .38], cand: [1, .69, .13] };
+  const bodies = [], haloPos = [], haloCol = [], haloSize = [];
+  sc.objects.forEach(o => {
+    const [x0, x1, , zB, f0, f1] = o.box, fm = (f0 + f1) / 2, xm = (x0 + x1) / 2;
+    const hx = Math.max(.2, (x1 - x0) / 2 + .08), hf = Math.max(.2, (f1 - f0) / 2 + .08);
+    const bot = railAt(fm), top = Math.max(zB + .08, bot + .3);
+    bodies.push({ o, xm, fm, top });
+    const col = o.alarm ? NEON.alarm : NEON.cand, k = o.alarm ? 1 : .55;
+
+    [[0, .30], [.07, .13], [.17, .07], [.32, .035]].forEach(([g, a]) => {
+      const X0 = xm - hx - g, X1 = xm + hx + g, Z0 = bot - Math.min(g, .02), Z1 = top + g, F0 = -(fm - hf - g), F1 = -(fm + hf + g);
+      const v = [[X0, Z0, F0], [X1, Z0, F0], [X1, Z1, F0], [X0, Z1, F0], [X0, Z0, F1], [X1, Z0, F1], [X1, Z1, F1], [X0, Z1, F1]];
+      [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]].forEach(([a0, b0, c0, d0]) => {
+        [v[a0], v[b0], v[c0], v[a0], v[c0], v[d0]].forEach(pt => { neonTri.push(...pt); neonTriCol.push(...col, a * k); });
+      });
+      if (!g) [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([a0, b0]) => {
+        neonLn.push(...v[a0], ...v[b0]); neonLnCol.push(...col, .95 * k, ...col, .95 * k);
+      });
+    });
+    if (o.alarm) { neonLn.push(xm, top + .05, -fm, xm, top + 3.2, -fm); neonLnCol.push(...col, .9, ...col, .15); }
+    haloPos.push(xm, (bot + top) / 2, -fm); haloCol.push(...col, o.alarm ? .85 : .4); haloSize.push(o.alarm ? 3.0 : 1.6);
+  });
+
+  const vs = `attribute vec3 p; attribute vec4 c; attribute float sz; uniform mat4 m; uniform float k; uniform float minpx; uniform float maxpx; varying vec4 vc;
+    void main(){ gl_Position = m * vec4(p, 1.0); gl_PointSize = clamp(sz * k / gl_Position.w, minpx, maxpx); vc = c; }`;
+  const fsP = `precision mediump float; varying vec4 vc; void main(){ vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard; gl_FragColor = vc; }`;
+  const fsL = `precision mediump float; uniform float am; varying vec4 vc; void main(){ gl_FragColor = vec4(vc.rgb, vc.a * am); }`;
+  function prog(fs) {
+    const pr = gl.createProgram();
+    [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(([ty, src]) => { const sh = gl.createShader(ty); gl.shaderSource(sh, src); gl.compileShader(sh); gl.attachShader(pr, sh); });
+    gl.linkProgram(pr);
+    return pr;
+  }
+
+  const fsG = `precision mediump float; uniform float am; varying vec4 vc; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard; float ring = exp(-pow((r - 0.8) / 0.06, 2.0)); float f = 0.75 * exp(-r * r * 4.5) + 0.8 * ring; gl_FragColor = vec4(vc.rgb, vc.a * f * am); }`;
+  const pP = prog(fsP), pL = prog(fsL), pG = prog(fsG);
+  function buf(arr) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); return b; }
+  const groups = [
+    { pr: pP, mode: gl.POINTS, pos: buf(bgPos), col: buf(bgCol), sz: buf(bgSize), n: bgPos.length / 3, minpx: 1.0, maxpx: 3.2 },
+    { pr: pL, mode: gl.LINES, pos: buf(lnPos), col: buf(lnCol), sz: buf(new Array(lnPos.length / 3).fill(1)), n: lnPos.length / 3, minpx: 1, maxpx: 1, blend: true },
+    { pr: pP, mode: gl.POINTS, pos: buf(hiPos), col: buf(hiCol), sz: buf(hiSize), n: hiPos.length / 3, minpx: 6.0, maxpx: 12.0 },
+    { pr: pL, mode: gl.TRIANGLES, pos: buf(neonTri), col: buf(neonTriCol), sz: buf(new Array(neonTri.length / 3).fill(1)), n: neonTri.length / 3, minpx: 1, maxpx: 1, blend: 'add', pulse: true },
+    { pr: pG, mode: gl.POINTS, pos: buf(haloPos), col: buf(haloCol), sz: buf(haloSize), n: haloPos.length / 3, minpx: 64, maxpx: 220, blend: 'add', pulse: true, nodepth: true },
+    { pr: pL, mode: gl.LINES, pos: buf(neonLn), col: buf(neonLnCol), sz: buf(new Array(neonLn.length / 3).fill(1)), n: neonLn.length / 3, minpx: 1, maxpx: 1, blend: 'add', pulse: true }
+  ];
+
+  const cam = { tx: 0, ty: 0, tz: -40, yaw: 0, pitch: .12, dist: 46, fov: 50 };
+  const objPos = alarmObj ? [(alarmObj.box[0] + alarmObj.box[1]) / 2, (alarmObj.box[2] + alarmObj.box[3]) / 2, -(alarmObj.box[4] + alarmObj.box[5]) / 2] : [0, 0, -50];
+  const axisAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return [axis[i][0], axis[i][1], -axis[i][2]]; };
+
+  const look = (e, tg) => { const dx = e[0] - tg[0], dy = e[1] - tg[1], dz = e[2] - tg[2], d = Math.hypot(dx, dy, dz);
+    return { tx: tg[0], ty: tg[1], tz: tg[2], dist: d, yaw: Math.atan2(dx, dz), pitch: Math.asin(dy / d) }; };
+  const VIEWS = {
+    cab: () => { const e = axisAt(2), tg = axisAt(48); return look([e[0], e[1] + 2.6, e[2] + 6], [tg[0], tg[1] + 0.8, tg[2]]); },
+    obj: () => ({ tx: objPos[0], ty: objPos[1] + .8, tz: objPos[2], yaw: .75, pitch: .28, dist: 18 }),
+    top: () => { const r = Math.min(sc.path_range_m || 120, 200) / 2, a = axisAt(r); return { tx: a[0], ty: a[1], tz: a[2], yaw: Math.PI / 2, pitch: 1.5, dist: r * 2 * W0 / Math.max(W0, H0) * 1.45 / (W0 / H0) }; },
+    side: () => { const a = axisAt(45); return { tx: a[0], ty: a[1] + 1, tz: a[2], yaw: 1.05, pitch: .42, dist: 62 }; }
+  };
+  const labelsEl = $('#labels');
+  const labels = [];
+  const addLabel = (pos, html, cls) => { const e = document.createElement('div'); e.className = 'lbl ' + (cls || ''); e.innerHTML = html; labelsEl.appendChild(e); labels.push({ pos, e }); };
+  for (const d of [25, 50, 100, 150, 200]) {
+    if (d > (sc.path_range_m || 0) || (alarmObj && Math.abs(d - alarmObj.distance_m) < 12)) continue;
+    const a = axisAt(d); addLabel([a[0] + 2.2, a[1] + 0.1, a[2]], `${d} м`);
+  }
+  bodies.forEach(({ o, xm, fm, top }) => {
+    const p = [xm, top + (o.alarm ? 3.3 : .5), -fm];
+    if (o.alarm) addLabel(p, `${num(o.distance_m, 1)} м`, 'obj');
+    else addLabel(p, `кандидат ${num(o.distance_m, 0)} м`, 'cand');
+  });
+
+  const mul = (a, b) => { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let v = 0; for (let k = 0; k < 4; k++) v += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = v; } return o; };
+  function matrix(w, h) {
+    const cp = Math.cos(cam.pitch), ex = cam.tx + cam.dist * cp * Math.sin(cam.yaw), ey = cam.ty + cam.dist * Math.sin(cam.pitch), ez = cam.tz + cam.dist * cp * Math.cos(cam.yaw);
+    let fx = cam.tx - ex, fy = cam.ty - ey, fz = cam.tz - ez; const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
+    let up = [0, 1, 0]; if (Math.abs(fy) > .999) up = [Math.sin(cam.yaw) * -1, 0, -Math.cos(cam.yaw)];
+    let sx = fy * up[2] - fz * up[1], sy = fz * up[0] - fx * up[2], sz = fx * up[1] - fy * up[0]; const sl = Math.hypot(sx, sy, sz); sx /= sl; sy /= sl; sz /= sl;
+    const ux = sy * fz - sz * fy, uy = sz * fx - sx * fz, uz = sx * fy - sy * fx;
+    const view = new Float32Array([sx, ux, -fx, 0, sy, uy, -fy, 0, sz, uz, -fz, 0,
+      -(sx * ex + sy * ey + sz * ez), -(ux * ex + uy * ey + uz * ez), fx * ex + fy * ey + fz * ez, 1]);
+    const n = .1, f = 900, ft = 1 / Math.tan(cam.fov * Math.PI / 360), a = w / h;
+    const proj = new Float32Array([ft / a, 0, 0, 0, 0, ft, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]);
+    return { m: mul(proj, view), k: h / 2 * ft };
+  }
+  let dpr = 1, W0 = 1, H0 = 1;
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W0 = canvas.clientWidth; H0 = canvas.clientHeight;
+    canvas.width = Math.round(W0 * dpr); canvas.height = Math.round(H0 * dpr);
+    dirty = true;
+  }
+  let dirty = true;
+  let pulse = 1;
+  function draw() {
+    const { m, k } = matrix(W0, H0);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    groups.forEach(gp => {
+      if (!gp.n) return;
+      gl.useProgram(gp.pr);
+      if (gp.nodepth) gl.disable(gl.DEPTH_TEST); else gl.enable(gl.DEPTH_TEST);
+      if (gp.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gp.blend === 'add' ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); } else { gl.disable(gl.BLEND); gl.depthMask(true); }
+      [['p', gp.pos, 3], ['c', gp.col, 4], ['sz', gp.sz, 1]].forEach(([nm, b, sz]) => {
+        const loc = gl.getAttribLocation(gp.pr, nm); if (loc < 0) return;
+        gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0);
+      });
+      gl.uniformMatrix4fv(gl.getUniformLocation(gp.pr, 'm'), false, m);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'k'), k * dpr);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'minpx'), gp.minpx * dpr);
+      gl.uniform1f(gl.getUniformLocation(gp.pr, 'maxpx'), gp.maxpx * dpr);
+      const amLoc = gl.getUniformLocation(gp.pr, 'am'); if (amLoc) gl.uniform1f(amLoc, gp.pulse ? pulse : 1);
+      gl.drawArrays(gp.mode, 0, gp.n);
+    });
+    gl.depthMask(true);
+    labels.forEach(({ pos, e }) => {
+      const x = m[0] * pos[0] + m[4] * pos[1] + m[8] * pos[2] + m[12], y = m[1] * pos[0] + m[5] * pos[1] + m[9] * pos[2] + m[13], w = m[3] * pos[0] + m[7] * pos[1] + m[11] * pos[2] + m[15];
+      if (w <= .1) { e.style.display = 'none'; return; }
+      const sx = (x / w * .5 + .5) * W0, sy = (1 - (y / w * .5 + .5)) * H0;
+      if (sx < -80 || sx > W0 + 80 || sy < -40 || sy > H0 + 40) { e.style.display = 'none'; return; }
+      e.style.display = ''; e.style.left = sx + 'px'; e.style.top = sy + 'px';
+      if (!e.classList.contains('obj')) e.style.opacity = Math.max(.25, Math.min(1, 60 / w)).toFixed(2);
+    });
+  }
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let anim = null;
+  function goTo(target, ms = 900) {
+    const from = { ...cam }; let dy = target.yaw - from.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    const to = { ...target, yaw: from.yaw + dy };
+    if (reduce || !ms) { Object.assign(cam, to); dirty = true; return; }
+    const t0 = performance.now();
+    anim = now => { let u = Math.min(1, (now - t0) / ms); u = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      for (const k2 of ['tx', 'ty', 'tz', 'yaw', 'pitch', 'dist']) cam[k2] = from[k2] + (to[k2] - from[k2]) * u;
+      dirty = true; if (u >= 1) anim = null; };
+  }
+  const btns = [...document.querySelectorAll('.hud.views button')];
+  const press = v => btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v ? 'true' : 'false'));
+  btns.forEach(b => b.addEventListener('click', () => { press(b.dataset.view); goTo(VIEWS[b.dataset.view]()); }));
+  const breathe = !!alarmObj && !reduce;
+  function loop(now) {
+    if (anim) anim(now);
+    if (breathe) { pulse = .72 + .28 * Math.sin(now / 1600 * 2 * Math.PI); dirty = true; }
+    if (dirty) { dirty = false; draw(); }
+    requestAnimationFrame(loop);
+  }
+
+  const pts = new Map(); let last = null, pinch = null, mode = 'rot';
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); anim = null; press(null);
+    mode = e.button === 2 || e.shiftKey ? 'pan' : 'rot'; last = [e.clientX, e.clientY]; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+  canvas.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) cam.dist = Math.max(2, Math.min(500, cam.dist * pinch / d)); pinch = d; dirty = true; return; }
+    const dx = e.clientX - last[0], dy = e.clientY - last[1]; last = [e.clientX, e.clientY];
+    if (mode === 'rot') { cam.yaw -= dx * .005; cam.pitch = Math.max(-.2, Math.min(1.55, cam.pitch + dy * .005)); }
+    else { const k = cam.dist / H0 * 1.1, cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      cam.tx -= (dx * cy) * k; cam.tz -= (-dx * sy) * k; cam.ty += dy * k * .6; }
+    dirty = true;
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); anim = null; cam.dist = Math.max(2, Math.min(500, cam.dist * Math.exp(e.deltaY * .0012))); dirty = true; }, { passive: false });
+
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+  Object.assign(cam, VIEWS.top());
+  press('cab');
+  requestAnimationFrame(loop);
+  setTimeout(() => goTo(VIEWS.cab(), 1800), 250);
+}
+
+function nav() {
+  const secs = [...document.querySelectorAll('section.slide')];
+  $('#nav').innerHTML = secs.map(sc => `<li><a href="#${sc.id}">${sc.dataset.title}</a></li>`).join('');
+  const links = [...document.querySelectorAll('#nav a')];
+  const io = new IntersectionObserver(es => {
+    es.forEach(en => { if (en.isIntersecting) links.forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + en.target.id ? 'true' : 'false')); });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(sc => io.observe(sc));
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+    const down = ['ArrowDown', 'PageDown', 'j'].includes(e.key), upk = ['ArrowUp', 'PageUp', 'k'].includes(e.key);
+    if (!down && !upk) return;
+    e.preventDefault();
+    const y = window.scrollY + 8;
+    const idx = secs.findIndex((sc, i) => i === secs.length - 1 || secs[i + 1].offsetTop > y);
+    const tgt = secs[Math.max(0, Math.min(secs.length - 1, idx + (down ? 1 : (secs[idx].offsetTop < y - 16 ? 0 : -1))))];
+    tgt.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+}
+function theme() {
+  const b = $('#theme'), modes = ['auto', 'light', 'dark'], names = { auto: 'авто', light: 'светлая', dark: 'тёмная' };
+  let m = 'auto';
+  try { m = localStorage.getItem('tod-theme') || 'auto'; } catch (e) {  }
+  const apply = () => { if (m === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', m); b.textContent = 'Тема: ' + names[m]; };
+  apply();
+  b.addEventListener('click', () => { m = modes[(modes.indexOf(m) + 1) % 3]; try { localStorage.setItem('tod-theme', m); } catch (e) {  } apply(); renderCharts(); });
+}
+function renderCharts() {
+  [summary, qStrip, qApproach, qErr, qEmpty, qNd, sParse, sLat, sBudget, rBit, rFlow, rMatrix, mTable, method].forEach(fn => {
+    try { fn(); } catch (err) { console.error(fn.name, err); }
+  });
+}
+$('#stamp').textContent = D.generated ? `данные на ${D.generated.split('-').reverse().join('.')}${D.commit ? ', ' + D.commit : ''}` : '';
+nav(); theme(); renderCharts();
+try { scene(); } catch (err) { console.error('scene', err); }
+let rw = innerWidth, rt;
+addEventListener('resize', () => { if (innerWidth === rw) return; rw = innerWidth; clearTimeout(rt); rt = setTimeout(renderCharts, 150); });
+})();
+</script>
+</body>
+</html>

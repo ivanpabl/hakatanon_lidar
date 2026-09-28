@@ -55,7 +55,7 @@ def _crop_check(det_params, pre, actions):
     try:
         from tunnel_od_detector.util import required_fwd_range
         lo, hi = required_fwd_range({k: v for k, v in det_params.items() if k in ('near_cutoff', 'max_range')})
-    except Exception as e:  # ядро не импортируется -- не режем
+    except Exception as e:
         pre['crop_enabled'] = False
         actions.append(LogInfo(msg=f'[tunnel_od] обрезка облака выключена: не проверить диапазон ядра ({e})'))
         return

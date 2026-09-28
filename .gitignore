@@ -1,29 +1,17 @@
-# данные (bag-файлы ~22ГБ + ~84ГБ, картинки разметки) -- не в репозитории, см. tools/bags.py
 /data/
 *.db3
 
-# результаты инструментов (csv/png) -- пересобираются из tools/
-/runs/
+/output/*
+!/output/.gitkeep
 
-# виртуальное окружение
 venv/
-
-# Python
+.venv/
 __pycache__/
 *.pyc
 *.egg-info/
-
-# сборка ROS 2
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
-
-# служебная папка Claude Code
-.claude/
 ros2_ws/src/tunnel_od_preproc/build_host/
-
-# Windows: окружение run_all.bat, результаты run_all.py
-.venv-win/
-/results/
-/site/
+.claude/
 .DS_Store

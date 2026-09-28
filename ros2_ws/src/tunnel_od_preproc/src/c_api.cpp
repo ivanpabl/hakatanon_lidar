@@ -19,7 +19,6 @@ void copy_out(const std::string & s, char * buf, size_t len)
   buf[n] = '\0';
 }
 
-// неполученные предупреждения отдельного вызова tod_monitor_new_warnings
 struct Monitor
 {
   tunnel_od::InputMonitor mon;
@@ -28,7 +27,7 @@ struct Monitor
   : mon(c) {}
 };
 
-}  // namespace
+}
 
 extern "C" {
 
@@ -135,4 +134,4 @@ size_t tod_monitor_new_warnings(void * monitor, char * buf, size_t len)
   return s.size() + 1;
 }
 
-}  // extern "C"
+}

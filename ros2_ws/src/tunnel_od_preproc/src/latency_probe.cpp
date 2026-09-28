@@ -1,12 +1,3 @@
-// Внешний замер полной задержки: "исходный кадр опубликован -> результат опубликован".
-//
-// Обе метки -- source_timestamp из rmw_message_info_t (время публикации, часы системы),
-// а не header.stamp: в записях он в 2000 году. Облако берётся сериализованным (без
-// разбора 23 МБ), штамп читается прямо из CDR. Результат сопоставляется с кадром по
-// полю "stamp" JSON результата (= header.stamp кадра).
-//
-//   ros2 run tunnel_od_preproc latency_probe --ros-args -p input_topic:=/lidar_points
-//        -p out_file:=/out/e2e.json
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -31,10 +22,10 @@ double pct(std::vector<double> v, double q)
   const double pos = q / 100.0 * (v.size() - 1);
   const size_t lo = static_cast<size_t>(pos);
   const size_t hi = std::min(lo + 1, v.size() - 1);
-  return v[lo] + (pos - lo) * (v[hi] - v[lo]);         // как numpy.percentile (linear)
+  return v[lo] + (pos - lo) * (v[hi] - v[lo]);
 }
 
-}  // namespace
+}
 
 class LatencyProbe : public rclcpp::Node
 {
@@ -64,6 +55,7 @@ private:
   {
     for (const auto & kv : get_topic_names_and_types()) {
       if (kv.first.rfind("/tunnel_od/", 0) == 0) {continue;}
+      if (count_publishers(kv.first) == 0) {continue;}
       for (const auto & t : kv.second) {
         if (t == "sensor_msgs/msg/PointCloud2") {
           timer_->cancel();
@@ -77,7 +69,6 @@ private:
   void subscribe(const std::string & topic)
   {
     input_topic_ = topic;
-    // QoS как у узла детектора (reliable, depth 5): замер не должен менять поведение плеера
     sub_cloud_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       topic, rclcpp::QoS(5).reliable(),
       [this](std::shared_ptr<const rclcpp::SerializedMessage> m, const rclcpp::MessageInfo & info) {
@@ -90,7 +81,6 @@ private:
   {
     const auto & raw = m.get_rcl_serialized_message();
     if (raw.buffer_length < 12) {return;}
-    // CDR: 4 байта заголовка инкапсуляции, затем header.stamp.sec (int32), nanosec (uint32)
     int32_t sec;
     uint32_t nsec;
     std::memcpy(&sec, raw.buffer + 4, 4);
@@ -106,7 +96,6 @@ private:
     const auto pos = m.data.find("\"stamp\":");
     if (pos == std::string::npos) {return;}
     const double stamp = std::strtod(m.data.c_str() + pos + 8, nullptr);
-    // stamp в JSON -- sec + nanosec * 1e-9 (float64): ищем ближайший кадр
     const int64_t approx = static_cast<int64_t>(std::llround(stamp * 1e9));
     auto it = clouds_.lower_bound(approx - 2000);
     if (it == clouds_.end() || std::llabs(it->first - approx) > 2000) {
@@ -143,7 +132,7 @@ private:
   }
 
   std::string input_topic_, result_topic_, out_file_;
-  std::map<int64_t, int64_t> clouds_;       // header.stamp, нс -> source_timestamp, нс
+  std::map<int64_t, int64_t> clouds_;
   std::vector<double> latency_;
   uint64_t n_clouds_ = 0, n_results_ = 0, unmatched_ = 0;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_cloud_;
@@ -156,7 +145,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   auto node = std::make_shared<LatencyProbe>();
   rclcpp::spin(node);
-  node.reset();          // деструктор пишет итог
+  node.reset();
   rclcpp::shutdown();
   return 0;
 }

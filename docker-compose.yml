@@ -1,0 +1,42 @@
+x-common: &common
+  image: tunnel-od
+  build: {context: ., target: detector}
+  user: "${UID:-1000}:${GID:-1000}"
+  shm_size: 2g                
+  volumes:
+    - ./config:/opt/tunnel_od/config:ro
+    - ./output:/out
+
+services:
+  play:
+    <<: *common
+    volumes:
+      - ./config:/opt/tunnel_od/config:ro
+      - ./output:/out
+      - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
+    command: ros2 launch tunnel_od_detector play.launch.py bag:=/bag rate:=${RATE:-1.0}
+
+  demo:
+    <<: *common
+    image: tunnel-od-viz
+    build: {context: ., target: viz}
+    cpus: 6                     
+    ports:
+      - "127.0.0.1:6080:6080"  
+    volumes:
+      - ./config:/opt/tunnel_od/config:ro
+      - ./output:/out
+      - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
+    command: ros2 launch tunnel_od_detector demo.launch.py bag:=/bag rate:=${RATE:-1.0}
+
+  detector:
+    <<: *common
+    network_mode: host       
+    ipc: host                    
+    command: ros2 launch tunnel_od_detector detector.launch.py
+
+  test:
+    <<: *common
+    command: >
+      bash -c "/ws/install/tunnel_od_preproc/lib/tunnel_od_preproc/test_canonical &&
+               python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test"

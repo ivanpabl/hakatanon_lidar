@@ -37,8 +37,8 @@ def test_parse_drops_zero_points_and_dual_return_duplicates():
     x = np.arange(2 * n_cols * COLUMN_HEIGHT, dtype=np.float32) * 0.01 + 1.0
     y = np.full_like(x, -5.0)
     z = np.zeros_like(x)
-    x.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] = x.reshape(-1, 2, COLUMN_HEIGHT)[:, 0]   # второе отражение = первое
-    for a in (x, y, z):                                                              # нет отражения (оба)
+    x.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] = x.reshape(-1, 2, COLUMN_HEIGHT)[:, 0]
+    for a in (x, y, z):
         a[:10] = a[COLUMN_HEIGHT:COLUMN_HEIGHT + 10] = 0.0
     data, step, fields = _cloud_bytes(x, y, z)
     assert step == 26
@@ -92,12 +92,12 @@ def test_evidence_tracker_confirms_weak_static_object_and_rejects_flicker():
         tr.update([ob], displacement=1.5, expected=expected)
         if ob['confirmed'] and confirmed_at is None:
             confirmed_at = k
-        d -= 1.5                      # поезд приближается к неподвижному объекту
+        d -= 1.5
     assert confirmed_at is not None and confirmed_at <= 8
 
     tr = EvidenceTracker()
     rng = np.random.default_rng(0)
-    for k in range(30):              # одиночные точки в случайных местах не подтверждаются
+    for k in range(30):
         ob = {'distance_m': float(rng.uniform(20, 200)), 'lateral_m': float(rng.uniform(-1, 1)), 'n_points': 1}
         tr.update([ob], displacement=1.5, expected=expected)
         assert not ob['confirmed']

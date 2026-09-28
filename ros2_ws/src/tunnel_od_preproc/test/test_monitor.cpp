@@ -1,5 +1,3 @@
-// Проверка входного потока: что находится на потоке как в записях и чего нет на потоке
-// по контракту v1.
 #include <gtest/gtest.h>
 
 #include <string>
@@ -74,29 +72,28 @@ FrameInfo contract_frame(int64_t stamp_ns)
   return f;
 }
 
-}  // namespace
+}
 
 TEST(Monitor, LegacyStreamViolations)
 {
   InputMonitor m;
-  const int64_t t0 = 946687297LL * 1000000000LL;       // 2000 год
+  const int64_t t0 = 946687297LL * 1000000000LL;
   int64_t t = t0;
   for (int i = 0; i < 40; ++i) {
-    t += (i == 20 ? 700 : 100) * 1000000LL;             // разрыв 0.7 с
+    t += (i == 20 ? 700 : 100) * 1000000LL;
     m.on_frame(legacy_frame(t));
   }
   const auto cs = m.checks();
   EXPECT_EQ(level_of(cs, "format"), Level::Ok);
-  EXPECT_EQ(level_of(cs, "M1"), Level::Warn);      // height = 1, нули
-  EXPECT_EQ(level_of(cs, "M2"), Level::Warn);      // дубли по расстоянию
-  EXPECT_EQ(level_of(cs, "M3"), Level::Warn);      // нет TF
-  EXPECT_EQ(level_of(cs, "M4"), Level::Warn);      // 2000 год, разрыв
+  EXPECT_EQ(level_of(cs, "M1"), Level::Warn);
+  EXPECT_EQ(level_of(cs, "M2"), Level::Warn);
+  EXPECT_EQ(level_of(cs, "M3"), Level::Warn);
+  EXPECT_EQ(level_of(cs, "M4"), Level::Warn);
   EXPECT_EQ(level_of(cs, "M5"), Level::Ok);
   EXPECT_EQ(level_of(cs, "M6"), Level::Warn);
   const auto j = m.summary_json();
   EXPECT_NE(j.find("\"gaps\":1"), std::string::npos);
   EXPECT_NE(j.find("\"stamp_year\":2000"), std::string::npos);
-  // каждое предупреждение -- один раз
   const auto w = m.take_new_warnings();
   EXPECT_GE(w.size(), 5u);
   m.on_frame(legacy_frame(t + 100000000LL));
@@ -109,7 +106,7 @@ TEST(Monitor, ContractStreamIsClean)
   const double xyz[3] = {1.2, 0.0, 3.1}, rpy[3] = {0.1, -0.8, 0.0};
   m.on_tf("base_link", "lidar", xyz, rpy);
   m.on_description("{\"model\": \"Pandar128E3X\"}");
-  int64_t t = 1790000000LL * 1000000000LL;             // 2026 год
+  int64_t t = 1790000000LL * 1000000000LL;
   for (int i = 0; i < 40; ++i) {
     t += 100000000LL;
     m.on_frame(contract_frame(t));
@@ -131,7 +128,7 @@ TEST(Monitor, LayoutAndFrameChangesAndAxesHeuristic)
     auto f = contract_frame(t);
     if (i >= 10) {f.frame_id = "other";}
     if (i >= 15) {f.cloud.width = 1200;}
-    if (i >= 20) {f.stats.az_center = 90.0;}             // сектор смотрит вбок
+    if (i >= 20) {f.stats.az_center = 90.0;}
     m.on_frame(f);
   }
   const auto j = m.summary_json();

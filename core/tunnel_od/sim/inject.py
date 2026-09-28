@@ -10,7 +10,7 @@
   "в глубину" тоннеля), объект тоже перехватывает.
 
 Направления лучей -- tunnel_od.pointcloud.beam_directions. Фигуры -- sim.shapes.
-Пример запуска на записи -- tools/inject_demo.py.
+Пример запуска на записи -- python -m evaluation inject-demo.
 """
 import numpy as np
 

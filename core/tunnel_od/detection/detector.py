@@ -180,9 +180,6 @@ class ObstacleDetector:
         far_start = max(rails_end, 20.0) + self.far_from
         if self.edge_lines:
             mark_edge_lines(objects, far_start=far_start)
-        # за концом найденных рельсов ось и высота полотна -- оценка: объект у края
-        # коридора или целиком под сводом там скорее стена/свод при ошибке в десятки см.
-        # Фильтр по объектам, а не по точкам: иначе рвутся цепочки edge_line
         for o in objects:
             o['edge_line'] = o.get('edge_line', False) or bool(o['distance_m'] > far_start and (
                 (self.far_half_width is not None and abs(o['lateral_m']) > self.far_half_width)

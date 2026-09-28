@@ -28,13 +28,13 @@ def _child(conn, kwargs):
         t0 = time.monotonic()
         try:
             if hasattr(det, '_frame'):
-                det._frame = frame          # возраст пути считается в кадрах узла
+                det._frame = frame
             before = dict(vars(det))
             ok = bool(det.update_path(x, y, z))
             changed = {k: v for k, v in vars(det).items()
                        if k != '_frame' and (k not in before or before[k] is not v)}
             conn.send((frame, ok, changed, (time.monotonic() - t0) * 1e3, None))
-        except Exception as e:  # ошибка пересчёта не должна останавливать процесс
+        except Exception as e:
             conn.send((frame, False, {}, (time.monotonic() - t0) * 1e3, f'{type(e).__name__}: {e}'))
 
 
@@ -42,7 +42,7 @@ class AsyncPathFitter:
     """submit() отдаёт кадр, если процесс свободен; apply() переносит готовый путь в детектор."""
 
     def __init__(self, kwargs):
-        ctx = mp.get_context('spawn')      # не fork: в процессе узла уже работают потоки DDS
+        ctx = mp.get_context('spawn')
         self._conn, child = ctx.Pipe()
         self._proc = ctx.Process(target=_child, args=(child, kwargs), daemon=True, name='tunnel_od_path')
         self._proc.start()
