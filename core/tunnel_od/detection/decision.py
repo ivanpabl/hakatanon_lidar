@@ -15,9 +15,9 @@ import math
 
 import numpy as np
 
-RANGE_CAP_M = 200.0          # паспортная дальность Pandar128 при отражении 10 %
-SIGHT_C_M = 1.5              # хорда прямой видимости на кривой: sqrt(8 R c)
-MIN_CURVATURE = 1 / 5000     # кривая радиусом больше 5 км -- прямая
+RANGE_CAP_M = 200.0
+SIGHT_C_M = 1.5
+MIN_CURVATURE = 1 / 5000
 
 
 def object_level(obj, *, in_path, pending_score):

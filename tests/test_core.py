@@ -38,8 +38,8 @@ def test_parse_drops_zero_points_and_dual_return_duplicates():
     x = np.arange(2 * n_cols * COLUMN_HEIGHT, dtype=np.float32) * 0.01 + 1.0
     y = np.full_like(x, -5.0)
     z = np.zeros_like(x)
-    x.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] = x.reshape(-1, 2, COLUMN_HEIGHT)[:, 0]   # второе отражение = первое
-    for a in (x, y, z):                                                              # нет отражения (оба)
+    x.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] = x.reshape(-1, 2, COLUMN_HEIGHT)[:, 0]
+    for a in (x, y, z):
         a[:10] = a[COLUMN_HEIGHT:COLUMN_HEIGHT + 10] = 0.0
     data, step, fields = _cloud_bytes(x, y, z)
     assert step == 26
@@ -93,12 +93,12 @@ def test_evidence_tracker_confirms_weak_static_object_and_rejects_flicker():
         tr.update([ob], displacement=1.5, expected=expected)
         if ob['confirmed'] and confirmed_at is None:
             confirmed_at = k
-        d -= 1.5                      # поезд приближается к неподвижному объекту
+        d -= 1.5
     assert confirmed_at is not None and confirmed_at <= 8
 
     tr = EvidenceTracker()
     rng = np.random.default_rng(0)
-    for k in range(30):              # одиночные точки в случайных местах не подтверждаются
+    for k in range(30):
         ob = {'distance_m': float(rng.uniform(20, 200)), 'lateral_m': float(rng.uniform(-1, 1)), 'n_points': 1}
         tr.update([ob], displacement=1.5, expected=expected)
         assert not ob['confirmed']
@@ -193,18 +193,18 @@ def test_splice_far_axis_keeps_longer_previous_axis():
     old_f = np.arange(2.0, 200.0, 1.0)
     old_c = 0.001 * old_f
     new_f = np.arange(2.0, 60.0, 1.0)
-    new_c = 0.001 * (new_f + 3.0) + 0.05           # поезд проехал 3 м; небольшой сдвиг вбок
+    new_c = 0.001 * (new_f + 3.0) + 0.05
     f, c, ok = splice_far_axis(new_f, new_c, old_f, old_c, shift=3.0)
     assert ok and f[-1] == pytest.approx(196.0)
     assert np.all(np.diff(f) > 0)
     assert np.interp(59.0, f, c) == pytest.approx(new_c[-1])
-    assert abs(np.interp(61.0, f, c) - np.interp(59.0, f, c)) < 0.01   # без ступеньки на стыке
+    assert abs(np.interp(61.0, f, c) - np.interp(59.0, f, c)) < 0.01
 
-    far_off = 0.001 * new_f + 0.8                    # другая ось (стрелка) -- не склеиваем
+    far_off = 0.001 * new_f + 0.8
     f, c, ok = splice_far_axis(new_f, far_off, old_f, old_c, shift=0.0)
     assert not ok and f[-1] == new_f[-1]
 
-    f, c, ok = splice_far_axis(old_f, old_c, new_f, new_c, shift=0.0)   # новая длиннее
+    f, c, ok = splice_far_axis(old_f, old_c, new_f, new_c, shift=0.0)
     assert not ok and f[-1] == old_f[-1]
 
 
@@ -215,7 +215,7 @@ def test_detector_holds_far_axis_when_refit_is_short():
     assert full > 100
     det._fit_fwd, det._fitted_cl = det._fit_fwd[det._fit_fwd < 50], det._fitted_cl[det._fit_fwd < 50]
     det._path_range = float(det._fit_fwd[-1])
-    det._path_frame = det._frame + 1                # как будто пришёл новый короткий путь
+    det._path_frame = det._frame + 1
     x, y, z, *_ = simulate_frame()
     res = det.check_frame(x, y, z)
     assert res['path_range_m'] > full - 5
@@ -227,7 +227,7 @@ def test_held_alarm_survives_short_axis():
     assert _run(det, [{'obstacle_forward': 60.0, 'obstacle_radius': 0.35}] * 8)['obstacle']
     x, y, z, *_ = simulate_frame()
     det._fit_fwd, det._fitted_cl = det._fit_fwd[det._fit_fwd < 50], det._fitted_cl[det._fit_fwd < 50]
-    det._path_range = float(det._fit_fwd[-1])       # новый путь короче объекта, объект пропал
+    det._path_range = float(det._fit_fwd[-1])
     res = det.check_frame(x, y, z)
     assert res['obstacle'] and res['path_range_m'] < 55
 
@@ -243,19 +243,19 @@ def _cloud16(x, y, z):
 def test_parse_unordered_16_byte_cloud_drops_duplicates():
     rng = np.random.default_rng(0)
     base = rng.uniform(-20, 20, (200, 3)).astype(np.float32)
-    pts = np.vstack([base, base[:100]])                      # 300 точек: не кратно 256, 100 дублей
+    pts = np.vstack([base, base[:100]])
     data, step, fields = _cloud16(pts[:, 0], pts[:, 1], pts[:, 2])
     assert step == 16
     px, py, pz = parse_pointcloud2(data, step, fields)
     assert len(px) == 200
-    assert np.array_equal(px, base[:, 0])                    # порядок первых вхождений сохранён
+    assert np.array_equal(px, base[:, 0])
 
 
 def test_parse_ordered_cloud_keeps_close_points_outside_dual_pair():
     """Упорядоченное облако: дубли снимаются только внутри пары столбцов, запасной способ не включается."""
     n_cols = 4
-    x = np.arange(n_cols * COLUMN_HEIGHT, dtype=np.float32) * 0.01 + 1.0      # 512 точек: пары (0,1), (2,3)
-    x.reshape(n_cols, COLUMN_HEIGHT)[2] = x.reshape(n_cols, COLUMN_HEIGHT)[0]   # столбец 2 = столбец 0 (другая пара)
+    x = np.arange(n_cols * COLUMN_HEIGHT, dtype=np.float32) * 0.01 + 1.0
+    x.reshape(n_cols, COLUMN_HEIGHT)[2] = x.reshape(n_cols, COLUMN_HEIGHT)[0]
     y, z = np.full_like(x, -5.0), np.zeros_like(x)
     data, step, fields = _cloud_bytes(x, y, z)
     px, _, _ = parse_pointcloud2(data, step, fields)
@@ -286,7 +286,7 @@ def test_parse_16_byte_512_point_cloud_dedupes_by_rounding_not_columns():
     (синтетика организаторов), дубли снимает округление, а не пара столбцов."""
     rng = np.random.default_rng(1)
     base = rng.uniform(-20, 20, (312, 3)).astype(np.float32)
-    pts = np.vstack([base, base[:200]])                      # 512 точек: кратно 256, 200 дублей
+    pts = np.vstack([base, base[:200]])
     assert len(pts) == 512 and len(pts) % (2 * COLUMN_HEIGHT) == 0
     data, step, fields = _cloud16(pts[:, 0], pts[:, 1], pts[:, 2])
     px, py, pz = parse_pointcloud2(data, step, fields)
@@ -300,7 +300,7 @@ def test_frame_repeat_detects_bitwise_same_cloud():
     assert not rep.check(a)
     assert rep.check(a)
     assert not rep.check(b)
-    assert rep.check(np.frombuffer(b, np.uint8))             # numpy-массив (rosbags) и bytes -- одно и то же
+    assert rep.check(np.frombuffer(b, np.uint8))
 
 
 def _o(d, **kw):
@@ -331,7 +331,7 @@ def test_object_level_table_and_reason_order():
 def test_decide_status_priority():
     assert _decide([_o(50, confirmed=True), _o(80, confirmed=True, beyond_path=True)])['status'] == 'stop'
     held = _o(50, confirmed=True, held=True, level='stop', reason='in_gauge')
-    assert _decide([held], path=False)['status'] == 'stop'                       # stop > unknown
+    assert _decide([held], path=False)['status'] == 'stop'
     assert _decide([_o(80, confirmed=True, beyond_path=True)], path=False)['status'] == 'unknown'
     assert _decide([_o(80, confirmed=True, beyond_path=True)], path_range=60.0)['status'] == 'caution'
     assert _decide([_o(80, hits=1)])['status'] == 'clear'
@@ -349,8 +349,8 @@ def test_sight_and_clear_to():
     assert r['sight_m'] == 0.0 and r['clear_to_m'] == 0.0
     assert _decide([], path_range=250.0)['sight_m'] == 200.0
     assert _decide([], path_range=143.0)['sight_m'] == 143.0
-    assert _decide([], path_range=250.0, curvature=1 / 300)['sight_m'] == pytest.approx(60.0)   # sqrt(8*300*1.5)
-    assert _decide([], path_range=250.0, curvature=1 / 6000)['sight_m'] == 200.0                # |k| < 1/5000
+    assert _decide([], path_range=250.0, curvature=1 / 300)['sight_m'] == pytest.approx(60.0)
+    assert _decide([], path_range=250.0, curvature=1 / 6000)['sight_m'] == 200.0
     r = _decide([_o(40, confirmed=True)], path_range=150.0)
     assert r['clear_to_m'] == 40 and r['sight_m'] == 150.0
     assert sight_distance(None, 0.0) == 0.0
@@ -367,7 +367,7 @@ def test_axis_curvature_of_arc():
     f = np.arange(2.0, 150.0, 1.0)
     assert axis_curvature(f, f ** 2 / (2 * R)) == pytest.approx(1 / R, rel=1e-3)
     assert axis_curvature(f, 0.01 * f) == pytest.approx(0.0, abs=1e-9)
-    assert axis_curvature(np.arange(2.0, 45.0, 1.0), np.zeros(43)) == 0.0         # до 45 м: на 40-120 мало точек
+    assert axis_curvature(np.arange(2.0, 45.0, 1.0), np.zeros(43)) == 0.0
 
 
 def test_detector_status_fields_clear_and_stop():
@@ -387,7 +387,7 @@ def test_detector_status_fields_clear_and_stop():
 def test_detector_unknown_without_path():
     det = ObstacleDetector()
     x, y, z, *_ = simulate_frame()
-    res = det.check_frame(x, y, z)                    # путь ещё не считался
+    res = det.check_frame(x, y, z)
     assert res['status'] == 'unknown' and not res['obstacle']
     assert res['sight_m'] == 0.0 and res['clear_to_m'] == 0.0
 
@@ -429,7 +429,7 @@ def test_ego_no_decision_when_train_stands_or_travel_unknown():
 
 
 def test_ego_short_travel_no_decision():
-    ob = _ego_run(1.2, lambda k: 30.0, n=4)          # пробег 3,6 м < 4 м
+    ob = _ego_run(1.2, lambda k: 30.0, n=4)
     assert ob['ego_slope'] is None and not ob['ego_carried']
 
 
@@ -450,11 +450,11 @@ def test_detector_passes_ego_params():
 
 def test_held_track_not_held_past_near_cutoff():
     tr = EvidenceTracker(hold=3, hold_min=1)
-    for k in range(4):                      # подтверждённый объект подъезжает к 3 м, тревога
+    for k in range(4):
         ob = {'distance_m': 6.0 - k, 'lateral_m': 0.0, 'n_points': 50}
         tr.update([ob], displacement=1.0, expected=lambda d: 5.0)
         tr.set_alarm({ob['track_id']})
-    tr.update([], displacement=1.0)          # пропал: прогноз 2 м -- ещё держится
+    tr.update([], displacement=1.0)
     assert [round(t['distance_m'], 1) for t in tr.held(min_distance=2.0)] == [2.0]
-    tr.update([], displacement=1.0)          # прогноз 1 м -- уже проехали, не держится
+    tr.update([], displacement=1.0)
     assert tr.held(min_distance=2.0) == [] and len(tr.held()) == 1

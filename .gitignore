@@ -1,30 +1,18 @@
-# данные (bag-файлы ~22ГБ + ~84ГБ) -- не в репозитории, см. tools/bags.py
 /data/
 *.db3
 
-# результаты запуска: docker compose пишет сюда
-/out/
-/runs/
+/output/*
+!/output/.gitkeep
 
-# сгенерированные страницы (пересобираются: docker compose --profile metrics up)
-/gui/demo.html
-/gui/dashboard.html
-
-# виртуальное окружение
 venv/
-
-# Python
+.venv/
 __pycache__/
 *.pyc
 *.egg-info/
-
-# сборка ROS 2
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
 ros2_ws/src/tunnel_od_preproc/build_host/
-
-# служебное
 .claude/
 .pytest_cache/
 .superpowers/

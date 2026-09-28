@@ -1,15 +1,15 @@
-"""Тесты чистых функций офлайн-инструментов (tools/), без записей."""
+"""Тесты чистых функций офлайн-инструментов (evaluation/), без записей."""
 import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'evaluation'))
 
-from bags import EMPTY_BAGS, read_problems, safe_messages          # noqa: E402
-from eval_fake_obj import evaluate, group_x, summary_line          # noqa: E402
-from compare_row import approach_median, first_stop_56, shares          # noqa: E402
-from selflabel import episodes, label, sanity, segments          # noqa: E402
+from bags import EMPTY_BAGS, read_problems, safe_messages
+from eval_fake_obj import evaluate, group_x, summary_line
+from compare_row import approach_median, first_stop_56, shares
+from selflabel import episodes, label, sanity, segments
 
 
 def test_safe_messages_stops_on_read_error():
@@ -42,12 +42,12 @@ def test_group_x_splits_on_gap():
 def test_evaluate_first_stop_share_and_false_frames():
     frames = [{'frame': k, 'travel_m': 2.0 * k, 'status': 'clear', 'sight_m': 150.0} for k in range(40)]
     objs = {}
-    for k in range(5, 20):                                   # объект 1: X = 100, СТОП с кадра 5
+    for k in range(5, 20):
         objs[k] = [{'distance_m': 100.0 - 2.0 * k, 'level': 'stop', 'reason': 'in_gauge'}]
         frames[k]['status'] = 'stop'
-    for k in range(10, 12):                                  # объект 5: X = 200, ВНИМАНИЕ
+    for k in range(10, 12):
         objs.setdefault(k, []).append({'distance_m': 200.0 - 2.0 * k, 'level': 'caution', 'reason': 'beyond_path'})
-    objs[30] = [{'distance_m': 20.0, 'level': 'stop', 'reason': 'in_gauge'}]   # X = 80: ни в одно окно
+    objs[30] = [{'distance_m': 20.0, 'level': 'stop', 'reason': 'in_gauge'}]
     frames[30]['status'] = 'stop'
     rows, false_frames = evaluate(_ref(), frames, objs)
     r1, r5, r9 = rows
@@ -89,7 +89,7 @@ def test_compare_row_helpers():
 
 def test_compare_row_missing_runs_show_dash(tmp_path, monkeypatch):
     import compare_row
-    monkeypatch.setattr(compare_row, 'RUNS', tmp_path)                  # FAST=1: нет alarms_<tag>.csv
+    monkeypatch.setattr(compare_row, 'RUNS', tmp_path)
     cells = [c.strip() for c in compare_row.row('t', '{}').split('|')]
     assert cells[4] == '-' and cells[5] == '-'
 
@@ -104,28 +104,28 @@ def _rows(n, dt=0.1, disp=1.0, none_at=()):
 
 
 def test_segments_break_on_long_odometry_gap_and_restart():
-    assert len(set(segments(_rows(30, none_at=range(10, 15))))) == 1          # 0,5 с без смещения
-    seg = segments(_rows(40, none_at=range(10, 26)))                          # 1,6 с без смещения
+    assert len(set(segments(_rows(30, none_at=range(10, 15))))) == 1
+    seg = segments(_rows(40, none_at=range(10, 26)))
     assert seg[9] == seg[25] == 0 and seg[26] == 1
-    rows = _rows(10) + [dict(r, frame=100 + r['frame']) for r in _rows(10)]   # отрезок alarms.py --segments
+    rows = _rows(10) + [dict(r, frame=100 + r['frame']) for r in _rows(10)]
     assert segments(rows)[10] == 1
 
 
 def test_episodes_gap_rule():
     st = lambda frames: [(f, f, 7, 50.0, 'in_gauge') for f in frames]
-    assert len(episodes(st([0, 1, 2, 8, 9]))) == 1        # пропущено 5 кадров (3..7) -- эпизод не рвётся
-    assert len(episodes(st([0, 1, 2, 9, 10]))) == 2       # пропущено 6
+    assert len(episodes(st([0, 1, 2, 8, 9]))) == 1
+    assert len(episodes(st([0, 1, 2, 9, 10]))) == 2
     two = episodes(st([0, 1]) + [(f, f, 8, 30.0, 'in_gauge') for f in (0, 1)])
-    assert len(two) == 2                                   # разные треки -- разные эпизоды
+    assert len(two) == 2
 
 
 def test_label_false_proven_only_in_same_segment():
-    rows = _rows(200)                                      # 1 м за кадр
+    rows = _rows(200)
     seg = segments(rows)
-    ep = episodes([(10, 10, 1, 50.0, 'in_gauge')])[0]     # X = 11 + 50 = 61; нужно travel >= 61 + 3 + 1 = 65
+    ep = episodes([(10, 10, 1, 50.0, 'in_gauge')])[0]
     assert label(ep, rows, seg) == 'false_proven'
     assert label(ep, rows[:60], seg[:60]) == 'unresolved'
-    rows2 = _rows(200, none_at=range(20, 40))              # сегмент рвётся до проезда X
+    rows2 = _rows(200, none_at=range(20, 40))
     assert label(episodes([(10, 10, 1, 50.0, 'in_gauge')])[0], rows2, segments(rows2)) == 'unresolved'
 
 
@@ -141,10 +141,10 @@ def test_read_problems_flags_truncated_and_missing(tmp_path):
     p = read_problems('nd_t', tmp_path)
     assert len(p) == 1 and 'new_data' in p[0] and '418' in p[0] and '11271' in p[0]
     assert read_problems('fo_t', tmp_path) == []
-    assert read_problems('seg', tmp_path) == []                      # отрезки -- кадров меньше по замыслу
+    assert read_problems('seg', tmp_path) == []
     assert read_problems('absent', tmp_path) == ['alarms_absent: нет сведений о чтении']
     (tmp_path / 'alarms_old.csv').write_text('bag,frame\n' + 'new_data,0\n' * 418, encoding='utf-8')
-    assert any('418' in m for m in read_problems('old', tmp_path))    # прогон без _read.json: по CSV
+    assert any('418' in m for m in read_problems('old', tmp_path))
 
 
 def test_compare_row_marks_truncated_run(tmp_path, monkeypatch):

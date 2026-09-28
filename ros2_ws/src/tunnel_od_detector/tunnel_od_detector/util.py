@@ -9,7 +9,6 @@ from collections import deque
 import numpy as np
 
 
-# ---------------------------------------------------------------- параметры детектора
 
 def _convert_value(key, value):
     """Значение ROS-параметра -> значение kwargs. ROS-параметры не умеют None и
@@ -62,7 +61,6 @@ def build_detector_kwargs(ros_params: dict, json_override: str = '', target=None
     return kwargs
 
 
-# ---------------------------------------------------------------- вход
 
 CANONICAL_FIELDS = (('x', 0, 7), ('y', 4, 7), ('z', 8, 7))
 
@@ -87,7 +85,7 @@ def canonical_xyz(msg):
 def required_fwd_range(det_kwargs):
     """Какой диапазон дальности вперёд ядро может использовать при этих параметрах:
     (min, max). Обрезка облака в tunnel_od_preproc безопасна, только если
-    crop_fwd_min <= min и crop_fwd_max >= max (см. docs/INPUT_FORMAT.md, "Обрезка")."""
+    crop_fwd_min <= min и crop_fwd_max >= max (см. docs/input_format.md, "Обрезка")."""
     from tunnel_od.detection.detector import ObstacleDetector
     from tunnel_od.geometry import bed, path, rails
     defaults = {k: p.default for k, p in inspect.signature(ObstacleDetector.__init__).parameters.items()}
@@ -101,9 +99,7 @@ def required_fwd_range(det_kwargs):
     return lo, hi
 
 
-# ---------------------------------------------------------------- решение и входное облако
-
-COLUMN_PAIR = 256        # 2 x 128 каналов: облако из столбцов, дубли dual return снимает разбор
+COLUMN_PAIR = 256
 
 LEVEL_COLOR = {'stop': (1.0, 0.1, 0.1, 0.9), 'caution': (1.0, 0.85, 0.1, 0.8), None: (0.6, 0.6, 0.6, 0.5)}
 
@@ -128,18 +124,62 @@ def raw_hesai_format(meta) -> bool:
 
 
 def status_text(result):
-    """Строка решения для RViz и логов и её цвет."""
+    """Строка решения для RViz и логов и её цвет. Латиница: шрифт RViz не рисует кириллицу."""
     s = result.get('status')
     if s == 'stop':
-        return f"СТОП {float(result['distance_m']):.0f} м", (1.0, 0.2, 0.2)
+        return f"STOP {float(result['distance_m']):.0f} m", (1.0, 0.2, 0.2)
     if s == 'caution':
-        return f"ВНИМАНИЕ {float(result['caution_distance_m']):.0f} м", (1.0, 0.85, 0.1)
+        return f"CAUTION {float(result['caution_distance_m']):.0f} m", (1.0, 0.85, 0.1)
     if s == 'unknown':
-        return 'ПУТЬ НЕ ОПРЕДЕЛЁН', (0.7, 0.7, 0.7)
-    return f"СВОБОДНО до {float(result.get('clear_to_m') or 0.0):.0f} м", (0.3, 1.0, 0.3)
+        return 'PATH UNKNOWN', (0.7, 0.7, 0.7)
+    return f"CLEAR to {float(result.get('clear_to_m') or 0.0):.0f} m", (0.3, 1.0, 0.3)
 
 
-# ---------------------------------------------------------------- JSON
+def limit_alarms(res, limit_m, end_m=None):
+    """Тревога только у подтверждённых объектов не дальше limit_m (м).
+
+    В режиме refit_mode: async путь приходит из фонового процесса с опозданием на кадр, а конец
+    известной оси скачет от кадра к кадру (199 -> 153 -> 204 -> 131 м). С осью прошлого кадра
+    дальний кандидат, который по оси текущего кадра был бы «за концом оси», поднимает ложную
+    тревогу. Узел поэтому не поднимает тревогу у объектов у конца оси: дальше limit_m (минимум
+    дальности оси по последним пересчётам) и дальше end_m (доля от максимума). Второе условие
+    нужно, чтобы один короткий пересчёт (ось 52 м при объекте на 56 м) не гасил тревогу у объекта
+    далеко от конца оси лишний кадр. Такие объекты -- beyond_path, как у ядра: уровень stop
+    становится caution (beyond_path), статус, дистанции и clear_to_m пересчитываются так же, как
+    в decision.decide. Объект без уровня (level) считается stop, если подтверждён и в пределах оси."""
+    if limit_m is None:
+        return res
+    objects = res.get('objects') or []
+    for o in objects:
+        d = o['distance_m']
+        if o.get('confirmed') and not o.get('beyond_path') and d > limit_m and (end_m is None or d > end_m):
+            o['beyond_path'] = True
+            o['beyond_recent_path'] = True
+            if o.get('level') == 'stop':
+                o['level'], o['reason'] = 'caution', 'beyond_path'
+
+    def level(o):
+        if 'level' in o:
+            return o['level']
+        return 'stop' if o.get('confirmed') and not o.get('beyond_path') else None
+
+    stop = [o['distance_m'] for o in objects if level(o) == 'stop']
+    caution = [o['distance_m'] for o in objects if level(o) == 'caution']
+    res['obstacle'] = bool(stop)
+    res['distance_m'] = min(stop) if stop else None
+    if 'status' in res:
+        if stop:
+            res['status'] = 'stop'
+        elif res['status'] != 'unknown':
+            res['status'] = 'caution' if caution else 'clear'
+        res['caution_distance_m'] = min(caution) if caution else None
+        if res['status'] != 'unknown' and res.get('sight_m') is not None:
+            near = min(stop + caution, default=None)
+            sight = float(res['sight_m'])
+            res['clear_to_m'] = max(0.0, sight if near is None else min(sight, near))
+    res['alarm_range_m'] = limit_m
+    return res
+
 
 def to_jsonable(obj, _depth=0):
     """Любой результат детектора -> то, что берёт json.dumps без ошибок:
@@ -164,7 +204,7 @@ def to_jsonable(obj, _depth=0):
         return [to_jsonable(v, _depth + 1) for v in obj]
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return to_jsonable(dataclasses.asdict(obj), _depth + 1)
-    if hasattr(obj, 'item'):          # прочие numpy-подобные скаляры
+    if hasattr(obj, 'item'):
         try:
             return to_jsonable(obj.item(), _depth + 1)
         except Exception:
@@ -176,7 +216,6 @@ def dumps(obj) -> str:
     return json.dumps(to_jsonable(obj), ensure_ascii=False, allow_nan=False, separators=(',', ':'))
 
 
-# ---------------------------------------------------------------- статистика
 
 def percentile(values, q):
     return float(np.percentile(values, q)) if len(values) else None
@@ -186,14 +225,14 @@ class Stats:
     """Счётчики узла. Задержки -- за всё время работы и за последний период сводки."""
 
     def __init__(self):
-        self.received = 0          # принято сообщений (колбэк подписки)
-        self.processed = 0         # обработано детектором
-        self.dropped = 0           # отброшено как устаревшие (пришёл более новый кадр)
-        self.errors = 0            # исключения при обработке кадра
-        self.alarm_frames = 0      # кадров с obstacle=True
-        self.stamp_gaps = 0        # кадров, пропущенных по header.stamp (потери до узла или в записи)
-        self.latency_ms = []       # приём -> публикация результата
-        self.proc_ms = []          # разбор + детектор
+        self.received = 0
+        self.processed = 0
+        self.dropped = 0
+        self.errors = 0
+        self.alarm_frames = 0
+        self.stamp_gaps = 0
+        self.latency_ms = []
+        self.proc_ms = []
         self.min_alarm_distance = None
         self._period = {'processed': 0, 'latency': [], 'received': 0}
         self._last_stamp = None

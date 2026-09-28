@@ -81,7 +81,7 @@ def dedupe_rounded(x, y, z, cell=DEDUPE_CELL_M):
     if len(x) == 0:
         return x, y, z
     q = lambda a: (np.round(np.asarray(a, np.float64) / cell).astype(np.int64) + 32768) & 0xFFFF
-    key = (q(x) << 32) | (q(y) << 16) | q(z)          # +-327 м по каждой оси в 16 битах
+    key = (q(x) << 32) | (q(y) << 16) | q(z)
     _, first = np.unique(key, return_index=True)
     keep = np.sort(first)
     return x[keep], y[keep], z[keep]

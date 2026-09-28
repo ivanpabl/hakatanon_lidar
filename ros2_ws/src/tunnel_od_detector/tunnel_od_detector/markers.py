@@ -9,10 +9,11 @@ from visualization_msgs.msg import Marker, MarkerArray
 from .util import LEVEL_COLOR, status_text
 
 NS = 'tunnel_od'
-AXIS_STEP_M = 2.0          # шаг точек оси; каждая точка -- объект Point (~40 мкс в rclpy)
+NS_TEXT = 'tunnel_od_text'
+AXIS_STEP_M = 2.0
 CORRIDOR_STEP_M = 4.0
-FRAME_EVERY_M = 20.0       # поперечные рамки коридора
-DEFAULT_AXIS_M = 40.0      # длина рисуемой оси, если путь не найден
+FRAME_EVERY_M = 20.0
+DEFAULT_AXIS_M = 40.0
 
 
 def _color(r, g, b, a=1.0):
@@ -62,13 +63,11 @@ def build_markers(result, track, det, header, max_objects=30):
     tor = track.rail_top_at(fwd)
     path_ok = bool(result.get('path_available')) and track.center is not None
 
-    # ось пути: головка рельса по оси
     axis = _marker(header, 0, Marker.LINE_STRIP,
                    _color(0.1, 0.9, 0.2) if path_ok else _color(0.6, 0.6, 0.6, 0.6), (0.08, 0, 0))
     axis.points = [_pt(x, -f, z) for f, x, z in zip(fwd, cx, tor)]
     arr.markers.append(axis)
 
-    # коридор: четыре продольных ребра зоны (LINE_STRIP) + поперечные рамки
     lo, hi, hw = _zone_bounds(det)
     corr_col = _color(0.2, 0.6, 1.0, 0.5)
     k = np.unique(np.r_[np.arange(0, len(fwd), max(1, int(CORRIDOR_STEP_M / AXIS_STEP_M))), len(fwd) - 1])
@@ -84,7 +83,6 @@ def build_markers(result, track, det, header, max_objects=30):
             frames.points += [_pt(a[0], -fwd[i], a[1]), _pt(b[0], -fwd[i], b[1])]
     arr.markers.append(frames)
 
-    # объекты: цвет по уровню -- stop красный, caution жёлтый, прочие серые
     rank = {'stop': 0, 'caution': 1}
     shown = sorted(result.get('objects') or [], key=lambda o: (rank.get(o.get('level'), 2), o.get('distance_m', 1e9)))
     for i, o in enumerate(shown[:max_objects]):
@@ -98,11 +96,10 @@ def build_markers(result, track, det, header, max_objects=30):
         box.pose.position = _pt(x, -(d + 0.3), base + h / 2)
         arr.markers.append(box)
 
-    # текст с решением над коридором
     text, rgb = status_text(result)
     if path_range:
-        text += f' (ось {float(path_range):.0f} м)'
-    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, 1.0))
+        text += f' (axis {float(path_range):.0f} m)'
+    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, 1.0), ns=NS_TEXT)
     label.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 1.5)
     label.text = text
     arr.markers.append(label)

@@ -71,7 +71,6 @@ def _extend_far(ff, xf, af, ac, offsets, far):
     c2_max = 1.0 / (2 * FAR_MIN_RADIUS)
     c1 = np.polyfit(tf[t] - s0, tc[t], 1)[0]
     c0 = ac[-1]
-    # начальная кривизна -- по всей известной оси (дуга продолжается)
     q = tf >= s0 - 2 * FAR_TAIL_M
     c2 = float(np.clip(np.polyfit(tf[q] - s0, tc[q], 2)[0], -c2_max, c2_max)) if q.sum() >= 5 else 0.0
     sel = ff > s0
@@ -90,11 +89,9 @@ def _extend_far(ff, xf, af, ac, offsets, far):
         return (best_d < tol + 0.002 * s) & (s < limit), best_c
 
     def fit_c2(used, cen):
-        # МНК только по кривизне (c0, c1 заданы хвостом известной оси)
         su, cu = s[used], cen[used]
         return float(np.clip(np.sum((cu - c0 - c1 * su) * su ** 2) / np.sum(su ** 4), -c2_max, c2_max))
 
-    # растущее окно: кривизна уточняется по ближним точкам и только потом ведёт дальше
     used = np.zeros(len(s), bool)
     for limit in np.arange(FAR_STEP_M, far - s0 + FAR_STEP_M, FAR_STEP_M):
         u, cen = pick(limit, 0.5)
@@ -154,16 +151,11 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0, far_extend=Tru
         predict = _local_trend(af, ac)
         pred = predict(fc)
         lo, hi = np.searchsorted(ff, [f0, f0 + WALL_BIN_M])
-        # прогноз на каждую точку, а не на центр бина: в кривой вдали наклон оси
-        # в системе лидара 0.1-0.3, и за 4м бина стена "съезжает" на десятки см
         lat = xf[lo:hi] - predict(ff[lo:hi])
         cands, at = [], []
         for side, off in offsets.items():
             d = _wall_dist(lat, side)
             if d is not None and abs(d - off) < WALL_TOL:
-                # опорная точка -- там, где стена реально снята, а не в центре бина:
-                # вдали стену задевают отдельные столбцы, и в кривой разница 1-2м по s
-                # даёт десятки см вбок
                 band = np.abs(lat * side - d) < 0.3
                 sf = float(np.median(ff[lo:hi][band]))
                 cands.append(float(predict(sf)) + side * (d - off)); at.append(sf)
@@ -182,7 +174,6 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0, far_extend=Tru
     tail = ext_f > f_end
     c_t = ext_c[tail]
     if len(c_t) >= 3:
-        # края дополняются линейно, а не повтором: в кривой повтор тянет крайнюю точку вбок
         c_t = np.convolve(np.r_[2 * c_t[0] - c_t[1], c_t, 2 * c_t[-1] - c_t[-2]], np.ones(3) / 3, mode='valid')
     return np.concatenate([fit_fwd, ext_f[tail]]), np.concatenate([cl, c_t])
 

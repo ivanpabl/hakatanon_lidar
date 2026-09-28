@@ -20,10 +20,10 @@
 """
 import numpy as np
 
-BEAM_RAD = np.radians(0.125)     # вертикальный шаг лучей Pandar128 в средней части поля зрения
-RING_GAP_RAD = np.radians(0.06)  # разные лучи -- если углы места различаются больше полушага
-LIDAR_H = 1.5                    # высота лидара над головкой рельса, м (для шага лучей по полу)
-CTX_HALF_WIDTH = 4.0             # окрестность объекта вбок от оси, м
+BEAM_RAD = np.radians(0.125)
+RING_GAP_RAD = np.radians(0.06)
+LIDAR_H = 1.5
+CTX_HALF_WIDTH = 4.0
 
 
 def count_rings(elev):
@@ -69,32 +69,27 @@ def object_features(o, elev, ctx):
     out = {'rings': count_rings(elev),
            'ext_beams': round((top - low) / (max(d, 1.0) * BEAM_RAD), 2)}
 
-    # за объектом: до следующего попадания луча в пол (и не меньше 2 м)
     L = float(np.clip(1.5 * floor_step(d), 2.0, 30.0))
     f, l, h = ctx.window(far + 0.3, far + L)
     band = (l > lo_l - 0.3) & (l < hi_l + 0.3)
     out['behind_n'] = int(np.count_nonzero(band & (h >= low - 0.05) & (h <= top + 0.3)))
     out['behind_low_n'] = int(np.count_nonzero(band & (h < low - 0.05) & (h > low - 0.6)))
 
-    # перед объектом: самая высокая точка пола в его полосе
     f, l, h = ctx.window(d - L, d - 0.3)
     band = (l > lo_l - 0.3) & (l < hi_l + 0.3) & (h < low + 0.5)
     out['front_maxh'] = round(float(h[band].max()), 3) if band.any() else None
 
-    # продолжение той же линии вбок за пределы объекта (полоса пола поперёк коридора)
     f, l, h = ctx.window(d - 0.3, far + 0.3)
     mid = 0.5 * (low + top)
     side = ((l < lo_l - 0.15) | (l > hi_l + 0.15)) & (np.abs(l) < 2.5) & (np.abs(h - mid) < 0.08 + 0.5 * (top - low))
     out['side_n'] = int(np.count_nonzero(side))
 
-    # над объектом: свод/стена без разрыва
     ds = 1.0 + 0.01 * d
     f, l, h = ctx.window(d - ds, far + ds)
     m = (h > top) & (h < top + 1.2) & (l > lo_l - 0.4) & (l < hi_l + 0.4)
     touch = max(0.25, 3.0 * BEAM_RAD * d)
     out['shell_n'] = int(np.count_nonzero(m)) if m.any() and float(h[m].min()) - top <= touch else 0
 
-    # снаружи объекта: стена тоннеля на его высотах
     ds = 2.0 + 0.03 * d
     f, l, h = ctx.window(d - ds, far + ds)
     hm = (h > low - 0.6) & (h < top + 0.6)

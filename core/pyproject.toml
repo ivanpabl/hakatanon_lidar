@@ -10,7 +10,7 @@ requires-python = ">=3.10"   # Ubuntu 22.04 / ROS 2 Humble
 dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
-tools = ["matplotlib", "rosbags"]   # офлайн-инструменты: чтение bag-файлов, графики
+eval = ["matplotlib", "rosbags", "pytest"]   # evaluation/: чтение bag-файлов, графики, тесты
 
 [tool.setuptools.packages.find]
 include = ["tunnel_od*"]

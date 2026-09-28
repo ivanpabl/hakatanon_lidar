@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from tunnel_od_detector.util import (LEVEL_COLOR, Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
-                                     raw_hesai_format, raw_point_count, required_fwd_range, status_text,
-                                     to_jsonable, unordered_raw)
+                                     limit_alarms, raw_hesai_format, raw_point_count, required_fwd_range,
+                                     status_text, to_jsonable, unordered_raw)
 
 
 def _target(self, near_cutoff=2.0, zone=None, method='zone', path_margin=10.0):
@@ -59,7 +59,7 @@ def test_json_numpy_nan_unknown():
 
 def test_stats():
     s = Stats()
-    for i, t in enumerate([0.0, 0.1, 0.2, 0.5, 0.6]):     # 0.2 -> 0.5: пропущено 2 кадра
+    for i, t in enumerate([0.0, 0.1, 0.2, 0.5, 0.6]):
         s.on_receive(t)
         s.on_processed(10.0 + i, 5.0, i == 4, 56.0 if i == 4 else None)
     out = s.summary()
@@ -80,7 +80,7 @@ class _Cloud:
 
 
 def test_canonical_xyz_views_without_copy():
-    xyz = np.arange(3 * 256, dtype=np.float32).reshape(-1, 3)     # 256 точек: parse_pointcloud2 удалил бы "дубли"
+    xyz = np.arange(3 * 256, dtype=np.float32).reshape(-1, 3)
     buf = xyz.tobytes()
     x, y, z = canonical_xyz(_Cloud(buf))
     assert len(x) == 256 and np.array_equal(x, xyz[:, 0]) and np.array_equal(z, xyz[:, 2])
@@ -102,20 +102,66 @@ def test_unordered_raw_unknown_count():
     assert unordered_raw(300) and not unordered_raw(512)
     assert not unordered_raw(None) and not unordered_raw(0)
     assert raw_point_count(300, None, canonical=False) == 300
-    assert raw_point_count(999, None, canonical=True) is None                       # meta не пришла
+    assert raw_point_count(999, None, canonical=True) is None
     assert raw_point_count(999, {'parse': {'n_in': 300}}, canonical=True) == 300
 
 
 def test_unordered_raw_not_hesai_even_if_multiple_of_256():
-    # синтетика организаторов: 307200 точек без timestamp -- C++ дубли не снимал
     assert unordered_raw(307200, hesai=False) and not unordered_raw(307200, hesai=True)
     assert raw_hesai_format({'parse': {'format': 'legacy_hesai'}})
     assert not raw_hesai_format({'parse': {'format': 'generic'}}) and not raw_hesai_format(None)
 
 
 def test_status_text():
-    assert status_text({'status': 'stop', 'distance_m': 56.3})[0] == 'СТОП 56 м'
-    assert status_text({'status': 'caution', 'caution_distance_m': 80.2})[0] == 'ВНИМАНИЕ 80 м'
-    assert status_text({'status': 'clear', 'clear_to_m': 143.4})[0] == 'СВОБОДНО до 143 м'
-    assert status_text({'status': 'unknown'})[0] == 'ПУТЬ НЕ ОПРЕДЕЛЁН'
+    assert status_text({'status': 'stop', 'distance_m': 56.3})[0] == 'STOP 56 m'
+    assert status_text({'status': 'caution', 'caution_distance_m': 80.2})[0] == 'CAUTION 80 m'
+    assert status_text({'status': 'clear', 'clear_to_m': 143.4})[0] == 'CLEAR to 143 m'
+    assert status_text({'status': 'unknown'})[0] == 'PATH UNKNOWN'
     assert set(LEVEL_COLOR) == {'stop', 'caution', None}
+
+
+def _res(*objs):
+    return {'obstacle': True, 'distance_m': min(o['distance_m'] for o in objs if o['confirmed']),
+            'objects': [dict(o) for o in objs]}
+
+
+def test_limit_alarms_drops_far_candidate_keeps_near():
+    far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False}
+    near = {'distance_m': 56.0, 'confirmed': True, 'beyond_path': False}
+    res = limit_alarms(_res(far), 153.0)
+    assert res['obstacle'] is False and res['distance_m'] is None
+    assert res['objects'][0]['beyond_path'] and res['objects'][0]['beyond_recent_path']
+    res = limit_alarms(_res(far, near), 153.0)
+    assert res['obstacle'] is True and res['distance_m'] == 56.0 and res['alarm_range_m'] == 153.0
+
+
+def test_limit_alarms_ignores_unconfirmed_and_none_limit():
+    cand = {'distance_m': 90.0, 'confirmed': False, 'beyond_path': False}
+    near = {'distance_m': 40.0, 'confirmed': True, 'beyond_path': False}
+    res = limit_alarms(_res(cand, near), 50.0)
+    assert res['obstacle'] and res['distance_m'] == 40.0 and 'beyond_recent_path' not in res['objects'][0]
+    res = _res(near)
+    assert limit_alarms(res, None) is res and res['obstacle']
+
+
+def test_limit_alarms_only_near_end_of_axis():
+    near = {'distance_m': 56.0, 'confirmed': True, 'beyond_path': False}
+    res = limit_alarms(_res(near), 52.0, 0.8 * 121.0)
+    assert res['obstacle'] and res['distance_m'] == 56.0
+    far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False}
+    res = limit_alarms(_res(far), 153.0, 0.8 * 204.0)
+    assert not res['obstacle']
+
+
+def test_limit_alarms_recomputes_decision_levels():
+    far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False, 'level': 'stop', 'reason': 'in_gauge'}
+    res = {'status': 'stop', 'obstacle': True, 'distance_m': 197.0, 'caution_distance_m': None,
+           'sight_m': 180.0, 'clear_to_m': 180.0, 'objects': [far]}
+    res = limit_alarms(res, 153.0, 0.8 * 204.0)
+    o = res['objects'][0]
+    assert (o['level'], o['reason']) == ('caution', 'beyond_path')
+    assert res['status'] == 'caution' and not res['obstacle'] and res['distance_m'] is None
+    assert res['caution_distance_m'] == 197.0 and res['clear_to_m'] == 180.0
+    res = {'status': 'unknown', 'obstacle': False, 'distance_m': None, 'caution_distance_m': None,
+           'sight_m': 0.0, 'clear_to_m': 0.0, 'objects': []}
+    assert limit_alarms(res, 50.0)['status'] == 'unknown'

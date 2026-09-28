@@ -1,0 +1,1730 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Контроль пути — 3D-лидар · ЛЦТ 2026</title>
+<style>
+/* =====================================================================
+   Дизайн-система дашборда
+   Палитра: нейтральная основа + один акцент + два функциональных цвета.
+     accent  -- навигация, ссылки, итоговая версия на графиках
+     stop    -- только решение СТОП детектора и ложные тревоги
+     warn    -- только критическая оговорка рядом с числом
+     faint   -- исходная версия и прочие опорные ряды
+   Типографика: одна шкала, нижняя граница 13px -- микротекста нет.
+   Ритм: шаг 4px, отступы разделов и панелей берутся из одной лестницы.
+   ===================================================================== */
+:root {
+  color-scheme: light;
+  --page: #f1f4f7; --surface: #ffffff; --surface-2: #f5f8fa;
+  --ink: #111823; --ink-2: #4e5966; --muted: #77828f;
+  --border: rgba(17, 24, 35, .13); --grid: #e5eaee; --axis: #c0c9d2;
+  --accent: #1b63cc; --accent-soft: rgba(27, 99, 204, .09);
+  --stop: #c3372c; --stop-ink: #a92f25; --stop-soft: rgba(195, 55, 44, .09);
+  --warn-ink: #8a5c00; --warn-soft: rgba(190, 140, 20, .15);
+  --faint: #a9b2bd;
+  --shadow: 0 1px 2px rgba(17, 24, 35, .05);
+
+  /* совместимость с кодом графиков: цветов остаётся четыре */
+  --now: var(--accent); --now-ink: var(--accent); --link: var(--accent);
+  --was: var(--faint); --track: var(--accent);
+  --alarm: var(--stop); --bad-ink: var(--stop-ink); --bad-bg: var(--stop-soft);
+  --good: var(--faint); --good-ink: var(--ink-2); --ok-bg: var(--surface-2);
+  --warn: var(--warn-ink); --warn-bg: var(--warn-soft); --info-bg: var(--accent-soft);
+
+  --t-hero: clamp(3rem, 5.2vw, 4.25rem);
+  --t-big: clamp(2.1rem, 3.1vw, 2.75rem);
+  --t-mid: 1.625rem;
+  --t-h1: clamp(1.9rem, 3vw, 2.5rem);
+  --t-h2: clamp(1.45rem, 2.3vw, 1.9rem);
+  --t-h3: 1.125rem;
+  --t-body: 1rem;
+  --t-sm: .9375rem;
+  --t-xs: .875rem;
+  --t-micro: .8125rem;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --radius: 10px;
+  --font: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --dark: 1; } }
+:root[data-theme="dark"] { --dark: 1; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d1117; --surface: #151b23; --surface-2: #1b222c;
+    --ink: #eef2f7; --ink-2: #aab4c0; --muted: #7f8b99;
+    --border: rgba(255, 255, 255, .11); --grid: #232c37; --axis: #3a4552;
+    --accent: #6ba6f5; --accent-soft: rgba(107, 166, 245, .14);
+    --stop: #ef6f66; --stop-ink: #f2837b; --stop-soft: rgba(239, 111, 102, .14);
+    --warn-ink: #e0b768; --warn-soft: rgba(224, 183, 104, .13);
+    --faint: #5e6875;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d1117; --surface: #151b23; --surface-2: #1b222c;
+  --ink: #eef2f7; --ink-2: #aab4c0; --muted: #7f8b99;
+  --border: rgba(255, 255, 255, .11); --grid: #232c37; --axis: #3a4552;
+  --accent: #6ba6f5; --accent-soft: rgba(107, 166, 245, .14);
+  --stop: #ef6f66; --stop-ink: #f2837b; --stop-soft: rgba(239, 111, 102, .14);
+  --warn-ink: #e0b768; --warn-soft: rgba(224, 183, 104, .13);
+  --faint: #5e6875;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 400 var(--t-body)/1.55 var(--font); -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+code, .code { font-family: var(--mono); font-size: max(12.5px, .92em); overflow-wrap: anywhere; }
+small { font-size: inherit; }
+b { font-weight: 600; }
+
+/* ---------- каркас ---------- */
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
+nav.rail {
+  position: sticky; top: 0; height: 100vh; padding: var(--s6) var(--s4) var(--s5);
+  display: flex; flex-direction: column; gap: var(--s5);
+  background: var(--surface); border-right: 1px solid var(--border);
+}
+.brand { display: flex; align-items: flex-start; gap: var(--s3); color: var(--ink); text-decoration: none; font-size: var(--t-sm); font-weight: 600; line-height: 1.25; padding: 0 var(--s2); }
+.brand svg { flex: none; }
+.brand small { display: block; font-weight: 400; font-size: var(--t-micro); color: var(--muted); margin-top: var(--s1); }
+.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rail .gl { font-size: var(--t-micro); font-weight: 500; color: var(--muted); padding: var(--s4) var(--s3) var(--s1); }
+.rail ol li:first-child .gl { padding-top: 0; }
+.rail li a {
+  display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s3);
+  border-radius: 7px; text-decoration: none; color: var(--ink-2); font-size: var(--t-xs);
+}
+.nav-icon { font-size: 1rem; width: 18px; text-align: center; color: var(--muted); }
+.rail li a:hover { background: var(--surface-2); color: var(--ink); }
+.rail li a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail li a[aria-current="page"] .nav-icon { color: var(--accent); }
+.rail .foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s3); font-size: var(--t-micro); color: var(--muted); }
+.rail .foot small { font-size: var(--t-micro); }
+.rail .foot a { color: var(--ink-2); text-decoration: none; }
+.rail .cross { display: flex; flex-direction: column; gap: var(--s2); }
+.rail .cross a { font-size: var(--t-micro); }
+.rail .foot a:hover { color: var(--accent); }
+button.ghost {
+  font: 500 var(--t-micro) var(--font); color: var(--ink-2); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: var(--s2) var(--s3); cursor: pointer; align-self: flex-start;
+}
+button.ghost:hover { color: var(--ink); background: var(--surface-2); }
+
+main { min-width: 0; padding-bottom: var(--s5); }
+.appbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  height: 60px; padding: 0 var(--s7); background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.breadcrumb { font-size: var(--t-xs); color: var(--ink-2); }
+.breadcrumb b { font-weight: 600; color: var(--ink); }
+.present-button {
+  display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--ink-2); font: 500 var(--t-micro) var(--font); cursor: pointer;
+}
+.present-button:hover { background: var(--surface-2); color: var(--ink); }
+
+section.slide { max-width: 1180px; margin: 0 auto; padding: var(--s7) var(--s7) var(--s8); scroll-margin-top: 200px; }
+.slide > header { margin-bottom: var(--s6); }
+h1 { font-size: var(--t-h1); line-height: 1.12; font-weight: 600; letter-spacing: -.02em; margin: 0 0 var(--s3); }
+h2 { font-size: var(--t-h2); line-height: 1.15; font-weight: 600; letter-spacing: -.018em; margin: 0 0 var(--s3); max-width: 30ch; }
+h3 { font-size: var(--t-h3); line-height: 1.3; font-weight: 600; margin: 0 0 var(--s1); letter-spacing: -.005em; }
+.lede, .hero-lede { color: var(--ink-2); font-size: var(--t-sm); line-height: 1.55; margin: 0; max-width: 66ch; }
+.sub { color: var(--ink-2); font-size: var(--t-xs); line-height: 1.5; margin: 0 0 var(--s4); max-width: 72ch; }
+.note { color: var(--muted); font-size: var(--t-micro); line-height: 1.5; margin: var(--s3) 0 0; max-width: 80ch; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s5); min-width: 0; box-shadow: var(--shadow); }
+.grid { display: grid; gap: var(--s5); grid-template-columns: minmax(0, 1fr); }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.span2 { grid-column: span 2; }
+
+/* ==============================================================
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--font); }
+svg.chart text { fill: var(--muted); font-size: 13px; }
+svg.chart text.ink { fill: var(--ink); }
+svg.chart text.ink2 { fill: var(--ink-2); }
+svg.chart text.b { font-weight: 600; }
+svg.chart .gridl { stroke: var(--grid); stroke-width: 1; }
+svg.chart .base { stroke: var(--axis); stroke-width: 1; }
+.band-lbl { font-size: 13px; }
+.hit { fill: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); font-size: var(--t-micro); color: var(--ink-2); margin: 0 0 var(--s4); }
+.legend span { display: inline-flex; align-items: center; gap: var(--s2); }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend i.sq { border-radius: 2px; }
+.legend i.hollow { background: none !important; border: 2px solid var(--faint); width: 11px; height: 11px; }
+.legend i.ln { width: 16px; height: 3px; border-radius: 2px; }
+.stats { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s6); margin: 0 0 var(--s5); }
+.stat .v { font-size: var(--t-mid); font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+.stat .v .u { font-size: .58em; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+.stat .k { font-size: var(--t-micro); color: var(--ink-2); max-width: 26ch; margin-top: 2px; }
+.stat .d { font-size: var(--t-micro); color: var(--muted); }
+.kv { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s6); margin: 0 0 var(--s5); }
+.kv > div { min-width: 120px; }
+.kv .v { font-size: var(--t-mid); font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+.kv .v .u { font-size: .58em; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+.kv .k { font-size: var(--t-micro); color: var(--ink-2); max-width: 26ch; margin-top: 2px; }
+.fig { margin: 0 0 var(--s5); }
+.fig .v { font-size: var(--t-big); line-height: 1.02; font-weight: 600; letter-spacing: -.03em; }
+.fig .v .u { font-size: .42em; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 3px; }
+.fig .was { display: inline-block; font-size: var(--t-xs); color: var(--muted); margin-left: var(--s3); font-weight: 400; }
+.fig .k { color: var(--ink-2); font-size: var(--t-xs); line-height: 1.45; margin-top: var(--s2); max-width: 32ch; }
+.gain { font-weight: 600; color: var(--accent); }
+.loss { font-weight: 600; color: var(--stop-ink); }
+
+/* ---------- второй уровень: подробности по запросу ---------- */
+details.more { border-top: 1px solid var(--border); margin-top: var(--s5); }
+details.more summary, .facts-wrap summary, .gt-all summary {
+  cursor: pointer; list-style: none; color: var(--ink-2); font-size: var(--t-xs);
+  display: flex; align-items: center; gap: var(--s2); min-height: 40px; user-select: none;
+}
+details.more summary::-webkit-details-marker, .facts-wrap summary::-webkit-details-marker, .gt-all summary::-webkit-details-marker { display: none; }
+details.more summary::before, .facts-wrap summary::before, .gt-all summary::before {
+  content: ""; flex: none; width: 6px; height: 6px; margin: 0 2px;
+  border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(-45deg); transition: transform .15s;
+}
+details[open].more > summary::before, .facts-wrap[open] > summary::before, .gt-all[open] > summary::before { transform: rotate(45deg); }
+details.more summary:hover, .facts-wrap summary:hover, .gt-all summary:hover { color: var(--ink); }
+details.more .in { padding: 0 0 var(--s4) var(--s4); }
+.callout { border-left: 2px solid var(--axis); background: var(--surface-2); padding: var(--s4) var(--s5); border-radius: 0 8px 8px 0; font-size: var(--t-xs); line-height: 1.55; color: var(--ink-2); }
+.callout h4 { margin: 0 0 var(--s2); font-size: var(--t-xs); color: var(--ink); }
+.callout p { margin: 0 0 var(--s2); }
+.callout p:last-child { margin: 0; }
+.callout.info { border-left-color: var(--accent); }
+.callout b { color: var(--ink); }
+.limits { margin: 0; padding-left: var(--s4); font-size: var(--t-xs); color: var(--ink-2); line-height: 1.55; }
+.limits li + li { margin-top: var(--s2); }
+.limits b { color: var(--ink); }
+
+/* ---------- метки происхождения ---------- */
+.badges { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.badge {
+  display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-micro); font-weight: 500;
+  padding: 2px var(--s2); border-radius: 5px; border: 1px solid var(--border); color: var(--muted);
+  background: none; white-space: nowrap;
+}
+.badge.cav { border-color: color-mix(in srgb, var(--warn-ink) 40%, transparent); color: var(--warn-ink); background: var(--warn-soft); }
+.badge.bad { border-color: color-mix(in srgb, var(--stop) 40%, transparent); color: var(--stop-ink); background: var(--stop-soft); }
+.verdict { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-micro); font-weight: 500; padding: 2px var(--s2); border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
+.verdict.proved { color: var(--ink-2); }
+.verdict.caveat { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn-ink) 40%, transparent); }
+.verdict.weak { color: var(--stop-ink); border-color: color-mix(in srgb, var(--stop) 40%, transparent); }
+.pill { display: inline-block; padding: 2px var(--s2); border-radius: 999px; font-size: var(--t-micro); background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+
+/* ---------- реестр доказательств ---------- */
+.ledger-h { font-size: var(--t-h3); font-weight: 600; margin: 0; }
+.ledger-sub { color: var(--ink-2); font-size: var(--t-xs); margin: var(--s2) 0 0; max-width: 72ch; }
+.ledger { border-top: 1px solid var(--ink); margin-top: var(--s5); }
+.claim {
+  display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
+  gap: var(--s1) var(--s6); padding: var(--s5) 0; border-bottom: 1px solid var(--border); align-items: start;
+}
+.claim h3 { margin: 0 0 var(--s1); }
+.claim .cond { color: var(--ink-2); font-size: var(--t-xs); line-height: 1.5; margin: 0 0 var(--s3); }
+.claim .cl-txt { padding-top: 2px; }
+.claim .cl-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.claim .cl-tags .badges { margin: 0; }
+.res .v { font-size: var(--t-mid); line-height: 1.05; font-weight: 600; letter-spacing: -.02em; }
+.res .v .u { font-size: max(13px, .45em); font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 4px; }
+.res .v .of { font-size: max(13px, .5em); font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.facts-wrap { grid-column: 1 / -1; margin-top: var(--s2); }
+.facts-wrap > .cond { margin: var(--s2) 0 var(--s4); max-width: 84ch; color: var(--ink-2); font-size: var(--t-xs); line-height: 1.55; }
+.facts { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: var(--s2) var(--s5); margin: 0; font-size: var(--t-xs); line-height: 1.55; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; color: var(--ink-2); }
+.facts dd.meaning { color: var(--ink); }
+.facts a { color: var(--accent); text-underline-offset: 3px; }
+
+/* ---------- эталон организаторов: компактная сводка ---------- */
+.gt-summary { display: flex; flex-wrap: wrap; gap: var(--s5) var(--s7); align-items: flex-start; padding-bottom: var(--s5); border-bottom: 1px solid var(--border); }
+.gt-summary > div { min-width: 0; }
+.gt-summary strong { display: block; font-size: var(--t-big); font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+.gt-summary strong span { font-size: .45em; color: var(--muted); font-weight: 500; }
+.gt-summary p { margin: var(--s2) 0 0; color: var(--ink-2); font-size: var(--t-xs); max-width: 30ch; line-height: 1.45; }
+.gt-summary .gt-summary-note { color: var(--muted); font-size: var(--t-micro); max-width: 40ch; line-height: 1.55; align-self: center; }
+.gt-selector { display: flex; flex-wrap: wrap; gap: var(--s2); padding: var(--s5) 0 var(--s4); }
+.gt-object-btn {
+  display: flex; align-items: baseline; gap: var(--s2); padding: var(--s2) var(--s3);
+  color: var(--ink-2); border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+  cursor: pointer; font: 500 var(--t-xs) var(--font);
+}
+.gt-object-btn:hover { border-color: var(--accent); color: var(--ink); }
+.gt-object-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.gt-object-no { font-size: var(--t-body); font-weight: 600; }
+.gt-object-state { font-size: var(--t-micro); color: var(--muted); }
+.gt-miss .gt-object-state { color: var(--stop-ink); }
+.gt-match .gt-object-state { color: var(--ink-2); }
+.gt-object-detail { padding: var(--s5); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.gt-object-heading { display: flex; gap: var(--s4); align-items: flex-start; justify-content: space-between; margin-bottom: var(--s4); }
+.gt-object-heading h3 { margin: 0; font-size: var(--t-h3); }
+.gt-detail-label { display: block; color: var(--muted); font-size: var(--t-micro); margin-bottom: 2px; }
+.gt-verdict { flex: none; font-size: var(--t-micro); padding: 3px var(--s2); border-radius: 5px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
+.gt-verdict-miss { color: var(--stop-ink); border-color: color-mix(in srgb, var(--stop) 40%, transparent); }
+.gt-detail-grid { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s6); }
+.gt-detail-grid > div { min-width: 0; }
+.gt-detail-grid strong { display: block; font-size: var(--t-h3); font-weight: 600; line-height: 1.3; }
+.gt-detail-grid small { display: block; font-size: var(--t-micro); color: var(--ink-2); line-height: 1.45; margin-top: 2px; max-width: 34ch; }
+.gt-level { display: inline-flex; align-items: center; gap: var(--s1); }
+.gt-level svg { width: 14px; height: 14px; flex: none; }
+.gt-level-stop { color: var(--stop-ink); }
+.gt-level-caution { color: var(--warn-ink); }
+.gt-timeline-wrap { margin-top: var(--s5); }
+.gt-timeline { position: relative; height: 12px; border-radius: 3px; background: var(--grid); margin-top: var(--s2); overflow: hidden; }
+.gt-segment { position: absolute; top: 0; height: 100%; }
+.gt-segment-0 { background: var(--grid); }
+.gt-segment-1 { background: color-mix(in srgb, var(--warn-ink) 55%, transparent); }
+.gt-segment-2 { background: var(--stop); }
+.gt-timeline-key { display: flex; justify-content: space-between; gap: var(--s3); font-size: var(--t-micro); color: var(--muted); margin-top: var(--s2); }
+.gt-explanation { margin-top: var(--s4); }
+.gt-explanation p { font-size: var(--t-xs); color: var(--ink-2); line-height: 1.55; margin: var(--s2) 0 0; max-width: 84ch; }
+.gt-all { margin-top: var(--s4); }
+.gt-all .tbl-wrap { margin-top: var(--s3); }
+
+/* ---------- таблицы ---------- */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: var(--t-xs); }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: var(--t-micro); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--axis); vertical-align: bottom; }
+td { padding: var(--s3); border-bottom: 1px solid var(--grid); vertical-align: top; color: var(--ink-2); line-height: 1.5; }
+td.num { text-align: right; white-space: nowrap; }
+.matrix td.c { font-size: var(--t-micro); padding: var(--s2) var(--s1); }
+.matrix td:first-child { font-size: var(--t-micro); min-width: 140px; }
+.cell { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: 5px; white-space: nowrap; }
+.cell.ok { color: var(--ink-2); }
+.cell.warn { color: var(--warn-ink); background: var(--warn-soft); }
+.cell.unknown { color: var(--muted); }
+.cell svg { flex: none; }
+tr.contract td { border-top: 2px solid var(--axis); }
+.mtable td:first-child { font-weight: 600; white-space: nowrap; color: var(--ink); }
+.mtable td:nth-child(2) { color: var(--ink-2); }
+.mtable .viol { color: var(--ink); }
+.srcs td:first-child { font-weight: 600; white-space: nowrap; color: var(--ink); }
+.srcs code { word-break: break-all; }
+.conf { display: inline-flex; align-items: center; gap: var(--s1); white-space: nowrap; }
+.conf.high { color: var(--ink-2); } .conf.mid { color: var(--warn-ink); } .conf.low { color: var(--stop-ink); }
+.method dl { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--s3) var(--s5); margin: 0; font-size: var(--t-xs); }
+.method dt { color: var(--muted); }
+.method dd { margin: 0; min-width: 0; color: var(--ink-2); }
+.cmd { display: block; margin: var(--s1) 0; padding: var(--s2) var(--s3); background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+.src { font-size: var(--t-micro); color: var(--muted); }
+.flow text { font-size: 13px; }
+
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; max-width: 320px; padding: var(--s2) var(--s3); border-radius: 8px;
+  background: var(--ink); color: var(--page); font-size: var(--t-micro); line-height: 1.45; opacity: 0; transition: opacity .08s;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .22);
+}
+#tip.on { opacity: 1; }
+#tip b { font-weight: 600; }
+
+/* ---------- титульный экран со сценой ---------- */
+.demo-home .shell { display: block; }
+.demo-home .rail, .demo-home .appbar, .demo-home .presentation-footer { display: none; }
+.demo-home main { padding: 0; }
+#top { position: relative; height: 100svh; min-height: 620px; padding: 0; max-width: none; overflow: hidden; background: #070a0f; color: #eef2f6; }
+#hero-demo { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.hero-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, #070a0fee 0%, #070a0fab 22%, #070a0f00 52%), linear-gradient(0deg, #070a0f8f, transparent 16%); }
+.hero-brand { position: absolute; top: var(--s6); left: var(--s7); font-size: var(--t-sm); font-weight: 600; pointer-events: none; }
+.hero-brand span { display: block; font-size: var(--t-micro); color: #8c99a8; font-weight: 400; margin-top: var(--s1); }
+.hero-intro { position: absolute; left: var(--s7); top: 26%; width: min(470px, 42%); pointer-events: none; }
+.hero-intro h1 { font-size: clamp(2rem, 3vw, 2.9rem); line-height: 1.1; letter-spacing: -.03em; margin: 0 0 var(--s4); color: #fff; }
+.hero-intro p { color: #97a3b1; font-size: var(--t-xs); line-height: 1.55; margin: 0; max-width: 42ch; }
+.hero-intro p code { color: #c6d2de; }
+/* значимость найденного объекта: живое решение детектора по текущему кадру */
+.hero-find { display: flex; align-items: center; gap: var(--s4); margin: var(--s5) 0 var(--s5); pointer-events: none; }
+.hero-find .hf-num { font-size: clamp(2.6rem, 4.6vw, 3.9rem); font-weight: 600; letter-spacing: -.04em; line-height: .9; color: #fff; }
+.hero-find .hf-num small { font-size: .32em; font-weight: 500; color: #aab5c0; margin-left: .15em; }
+.hero-find .hf-txt { font-size: var(--t-micro); line-height: 1.45; color: #9aa7b5; min-width: 0; }
+.hero-find .hf-txt span { display: block; margin-top: 3px; }
+.hero-find .hf-txt b { display: block; color: #ff8d84; font-weight: 600; font-size: var(--t-sm); letter-spacing: .01em; }
+.hero-find[data-st="none"] .hf-txt b { color: #aab5c0; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4) var(--s5); margin-top: var(--s6); }
+.hero-action {
+  display: inline-flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s5);
+  border: 1px solid #ffffff38; border-radius: 8px; background: #18202ad9; color: #eef2f6;
+  font-size: var(--t-xs); font-weight: 500; text-decoration: none; pointer-events: auto;
+}
+.hero-action:hover { background: #22344a; border-color: #4f9bf0; }
+.hero-player { color: #9aa7b5; font-size: var(--t-xs); text-underline-offset: 4px; pointer-events: auto; }
+.hero-player:hover { color: #eef2f6; }
+.back-demo { display: inline-block; margin-top: var(--s5); font-size: var(--t-xs); color: var(--accent); }
+
+/* ---------- подвал навигации ---------- */
+.presentation-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  max-width: 1180px; margin: 0 auto; padding: var(--s4) var(--s7) var(--s5);
+  color: var(--muted); font-size: var(--t-micro);
+}
+.presentation-footer button {
+  background: var(--surface); color: var(--ink-2); font: 500 var(--t-micro) var(--font);
+  border: 1px solid var(--border); border-radius: 7px; padding: var(--s2) var(--s3); cursor: pointer;
+}
+.presentation-footer button:hover:not(:disabled) { color: var(--ink); background: var(--surface-2); }
+.presentation-footer button:disabled { opacity: .4; cursor: default; }
+.presenting .shell { grid-template-columns: minmax(0, 1fr); }
+.presenting .rail { display: none; }
+.presenting .presentation-footer { position: sticky; bottom: 0; background: var(--page); }
+#evidence .ledger-h, #evidence .ledger-sub { display: none; }
+#evidence .ledger { margin-top: 0; }
+
+@media (max-width: 1100px) {
+  section.slide { padding: var(--s6) var(--s5) var(--s7); }
+  .appbar { padding-inline: var(--s5); }
+  .presentation-footer { padding-inline: var(--s5); }
+  .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .claim { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: var(--s1) var(--s5); }
+}
+@media (max-width: 900px) {
+  .shell { display: block; }
+  nav.rail {
+    position: sticky; top: 0; z-index: 20; height: auto; flex-direction: row; align-items: center;
+    padding: var(--s2) var(--s4); gap: var(--s3); border-right: 0; border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .brand, .rail .foot, .rail .gl, .breadcrumb { display: none; }
+  .appbar { justify-content: flex-end; }
+  .rail ol { flex-direction: row; gap: var(--s1); }
+  .rail li { flex: none; }
+  .rail li a { white-space: nowrap; }
+  .appbar { height: 52px; }
+  .g2, .g3 { grid-template-columns: minmax(0, 1fr); }
+  .span2 { grid-column: auto; }
+  .board.r1, .board.r2 { grid-template-columns: minmax(0, 1fr); }
+  .m-cell { padding: var(--s5); }
+  .claim { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: var(--s2); }
+  .method dl { grid-template-columns: minmax(0, 1fr); gap: var(--s1); }
+  .method dd { margin-bottom: var(--s3); }
+  .gt-summary { gap: var(--s4) var(--s5); }
+}
+@media (max-width: 640px) {
+  section.slide { padding: var(--s5) var(--s4) var(--s6); }
+  .appbar, .presentation-footer { padding-inline: var(--s4); }
+  .panel { padding: var(--s4); }
+  .hero-brand { top: var(--s5); left: var(--s5); }
+  .hero-intro { left: var(--s5); top: 92px; width: calc(100% - var(--s5) * 2); }
+  .hero-intro h1 { font-size: 1.85rem; }
+  .hero-find { margin-top: var(--s4); }
+  .hero-actions { margin-top: var(--s4); }
+  .hero-shade { background: linear-gradient(180deg, #070a0fe6 0%, #070a0f96 40%, transparent 64%); }
+  .tech { gap: var(--s3) var(--s5); }
+  .m-lab { display: block; }
+  .m-lab i { display: block; margin-top: 2px; }
+}
+@media print {
+  .rail, .appbar, .presentation-footer { display: none !important; }
+  .shell { display: block; }
+  section.slide[hidden] { display: block !important; }
+  section.slide { break-before: page; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Разделы">
+    <a class="brand" href="#top"><svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="10" fill="#2a78d6"/><path d="M9 27V17a9 9 0 0 1 18 0v10M13 27l3-13m7 13-3-13M13 22h10M12 26h12" fill="none" stroke="#e5f7ef" stroke-width="1.6"/></svg><span>Контроль пути<small>3D-лидар · ЛЦТ 2026</small></span></a>
+    <ol id="nav"></ol>
+    <div class="foot">
+      <div class="cross"><a href="landing.html">О решении</a><a href="demo.html">Плеер записей</a></div>
+      <small id="stamp"></small>
+      <button class="ghost" id="theme" type="button">Тема: авто</button>
+    </div>
+  </nav>
+  <main id="main">
+    <div class="appbar"><div class="breadcrumb"><b id="current-section">Обзор</b></div><button class="present-button" id="present" type="button" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4m4 0h4v4M2 10v4h4m4 0h4v-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Режим защиты</span></button></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <section class="slide" id="top" data-group="Демонстрация" data-title="Демонстрация">
+      <iframe id="hero-demo" src="demo.html?embed=1&amp;clip=doubleT_obstacle&amp;loop=1&amp;start=10&amp;end=68" title="Зацикленная запись doubleT_obstacle: человек у рельсов" allow="autoplay"></iframe>
+      <div class="hero-shade" aria-hidden="true"></div>
+      <div class="hero-brand">Контроль пути <span>3D-лидар / ЛЦТ 2026</span></div>
+      <div class="hero-intro">
+        <h1>Человек на&nbsp;пути.<br>Найден и&nbsp;подтверждён.</h1>
+        <div class="hero-find" id="hero-find" data-st="none">
+          <div class="hf-num" id="hf-num">—</div>
+          <div class="hf-txt"><b id="hf-st">Кадр обрабатывается</b><span id="hf-sub">запись doubleT_obstacle, повтор по кругу</span></div>
+        </div>
+        <p>Решение и дистанция — из детектора, по кадрам записи. Подсветка обводит тот объект, который он подтвердил.</p>
+        <div class="hero-actions">
+          <a class="hero-action" href="#summary">Результаты испытаний <span aria-hidden="true">↗</span></a>
+          <a class="hero-player" href="demo.html">Полный плеер</a>
+          <a class="hero-player" href="landing.html">О решении</a>
+        </div>
+      </div>
+    </section>
+    <section class="slide" id="summary" data-group="Демонстрация" data-title="Результаты испытаний">
+      <header><h2>Результаты испытаний</h2><p class="lede">Два главных результата, два ограничения и технические показатели. Любое число открывает свой разбор.</p></header>
+      <div id="hero-sum"></div>
+      <a class="back-demo" href="#top">← К демонстрации</a>
+    </section>
+
+    <section class="slide" id="gt" data-group="Демонстрация" data-title="Эталон организаторов">
+      <header>
+        <h2>Эталон организаторов</h2>
+        <p class="lede">Десять объектов с известным ответом — единственная внешняя разметка в проекте. Выберите объект, чтобы увидеть разбор.</p>
+      </header>
+      <div class="panel" id="gt-objects"></div>
+    </section>
+    <section class="slide" id="range" data-group="Испытания" data-title="Дальность">
+      <header>
+        <h2>Дальность обнаружения</h2>
+        <p class="lede">Дистанция, на которой детектор впервые выдал СТОП синтетическому объекту на реальной записи. Исходная и итоговая версии — одним инструментом на одних окнах.</p>
+      </header>
+      <div class="grid">
+        <div class="panel" id="rg-scale"></div>
+        <div class="panel" id="rg-notes"></div>
+      </div>
+    </section>
+    <section class="slide" id="speed" data-group="Испытания" data-title="Скорость обработки">
+      <header>
+        <h2>Реальное время</h2>
+        <p class="lede">Лидар даёт 10 кадров в секунду — на кадр есть 100 мс. Главное здесь доля кадров, уложившихся в дедлайн, а не один p95.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel span2" id="s-budget"></div>
+        <div class="panel" id="s-parse"></div>
+        <div class="panel" id="s-limits"></div>
+      </div>
+    </section>
+    <section class="slide" id="fp" data-group="Испытания" data-title="Ложные тревоги">
+      <header>
+        <h2>Ложные СТОП на отложенной записи</h2>
+        <p class="lede">Запись <code>new_data</code> при подборе параметров не использовалась, препятствий на ней нет: любой СТОП здесь ложный.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel span2" id="f-main"></div>
+        <div class="panel span2" id="f-reconcile"></div>
+        <div class="panel" id="f-compare"></div>
+        <div class="panel" id="f-nature"></div>
+      </div>
+    </section>
+    <section class="slide" id="cont" data-group="Испытания" data-title="Устойчивость тревоги">
+      <header>
+        <h2>Непрерывность тревоги</h2>
+        <p class="lede">Пропадает ли СТОП, пока объект на пути. Это удержание уже поднятой тревоги, а не полнота обнаружения.</p>
+      </header>
+      <div class="grid">
+        <div class="panel" id="ct-real"></div>
+        <div class="panel" id="ct-approach"></div>
+        <div class="panel" id="ct-why"></div>
+      </div>
+    </section>
+    <section class="slide" id="limits" data-group="Проверка" data-title="Границы решения">
+      <header>
+        <h2>Границы решения</h2>
+        <p class="lede">Чего эти замеры не показывают. Список составлен по прогонам; ни один отрицательный результат не убран.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel" id="lim-cannot"></div>
+        <div class="panel" id="lim-data"></div>
+      </div>
+    </section>
+    <section class="slide" id="robust" data-group="Проверка" data-title="Инженерные проверки">
+      <header>
+        <h2>Инженерные проверки</h2>
+        <p class="lede">О качестве обнаружения не говорят: подтверждают, что переделка приёма ничего не сломала.</p>
+      </header>
+      <div class="grid g2">
+        <div class="panel" id="r-bit"></div>
+        <div class="panel" id="r-flow"></div>
+        <div class="panel span2" id="q-err"></div>
+        <div class="panel span2" id="r-matrix"></div>
+        <div class="panel span2"><h3>Контракт на входные данные</h3><p class="sub">Что обязательно требуется от поставщика облака, что нарушено в выданных записях и к чему это приводит в алгоритме. Подробно — <code>docs/input_format.md</code>.</p><div class="tbl-wrap" id="m-table"></div></div>
+      </div>
+    </section>
+    <section class="slide method" id="sources" data-group="Проверка" data-title="Источники данных">
+      <header>
+        <h2>Источники чисел</h2>
+        <p class="lede">Для каждого числа с первого экрана: данные, эталон, файл прогона и степень доверия.</p>
+      </header>
+      <div class="grid">
+        <div class="panel" id="src-table"></div>
+        <div class="panel" id="method-body"></div>
+      </div>
+    </section>
+    <section class="slide" id="evidence" data-group="Проверка" data-title="Реестр доказательств"><header><h2>Каждое число можно проверить</h2><p class="lede">Условия измерений, сравнение с исходной версией и границы выводов.</p></header>      <h2 class="ledger-h">Каждое число: на чём измерено и что из него не следует</h2>
+      <p class="ledger-sub">Слева — условия замера и статус, в середине — результат, справа — эталон, разница с прежней версией и границы вывода. Все значения посчитаны из файлов прогонов, не вписаны руками.</p>
+      <div class="ledger" id="ledger"></div>
+      <p class="note">Метки у чисел: <span class="badge">внешняя разметка</span> <span class="badge">отложенная запись</span> — происхождение данных; <span class="badge cav">синтетика</span> <span class="badge cav">настроено на этом бэге</span> <span class="badge cav">стационарная запись</span> <span class="badge cav">один стенд</span> — чем ограничен вывод. Подробно — в разделе «Источники».</p>
+</section>
+    <footer class="presentation-footer"><button id="prev-section" type="button">← Назад</button><span id="section-count"></span><button id="next-section" type="button">Далее →</button></footer>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+'use strict';
+const D = DATA || {};
+const Q = D.quality || {}, S = D.speed || {}, R = D.robust || {};
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+
+function num(v, d = 0) {
+  if (v == null || !isFinite(v)) return '—';
+  const s = Math.abs(v).toFixed(d).split('.');
+  s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '−' : '') + s.join(',');
+}
+const pct = (v, d = 1) => num(v, d) + ' %';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const BAGS = {
+  doubleT_obstacle: 'doubleT_obstacle', doubleT_platform: 'doubleT_platform', roundT_doubleT: 'roundT_doubleT',
+  roundT_pressureGate_roundT: 'roundT_pressureGate_roundT', roundT_squareT_pressureGate_squareT: 'roundT_squareT_pressureGate_squareT',
+  squareT_platform_squareT_switch: 'squareT_platform_squareT_switch', new_data: 'new_data',
+  'contract_v1/doubleT_platform': 'contract_v1 / doubleT_platform'
+};
+const bagName = b => BAGS[b] || b;
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+
+function s(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function t(parent, x, y, text, attrs = {}) { const e = s('text', { x, y, ...attrs }, parent); e.textContent = text; return e; }
+function svgIn(box, w, h, label) {
+  const g = s('svg', { class: 'chart', viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': label });
+  box.appendChild(g);
+  return g;
+}
+const lin = (d0, d1, r0, r1) => v => r0 + (v - d0) / (d1 - d0) * (r1 - r0);
+function head(box, title, sub) {
+  box.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = title; box.appendChild(h);
+  if (sub) { const p = document.createElement('p'); p.className = 'sub'; p.innerHTML = sub; box.appendChild(p); }
+}
+function legend(box, items) {
+  const d = document.createElement('div'); d.className = 'legend';
+  d.innerHTML = items.map(([cls, color, text]) => `<span><i class="${cls || ''}" style="background:${color}"></i>${text}</span>`).join('');
+  box.appendChild(d);
+}
+function stats(box, items) {
+  const d = document.createElement('div'); d.className = 'stats';
+  d.innerHTML = items.map(i => `<div class="stat"><div class="v">${i.v}${i.u ? `<span class="u">${i.u}</span>` : ''}</div>` +
+    `<div class="k">${i.k}</div>${i.d ? `<div class="d">${i.d}</div>` : ''}</div>`).join('');
+  box.appendChild(d);
+}
+function note(box, html) { const p = document.createElement('p'); p.className = 'note'; p.innerHTML = html; box.appendChild(p); }
+const W = box => Math.max(300, Math.round(box.clientWidth - (box.classList.contains('panel') ? parseFloat(getComputedStyle(box).paddingLeft) * 2 : 0)));
+const ICON = {
+  ok: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.4l2.6 2.6L11 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.8l5.6 10H1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 5.6v3M7 10.3v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  unknown: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  alarm: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.8 12H1.2z" fill="currentColor"/><path d="M8 6v3.4M8 11.4v.1" stroke="#1a0b0b" stroke-width="1.7" stroke-linecap="round"/></svg>'
+};
+
+const tip = $('#tip');
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.classList.add('on');
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  tip.style.left = Math.max(8, left) + 'px'; tip.style.top = Math.max(8, top) + 'px';
+}
+const hideTip = () => tip.classList.remove('on');
+document.addEventListener('pointermove', e => {
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (el) showTip(el.getAttribute('data-tip'), e.clientX, e.clientY);
+  else if (!e.target.closest || !e.target.closest('[data-tipzone]')) hideTip();
+});
+document.addEventListener('scroll', hideTip, { passive: true });
+
+/* ==============================================================  const avg = (a, k) => a.reduce((x, p) => x + p[k], 0) / (a.length || 1);
+  if (big.length) F.parse = { bigPy: avg(big, 'python'), bigCpp: avg(big, 'cpp'), smallPy: avg(small, 'python'), smallCpp: avg(small, 'cpp') };
+  return F;
+}
+let F = {};
+
+/* =====================================================================
+   Мини-графики для первого экрана
+   ===================================================================== */
+function miniRange(box, { was, now, max = 220 }) {
+  const w = W(box), h = 74, l = 4, r = 14, y = 44;
+  const g = svgIn(box, w, h, `Дальность: было ${num(was, 0)} м, стало ${num(now, 0)} м; ориентиры ТЗ 100 и 200 м`);
+  const x = lin(0, max, l, w - r);
+  s('rect', { x: x(0), y: y - 16, width: x(100) - x(0), height: 32, fill: 'var(--bad-bg)' }, g);
+  s('line', { x1: x(0), x2: x(max), y1: y, y2: y, class: 'base' }, g);
+  [[100, '100 м'], [200, '200 м']].forEach(([v, lb]) => {
+    s('line', { x1: x(v), x2: x(v), y1: 12, y2: y + 16, stroke: 'var(--ink-2)', 'stroke-dasharray': '3 3' }, g);
+    t(g, x(v), 9, lb, { 'text-anchor': 'middle', class: 'ink2 band-lbl' });
+  });
+  t(g, x(50), y + 30, 'меньше 100 м: плохо', { 'text-anchor': 'middle', class: 'band-lbl' });
+  if (was != null) {
+    s('line', { x1: x(was), x2: x(now), y1: y, y2: y, stroke: 'var(--now)', 'stroke-width': 3, 'stroke-opacity': .35 }, g);
+    s('circle', { cx: x(was), cy: y, r: 6, fill: 'var(--surface)', stroke: 'var(--was)', 'stroke-width': 2.5 }, g);
+    t(g, x(was), y + 22, `было ${num(was, 0)}`, { 'text-anchor': 'middle', class: 'ink2' });
+  }
+  s('circle', { cx: x(now), cy: y, r: 7.5, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+  t(g, x(now), y + 22, `${num(now, 0)} м`, { 'text-anchor': 'middle', class: 'ink b' });
+}
+
+// Итог по объектам эталона. Зелёный — ответ совпал с ожиданием организаторов,
+// красная обводка — промах (объект требовал СТОП и его не получил).
+function miniObjects(box) {
+  const w = W(box), h = 58, c = 22, gp = 5;
+  const g = svgIn(box, w, h, `Эталон организаторов: СТОП получили ${F.fo.inStop} из ${F.fo.inG.length} объектов, требующих СТОП; ${F.fo.outStop} из ${F.fo.outG.length} не требующих`);
+  const draw = (list, x0, want) => list.forEach((o, i) => {
+    const x = x0 + i * (c + gp), stop = o.level === 'stop', ok = want ? stop : !stop;
+    s('rect', { x, y: 4, width: c, height: c, rx: 4, fill: ok ? 'var(--good)' : 'var(--bad-bg)',
+      stroke: ok ? 'none' : 'var(--alarm)', 'stroke-width': 1.6,
+      'data-tip': `<b>Объект ${o.id}</b>: ${esc(o.name)}<br>требуется: ${want ? 'СТОП' : 'не СТОП'}<br>итог: ${o.level === 'stop' ? 'СТОП' : o.level === 'caution' ? 'ВНИМАНИЕ' : 'решения нет'}${ok ? '' : ' — промах'}` }, g);
+    t(g, x + c / 2, 19, o.id, { 'text-anchor': 'middle', style: `fill:${ok ? '#fff' : 'var(--bad-ink)'};font-size:11px;font-weight:600` });
+  });
+  draw(F.fo.inG, 0, true);
+  const x2 = F.fo.inG.length * (c + gp) + 22;
+  draw(F.fo.outG, x2, false);
+  t(g, 0, 46, `требуют СТОП: ${F.fo.inStop} попал, ${F.fo.inG.length - F.fo.inStop} ${plural(F.fo.inG.length - F.fo.inStop, 'промах', 'промаха', 'промахов')}`, { class: 'ink2' });
+  t(g, x2, 46, `не требуют: ${F.fo.outG.length - F.fo.outStop} верно`, { class: 'ink2' });
+}
+
+// Лента кадров. `first` — кадр первого подтверждения: слева от него знаменателя нет,
+// поэтому участок помечается отдельно, чтобы «191 из 191» не читалось как полный recall.
+function miniStrip(box, rows, n, first) {
+  const w = W(box), lw = 74, rh = 12, gap = 6, lab = first != null ? 13 : 0, h = rows.length * (rh + gap) + lab;
+  const g = svgIn(box, w, h, 'Кадры с тревогой у объекта по версиям');
+  const cw = (w - lw) / n;
+  rows.forEach(([name, vals, cls], r) => {
+    const y = r * (rh + gap);
+    t(g, 0, y + 10, name, { class: cls });
+    s('rect', { x: lw, y, width: w - lw, height: rh, fill: 'var(--grid)', rx: 2 }, g);
+    let i = 0;
+    while (i < n) {
+      if (!vals[i]) { i++; continue; }
+      let j = i; while (j < n && vals[j]) j++;
+      s('rect', { x: lw + i * cw, y, width: (j - i) * cw, height: rh, fill: 'var(--alarm)' }, g);
+      i = j;
+    }
+  });
+  if (first != null) {
+    const xf = lw + first * cw, yb = rows.length * (rh + gap);
+    s('rect', { x: lw, y: 0, width: first * cw, height: yb - gap, fill: 'var(--ink-2)', opacity: .12 }, g);
+    s('line', { x1: xf, x2: xf, y1: 0, y2: yb - gap + 2, stroke: 'var(--ink)', 'stroke-width': 1.5 }, g);
+    t(g, xf + 4, yb + 9, 'после первого подтверждения — знаменатель метрики', { class: 'band-lbl' });
+    t(g, lw, yb + 9, 'до', { class: 'band-lbl' });
+  }
+}
+
+function miniBudget(box, p50, p95) {
+  const w = W(box), h = 54, max = 120, y = 22;
+  const g = svgIn(box, w, h, `Задержка p50 ${num(p50, 0)} мс, p95 ${num(p95, 0)} мс при бюджете 100 мс`);
+  const x = lin(0, max, 2, w - 10);
+  s('rect', { x: x(0), y, width: x(max) - x(0), height: 12, rx: 3, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+  s('rect', { x: x(0), y, width: x(p95) - x(0), height: 12, rx: 3, fill: 'var(--now)' }, g);
+  s('line', { x1: x(p50), x2: x(p50), y1: y - 2, y2: y + 14, stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+  s('line', { x1: x(BUDGET_MS), x2: x(BUDGET_MS), y1: 4, y2: y + 20, stroke: 'var(--ink)', 'stroke-width': 1.5 }, g);
+  t(g, x(BUDGET_MS) - 5, 12, '100 мс: следующий кадр', { 'text-anchor': 'end', class: 'ink2 band-lbl' });
+  t(g, x(p50), y + 30, 'p50', { 'text-anchor': 'middle' });
+  t(g, x(p95), y + 30, 'p95', { 'text-anchor': 'middle' });
+}
+
+function miniMinutes(box, perMin) {
+  const w = W(box), h = 56, n = perMin.length, bw = w / n, max = Math.max(...perMin, 1);
+  const g = svgIn(box, w, h, 'Кадры СТОП по минутам записи new_data');
+  const y = lin(0, max, h - 14, 4);
+  perMin.forEach((c, i) => {
+    if (c) s('rect', { x: i * bw + 1, y: y(c), width: Math.max(1, bw - 2), height: y(0) - y(c), rx: 1.5, fill: 'var(--alarm)',
+      'data-tip': `<b>${i}–${i + 1} мин</b><br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} СТОП из 600` }, g);
+  });
+  s('line', { x1: 0, x2: w, y1: y(0), y2: y(0), class: 'base' }, g);
+  t(g, 0, h - 1, '0 мин'); t(g, w, h - 1, `${num(n, 0)} мин`, { 'text-anchor': 'end' });
+}
+
+/* ==============================================================    });
+  }
+  if (F.fo) {
+    const fo = F.fo;
+    rows.push({
+      id: 'gt', name: 'Объекты с известным ответом', verdict: 'caveat', badges: ['ext', 'tuned', 'small'],
+      cond: `Бэг организаторов <code>cloud_with_fake_obj</code>: 10 объектов, для каждого организаторы указали, должен ли быть СТОП. Единственная внешняя разметка — и те же данные, по которым подбиралась зона.`,
+      value: `${fo.inStop}`, of: ` / ${fo.inG.length}`, short: `Объектов эталона остановлено · ${fo.inG.length - fo.inStop} ${plural(fo.inG.length - fo.inStop, 'промах', 'промаха', 'промахов')}`,
+      mini: box => miniObjects(box),
+      facts: [
+        ['Эталон', `Список организаторов: СТОП — ${fo.inG.map(o => o.id).join(', ')}; не СТОП — ${fo.outG.map(o => o.id).join(', ')}. Версия до подбора под этот бэг (<code>97f7376</code>) — ${fo.baseIn} из ${fo.inG.length}.`],
+        ['Разница', `<span class="gain">+${fo.inStop - fo.baseIn}</span> ${plural(fo.inStop - fo.baseIn, 'объект', 'объекта', 'объектов')} без новых СТОП на объектах, которые его не требуют.`],
+        ['Промахи', `Объект 4 — предмет у самого края габарита, получил только ВНИМАНИЕ. Объект 10 — стержень 5 см со свода, решения нет вообще. ${fo.stopOutside != null && fo.frames ? `Кроме того, ${fo.stopOutside} ${plural(fo.stopOutside, 'кадр', 'кадра', 'кадров')} из ${num(fo.frames)} (${pct(100 * fo.stopOutside / fo.frames)}) — СТОП не на размеченном объекте.` : ''}`],
+        ['Чего не следует', `Это не accuracy и не независимая валидация: зона детектора подбиралась по этому же бэгу, а ${fo.inG.length + fo.outG.length} объектов — слишком мало, чтобы считать доли. Доля правильных ответов на данных, по которым настраивались, систематически завышена.`, 'meaning'],
+        ['Источник', `<code>fake_obj_fo_final.csv</code>, <code>fake_obj_fo_base.csv</code>; <a href="#gt">раздел «Эталон организаторов»</a>`]
+      ]
+    });
+  }
+  if (F.dl) {
+    const e = F.e2e, dl = F.dl;
+    rows.push({
+      id: 'speed', name: 'Выполнение дедлайна 100 мс', verdict: 'caveat', badges: ['run', 'bench'],
+      cond: `От публикации облака плеером до публикации результата, ROS 2 в Docker без сети, запись <code>${e.bag}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц, ${e.received} принято / ${e.processed} обработано.`,
+      value: pct(dl.hitPct, 1), short: `Кадров в дедлайне 100 мс · ${dl.over} не успели`,
+      mini: box => miniBudget(box, e.e2e_ms_p50, e.e2e_ms_p95),
+      facts: [
+        ['Эталон', `100 мс — период кадра при 10 Гц (Q&A 16.09), а не измеренное время прежней версии. Цель плана — задержка меньше 100 мс и не меньше 95 % обработанных кадров.`],
+        ['Разница', `Запас до следующего кадра — ${num(BUDGET_MS - e.e2e_ms_p95, 0)} мс на p95, ${num(BUDGET_MS - e.e2e_ms_p50, 0)} мс на медиане. ${F.parse ? `Отдельно измерен разбор облака: кадр 23 МБ в C++ — ${num(F.parse.bigCpp, 1)} мс против ${num(F.parse.bigPy, 1)} мс в Python, ×${num(F.parse.bigPy / F.parse.bigCpp, 1)} (только разбор, не весь конвейер).` : ''}`],
+        ['Чего не следует', `${dl.over} ${plural(dl.over, 'кадр', 'кадра', 'кадров')} дедлайн пропустили — «p95 ${num(e.e2e_ms_p95, 0)} мс» это не отменяет. Кадры 23 МБ (полный оборот) в бюджет не укладываются вовсе: ${S.e2e_big ? `p95 ${num(S.e2e_big.e2e_ms_p95, 0)} мс, обработано ${S.e2e_big.processed} из ${S.e2e_big.received}` : '—'}. Загрузка CPU/GPU не измерялась.`, 'meaning'],
+        ['Источник', `<code>docker/${e.bag}_e2e.json</code>, <code>check_preproc.json</code>; <a href="#speed">раздел «Реальное время»</a>`]
+      ]
+    });
+  }
+  if (F.nd) {
+    const nd = F.nd, perMin = nd.episodes / nd.minutes;
+    rows.push({
+      id: 'fp', name: 'Ложные СТОП на отложенной записи', verdict: 'weak', badges: ['held', 'single'],
+      cond: `Запись <code>new_data</code>, ${num(nd.minutes, 1)} мин, при подборе параметров не использовалась. Препятствий на ней нет, поэтому любой СТОП ложный.`,
+      value: pct(nd.pct), short: `Ложных СТОП на отложенной записи · ${num(nd.episodes)} эпизодов`,
+      mini: box => miniMinutes(box, nd.per_min),
+      facts: [
+        ['Эталон', `Допустимого уровня в ТЗ нет. Версия до подбора под эталон организаторов (<code>97f7376</code>) — ${F.ndBase != null ? pct(F.ndBase) : '—'} на той же записи.`],
+        ['Разница', `${F.ndBase != null ? `<b>−${num(F.ndBase - nd.pct, 1)} п. п.</b> — практически без улучшения.` : ''} На пустых записях, по которым подбирали параметры, доля снизилась с ${Q.empty ? pct(Q.empty.before) : '—'} до ${Q.empty ? pct(Q.empty.after) : '—'}, но на новых данных этот выигрыш не повторился.`],
+        ['Чего не следует', `Поезд получал бы ложный СТОП около ${num(perMin, 1)} ${plural(Math.round(perMin), 'раза', 'раз', 'раз')} в минуту — для эксплуатации это много. ${Q.selflabel ? `${Q.selflabel.false_proven} из ${Q.selflabel.episodes} таких треков доказанно ложные: поезд потом проехал это место.` : ''} Низкий показатель на эталоне организаторов это не отменяет: там размечено три объекта, здесь — ${num(nd.minutes, 1)} минуты записи целиком.`, 'meaning'],
+        ['Источник', `<code>${esc(nd.file || '')}</code>, <code>selflabel_nd_final.csv</code>; <a href="#fp">раздел «Ложные СТОП»</a>`]
+      ]
+    });
+  }
+  if (F.ob) {
+    const o = F.ob, dt = 0.1;
+    rows.push({
+      id: 'cont', name: 'Удержание подтверждённого СТОП', verdict: 'caveat', badges: ['stat', 'tuned'],
+      cond: `Запись <code>doubleT_obstacle</code>: поезд стоит, на пути в ${num(o.dist, 0)} м объект, ${o.n} ${plural(o.n, 'кадр', 'кадра', 'кадров')} (${num(o.n * dt, 1)} с). Считается только то, что после первого подтверждения СТОП не пропадает.`,
+      value: `${o.after.hit}`, of: ` / ${o.after.after}`, short: `Кадров после первого подтверждения · стоящий поезд`,
+      mini: box => miniStrip(box, [['исходная', Q.obstacle.before, 'ink2'], ['итоговая', Q.obstacle.after, 'ink b']], o.n, o.after.first),
+      facts: [
+        ['Эталон', `Объект на ${num(o.dist, 0)} м есть во всех кадрах: человек в кадрах 12–68 и мелкий предмет у рельса всю запись (описано в README и видно на картинках кадров 10, 60 и 110; покадровой разметки нет). Исходная версия — тревога в ${o.before.total} кадрах из ${o.n}.`],
+        ['Разница', `Самый длинный провал: <span class="gain">${o.after.longest} вместо ${o.before.longest} кадров</span> (${num(o.before.longest * dt, 1)} с без тревоги у исходной версии).`],
+        ['Чего не следует', `Это <b>не</b> recall и не «100 % обнаружения»: знаменатель — кадры после первого подтверждения, а первые ${o.after.first} кадров записи в него не входят. Поезд в записи стоит, объект неподвижен, запись использовалась при подборе параметров. При подъезде картина хуже: дальше 70 м СТОП временами сменяется на ВНИМАНИЕ.`, 'meaning'],
+        ['Источник', `<code>alarms_final.csv</code>, <code>alarms_A_base.csv</code>; <a href="#cont">раздел «Непрерывность СТОП»</a>`]
+      ]
+    });
+  }
+  const box = $('#ledger');
+  box.innerHTML = '';
+  rows.forEach(r => {
+    const el = document.createElement('article');
+    el.className = 'claim';
+    // Видно сразу: число, что это и одна оговорка. Условия замера, эталон и разбор —
+    // под раскрытием: на защите их читают по вопросу, а не подряд.
+    el.innerHTML = `<div class="res"><div class="v">${r.value}${r.unit ? `<span class="u">${r.unit}</span>` : ''}${r.of ? `<span class="of">${r.of}</span>` : ''}</div></div>
+      <div class="cl-txt"><h3>${r.name}</h3><p class="cond">${r.short}</p>
+        <div class="cl-tags">${verdict(r.verdict)}${r.badges ? badges(r.badges.slice(0, 1)) : ''}</div></div>
+      <details class="facts-wrap"><summary>условия замера, эталон, границы вывода</summary>
+        <p class="cond">${r.cond}</p>
+        <dl class="facts">${r.facts.map(([k, v, c]) => `<dt>${k}</dt><dd class="${c || ''}">${v}</dd>`).join('')}</dl></details>`;
+    box.appendChild(el);
+  });
+}
+
+/* =====================================================================
+   Главное: сводка результата. Порядок задан важностью для жюри:
+   дальность -> эталон -> дедлайн -> ложные СТОП (риск).
+   ===================================================================== */
+function heroSum(F) {
+  const box = $('#hero-sum');
+  if (!box) return;
+  const nd = F.nd, dl = F.dl, e = F.e2e, fo = F.fo, p = F.p170 ? F.p170.after : null;
+  const st = (Q.status || []).find(r => r.bag === 'new_data');
+
+  // Ранг 1 -- то, ради чего система существует: как далеко видит и совпадает ли с эталоном.
+  const lead = [];
+  if (p && p.median) lead.push({ href: 'range', tag: 'синтетический объект',
+    lab: 'Дальность первого СТОП', val: `${num(p.median, 0)}<small>м</small>`,
+    cap: 'Человек 1,7 м на пути, поезд едет к нему',
+    cond: `медиана ${p.n} окон движения, старт 170 м · исходная версия ${num(F.p170.before.median, 0)} м`,
+    flag: 'Объект вставлен в реальные кадры и поставлен на ось, найденную самим детектором: оценка оптимистична' });
+  if (fo) lead.push({ href: 'gt', tag: 'разметка организаторов',
+    lab: 'Объекты в габарите', val: `${fo.inStop}<span class="of"> / ${fo.inG.length}</span>`,
+    cap: 'Получили СТОП на единственной внешней разметке',
+    cond: `остальные два: ВНИМАНИЕ у края габарита и решения нет у стержня со свода · вне габарита ${fo.outStop} из ${fo.outG.length}`,
+    flag: 'Зона детектора подбиралась по этой же записи — это не независимая проверка' });
+
+  // Ранг 2 -- ограничения: реальное время и ложные тревоги.
+  const second = [];
+  if (e) second.push({ href: 'speed', tag: 'один стенд',
+    lab: 'Полная задержка, p95', val: `${num(e.e2e_ms_p95)}<small>мс</small>`,
+    cap: `Бюджет 100 мс — период кадра при 10 Гц`,
+    cond: `кадр 8 МБ, ROS 2 в Docker${dl ? ` · в дедлайн уложились ${pct(dl.hitPct, 1)} кадров` : ''}`,
+    flag: S.e2e_big ? `Кадры 23 МБ (полный оборот) в бюджет не укладываются: p95 ${num(S.e2e_big.e2e_ms_p95, 0)} мс` : null });
+  if (nd) second.push({ href: 'fp', tag: 'отложенная запись', stop: true,
+    lab: 'Ложные СТОП', val: `${num(nd.pct, 1)}<small>%</small>`,
+    cap: `Кадров записи ${num(nd.minutes, 1)} мин, препятствий на ней нет`,
+    cond: `${num(nd.episodes)} ${plural(nd.episodes, 'эпизод', 'эпизода', 'эпизодов')}, ≈${num(nd.episodes / nd.minutes, 1)} в минуту · медиана ${num(nd.distance_median, 0)} м`,
+    flag: 'Главное нерешённое место: для эксплуатации такая частота велика' });
+
+  const cell = i => `<a class="m-cell" href="#${i.href}">
+      <div class="m-lab">${i.lab}<i>${i.tag}</i></div>
+      <div class="m-val">${i.val}</div>
+      <div class="m-cap">${i.cap}</div>
+      <div class="m-cond">${i.cond}</div>
+      ${i.flag ? `<div class="m-flag${i.stop ? ' stop' : ''}">${i.flag}</div>` : ''}
+    </a>`;
+
+  // Ранг 3 -- технические показатели: читаются, но не спорят с главными.
+  const tech = [];
+  if (dl) tech.push([pct(dl.hitPct, 1), 'кадров в дедлайне 100 мс']);
+  if (Q.dist_err) tech.push([`${num(Q.dist_err.p95, 2)} м`, 'ошибка дистанции, p95']);
+  if (F.ob) tech.push([`${F.ob.after.hit} / ${F.ob.after.after}`, 'кадров СТОП после подтверждения']);
+  if (st) tech.push([pct(100 - st.unknown, 0), 'кадров с найденной осью пути']);
+  if (F.fo) tech.push([`${F.fo.outStop} / ${F.fo.outG.length}`, 'ложных СТОП на объектах вне габарита']);
+
+  box.innerHTML =
+    (lead.length ? `<div class="board r1">${lead.map(cell).join('')}</div>` : '') +
+    (second.length ? `<div class="board r2">${second.map(cell).join('')}</div>` : '') +
+    (tech.length ? `<div class="tech">${tech.map(([v, k]) => `<div><div class="tv">${v}</div><div class="tk">${k}</div></div>`).join('')}</div>` : '');
+}
+
+function heroGauge(box, now, was, max = 300) {
+  const w = W(box), h = 104, y = 58, l = 6, r = 8;
+  const g = svgIn(box, w, h, `Дальность первого СТОП ${num(now, 0)} м на шкале ТЗ: 100 м — хорошо, 200 м — очень хорошо, 300 м — отлично`);
+  const x = lin(0, max, l, w - r);
+  s('rect', { x: x(0), y: y - 8, width: x(max) - x(0), height: 16, rx: 8, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+  if (was != null) s('line', { x1: x(was), x2: x(now), y1: y, y2: y, stroke: 'var(--now)', 'stroke-width': 4, 'stroke-opacity': .3 }, g);
+  s('rect', { x: x(0), y: y - 8, width: x(now) - x(0), height: 16, rx: 8, fill: 'var(--now)' }, g);
+  [[100, 'хорошо'], [200, 'очень хорошо'], [300, 'отлично']].forEach(([v, lb]) => {
+    s('line', { x1: x(v), x2: x(v), y1: y - 18, y2: y + 18, stroke: 'var(--axis)', 'stroke-dasharray': '3 3' }, g);
+    t(g, x(v), y - 24, `${v} м`, { 'text-anchor': 'middle', class: 'band-lbl ink2' });
+    t(g, x(v), y + 31, lb, { 'text-anchor': 'middle', class: 'band-lbl' });
+  });
+  if (was != null) {
+    s('circle', { cx: x(was), cy: y, r: 5.5, fill: 'var(--surface)', stroke: 'var(--was)', 'stroke-width': 2.5,
+      'data-tip': `Исходная версия <b>${num(was, 0)} м</b>` }, g);
+  }
+  s('circle', { cx: x(now), cy: y, r: 9, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 3,
+    'data-tip': `Итоговая версия <b>${num(now, 0)} м</b> — шкала ТЗ §8.2` }, g);
+  t(g, x(0), 16, 'шкала ТЗ §8.2', { class: 'band-lbl' });
+}
+
+// плитка эталона: по клетке на объект, требующий СТОП; промахи обведены красным
+function vizObjects(box, fo) {
+  const n = fo.inG.length, c = 20, gp = 6, w = W(box), h = c + 4;
+  const g = svgIn(box, w, h, `СТОП получили ${fo.inStop} из ${n} объектов, требующих СТОП`);
+  fo.inG.forEach((o, i) => {
+    const stop = o.level === 'stop';
+    s('rect', { x: i * (c + gp), y: 2, width: c, height: c, rx: 4, fill: stop ? 'var(--good)' : 'var(--bad-bg)',
+      stroke: stop ? 'none' : 'var(--alarm)', 'stroke-width': 1.6,
+      'data-tip': `<b>Объект ${o.id}</b>: ${esc(o.name)}<br>требуется: СТОП<br>итог: ${stop ? 'СТОП' : o.level === 'caution' ? 'ВНИМАНИЕ — промах' : 'решения нет — промах'}` }, g);
+    t(g, i * (c + gp) + c / 2, 16, o.id, { 'text-anchor': 'middle', style: `fill:${stop ? '#fff' : 'var(--bad-ink)'};font-size:11px;font-weight:600` });
+  });
+}
+
+// плитка дедлайна: доля кадров в бюджете
+function vizLatency(box, e, dl) {
+  const w = W(box), h = 26, y = 4, bh = 12;
+  const g = svgIn(box, w, h, `${num(dl.hit)} кадров из ${num(dl.n)} уложились в 100 мс, ${dl.over} — нет`);
+  const x = lin(0, dl.n, 0, w);
+  s('rect', { x: 0, y, width: w, height: bh, rx: 3, fill: 'var(--alarm)' }, g);
+  s('rect', { x: 0, y, width: Math.max(2, x(dl.hit)), height: bh, rx: 3, fill: 'var(--now)',
+    'data-tip': `<b>${num(dl.hit)}</b> из ${num(dl.n)} кадров ≤ 100 мс` }, g);
+  s('rect', { x: x(dl.hit), y, width: w - x(dl.hit), height: bh, class: 'hit',
+    'data-tip': `<b>${dl.over}</b> ${plural(dl.over, 'кадр', 'кадра', 'кадров')} > 100 мс` }, g);
+  t(g, 0, h - 1, `≤100 мс: ${num(dl.hit)}`, { class: 'band-lbl ink2' });
+  t(g, w, h - 1, `>100 мс: ${dl.over}`, { 'text-anchor': 'end', class: 'band-lbl', style: 'fill:var(--bad-ink)' });
+}
+
+// плитка риска: кадры СТОП по минутам записи new_data
+function vizMinutes(box, perMin) {
+  const w = W(box), h = 40, n = perMin.length, bw = w / n, max = Math.max(...perMin, 1);
+  const g = svgIn(box, w, h, 'Кадры СТОП по минутам отложенной записи');
+  const y = lin(0, max, h - 12, 2);
+  perMin.forEach((c, i) => {
+    if (c) s('rect', { x: i * bw + .5, y: y(c), width: Math.max(1, bw - 1.5), height: y(0) - y(c), rx: 1.5, fill: 'var(--alarm)' }, g);
+    s('rect', { x: i * bw, y: 0, width: bw, height: h - 12, class: 'hit',
+      'data-tip': `<b>${i}–${i + 1} мин</b><br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} СТОП из 600` }, g);
+  });
+  s('line', { x1: 0, x2: w, y1: y(0), y2: y(0), class: 'base' }, g);
+  t(g, 0, h - 1, '0 мин', { class: 'band-lbl' });
+  t(g, w, h - 1, `${num(n, 0)} мин`, { 'text-anchor': 'end', class: 'band-lbl' });
+}
+
+/* =====================================================================
+   Дальность
+   ===================================================================== */
+function rgScale() {
+  const box = $('#rg-scale'), ap = Q.approach;
+  if (!ap) return box.remove();
+  const a = F.p170 ? F.p170.after : null, b = F.p170 ? F.p170.before : null;
+  head(box, 'Первый СТОП при подъезде',
+    `Точка — окно движения, крупная метка — медиана. Поезд слева, объект появляется на отметке «старт». ${ap.windows} окон, 10–15 м/с.`);
+  legend(box, [['hollow', 'transparent', 'исходная версия'], ['', 'var(--now)', 'итоговая версия']]);
+  const shapes = ['человек стоит', 'куб 0.4', 'человек лежит'], starts = [170, 220].filter(st => ap.starts.includes(st));
+  const w = W(box), narrow = w < 640, lw = narrow ? 104 : 150, rw = narrow ? 0 : 150, rh = 34, gh = 30, top = 22, max = 230;
+  const x = lin(0, max, lw, w - rw - 10);
+  const h = top + starts.length * (gh + shapes.length * rh) + 34;
+  const g = svgIn(box, w, h, 'Дальность первого СТОП по фигурам, старт 170 и 220 м');
+  [[100, 'хорошо по ТЗ'], [200, 'очень хорошо']].forEach(([v, lb]) => {
+    s('line', { x1: x(v), x2: x(v), y1: top - 8, y2: h - 30, stroke: 'var(--ink-2)', 'stroke-dasharray': '3 3' }, g);
+    t(g, x(v), top - 12, lb, { 'text-anchor': 'middle', class: 'ink2' });
+  });
+  [0, 50, 150].forEach(v => s('line', { x1: x(v), x2: x(v), y1: top, y2: h - 30, class: 'gridl' }, g));
+  [0, 50, 100, 150, 200].forEach(v => t(g, x(v), h - 12, v, { 'text-anchor': 'middle' }));
+  t(g, x(max), h - 12, 'м', { 'text-anchor': 'end' });
+  t(g, lw - 12, h - 12, 'поезд', { 'text-anchor': 'end', class: 'ink2' });
+  let y = top;
+  starts.forEach(st => {
+    t(g, 0, y + 18, `старт ${st} м`, { class: 'ink b' });
+    s('line', { x1: x(st), x2: x(st), y1: y + 4, y2: y + gh + shapes.length * rh - 4, stroke: 'var(--ink)', 'stroke-width': 2 }, g);
+    if (st === starts[0]) t(g, x(st) - 5, y + 16, 'объект появляется', { class: 'ink2 band-lbl', 'text-anchor': 'end' });
+    y += gh;
+    shapes.forEach(sh => {
+      const c = ap.cells.find(c2 => c2.shape === sh && c2.start === st);
+      if (!c) return;
+      const cy = y + rh / 2, bb = c.before, aa = c.after;
+      t(g, lw - 12, cy + 4, sname(sh), { class: 'ink2', 'text-anchor': 'end' });
+      s('line', { x1: x(0), x2: x(st), y1: cy, y2: cy, stroke: 'var(--grid)', 'stroke-width': 1 }, g);
+      (bb.values || []).forEach(v => s('circle', { cx: x(v), cy: cy - 5, r: 2.6, fill: 'none', stroke: 'var(--was)', 'stroke-width': 1.3 }, g));
+      (aa.values || []).forEach(v => s('circle', { cx: x(v), cy: cy + 5, r: 2.6, fill: 'var(--now)', 'fill-opacity': .45 }, g));
+      if (bb.median && aa.median) s('line', { x1: x(bb.median), x2: x(aa.median), y1: cy, y2: cy, stroke: 'var(--now)', 'stroke-width': 2.5, 'stroke-opacity': .35 }, g);
+      if (bb.median) s('circle', { cx: x(bb.median), cy, r: 6, fill: 'var(--surface)', stroke: 'var(--was)', 'stroke-width': 2.5 }, g);
+      if (aa.median) s('circle', { cx: x(aa.median), cy, r: 7, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+      const lbl = `${bb.median ? num(bb.median, 0) : 'не найден'} → ${aa.median ? num(aa.median, 0) + ' м' : 'не найден'}`;
+      const sub = `${bb.found}/${bb.n} → ${aa.found}/${aa.n} окон`;
+      if (!narrow) { t(g, w - rw + 6, cy, lbl, { class: 'ink b' }); t(g, w - rw + 6, cy + 14, sub, { class: 'band-lbl' }); }
+      else if (aa.median) t(g, x(aa.median) - 10, cy - 9, num(aa.median, 0), { class: 'ink b', 'text-anchor': 'end' });
+      const tipTxt = `<b>${sname(sh)}, старт ${st} м</b><br>исходная: ${bb.median ? `медиана ${num(bb.median, 0)} м` : 'не найден'}, ${bb.found} из ${bb.n} окон` +
+        `<br>итоговая: ${aa.median ? `медиана ${num(aa.median, 0)} м` : 'не найден'}, ${aa.found} из ${aa.n} окон` +
+        (aa.median ? `<br>при 85 км/ч — ${num(aa.median / V85, 1)} с до объекта` : '');
+      s('rect', { x: 0, y, width: w, height: rh, class: 'hit', 'data-tip': tipTxt }, g);
+      y += rh;
+    });
+  });
+  if (a && b) {
+    const kv = document.createElement('div'); kv.className = 'kv';
+    kv.innerHTML = [
+      [`+${num(Math.round(a.median) - Math.round(b.median), 0)}`, 'м', 'человек, старт 170 м: медиана итоговой версии минус исходной'],
+      [F.p220 ? `${F.p220.after.found} из ${F.p220.after.n}` : '—', '', 'окон со старта 220 м, где человек найден']
+    ].map(([v, u, k]) => `<div><div class="v">${v}${u ? `<span class="u">${u}</span>` : ''}</div><div class="k">${k}</div></div>`).join('');
+    box.insertBefore(kv, box.querySelector('.legend'));
+  }
+}
+
+function rgNotes() {
+  const box = $('#rg-notes'), a = F.p170 ? F.p170.after : null;
+  if (!a) return box.remove();
+  head(box, 'Что из этого следует и чего не следует');
+  box.insertAdjacentHTML('beforeend', `<ul class="limits">
+    <li><b>По шкале ТЗ</b> ${num(a.median, 0)} м — между «хорошо» (100 м) и «очень хорошо» (200 м). 300 м не достигнуто: паспортная дальность лидара — 200 м при отражении 10 %, а со старта 220 м человек найден только в ${F.p220 ? F.p220.after.found : '—'} из ${F.p220 ? F.p220.after.n : '—'} окон.</li>
+    <li><b>Время на реакцию.</b> Максимальная скорость по Q&A — 80 км/ч, закладываться на 85 км/ч (23,6 м/с, 2,3 м за кадр). ${num(a.median, 0)} м при этой скорости — ${num(a.median / V85, 1)} с. Это арифметика, а не вывод о безопасности.</li>
+    <li><b>Достаточность для торможения не доказана.</b> Тормозной путь и решение о торможении постановщик вынес за рамки задачи (Q&A 16.09), тормозных характеристик состава в материалах нет.</li>
+    <li><b>Старт 170 м ограничивает замер сверху.</b> В одном окне первый СТОП — ${num(Math.max(...a.values), 0)} м, то есть сразу после появления объекта. Настоящая дальность там может быть больше.</li>
+    <li><b>Оценка оптимистична.</b> Объект синтетический и ставится на ось, найденную самим детектором: ошибка оси в эту оценку не попадает. ${Q.approach.windows} окон движения — маленькая выборка. Реальных препятствий при движущемся поезде в данных нет.</li>
+    <li><b>Относительно видимости.</b> Организаторы просили мерить дальность относительно видимой длины пути. Для объектов их бэга это сделано в разделе «Эталон организаторов».</li>
+  </ul>`);
+}
+
+/* =====================================================================
+   Эталон организаторов
+   ===================================================================== */
+// Retain the selected scenario when charts redraw after a resize or theme change.
+let selectedGtObjectId = 1;
+function gtObjects() {
+  const box = $('#gt-objects'), fo = D.fake_obj;
+  if (!box) return;
+  if (!fo || !Array.isArray(fo.objects) || !fo.objects.length) {
+    box.innerHTML = '<p class="sub">Результатов прогона по эталону нет.</p>';
+    return;
+  }
+  const objects = [...fo.objects].sort((a, b) => a.id - b.id);
+  const selected = objects.find(o => o.id === selectedGtObjectId) || objects[0];
+  selectedGtObjectId = selected.id;
+  const inGauge = o => o.expect === 'stop';
+  const matched = o => inGauge(o) ? o.level === 'stop' : o.level !== 'stop';
+  const label = l => l === 'stop' ? 'СТОП' : l === 'caution' ? 'ВНИМАНИЕ' : 'решения нет';
+  const inG = objects.filter(inGauge), outG = objects.filter(o => !inGauge(o));
+  const inHits = inG.filter(o => o.level === 'stop').length;
+  const outStops = outG.filter(o => o.level === 'stop').length;
+  const share = selected.stop_share == null ? null : Math.max(0, Math.min(1, selected.stop_share));
+
+  // Полоса кадров -- деталь разбора, а не первый экран: она уходит во второй уровень.
+  let timeline = '';
+  const track = fo.tracks && fo.tracks[selected.id];
+  if (track && track.length) {
+    const first = track[0][0], last = track[track.length - 1][0], span = last - first + 1;
+    const runs = [];
+    track.forEach(pt => {
+      const prev = runs[runs.length - 1];
+      if (prev && prev.level === pt[2] && prev.end + 1 === pt[0]) prev.end = pt[0];
+      else runs.push({ start: pt[0], end: pt[0], level: pt[2] });
+    });
+    const name = l => l === 2 ? 'СТОП' : l === 1 ? 'ВНИМАНИЕ' : 'нет совпавшего обнаружения';
+    timeline = `<div class="gt-timeline-wrap"><div class="gt-detail-label">Решение кадра на дистанции объекта, кадры ${first}–${last}</div>
+      <div class="gt-timeline" role="img" aria-label="Решения по кадрам ${first}–${last}">${runs.map(r =>
+        `<span class="gt-segment gt-segment-${r.level}" style="left:${100 * (r.start - first) / span}%;width:${100 * (r.end - r.start + 1) / span}%" title="Кадры ${r.start}–${r.end}: ${name(r.level)}"></span>`).join('')}</div>
+      <div class="gt-timeline-key"><span>СТОП</span><span>ВНИМАНИЕ</span><span>нет совпавшего обнаружения</span></div>
+      <p class="note">Дистанция объекта сопоставлена с ближайшим решением кадра (±5 м). Устойчивость СТОП считается по другому ряду — по всем обнаружениям объекта.</p></div>`;
+  }
+
+  box.innerHTML = `
+    <div class="gt-summary">
+      <div><strong>${inHits}<span> / ${inG.length}</span></strong><p>объектов в габарите получили СТОП</p></div>
+      <div><strong>${outStops}<span> / ${outG.length}</span></strong><p>объектов вне габарита получили СТОП</p></div>
+      <p class="gt-summary-note">Разметка организаторов, ${objects.length} объектов. Зона детектора подбиралась на этой же записи, поэтому доля правильных ответов здесь завышена.</p>
+    </div>
+    <div class="gt-selector" role="group" aria-label="Объект для разбора">${objects.map(o =>
+      `<button type="button" class="gt-object-btn ${matched(o) ? 'gt-match' : 'gt-miss'}" data-object-id="${o.id}" aria-pressed="${o.id === selected.id}" aria-controls="gt-object-detail" aria-label="Объект ${o.id}: ${esc(o.name)}, ${matched(o) ? 'совпал с эталоном' : 'не совпал с эталоном'}"><span class="gt-object-no">${String(o.id).padStart(2, '0')}</span>${matched(o) ? '' : '<span class="gt-object-state">промах</span>'}</button>`).join('')}</div>
+    <div id="gt-object-detail" class="gt-object-detail" aria-live="polite" aria-atomic="true">
+      <div class="gt-object-heading">
+        <div><span class="gt-detail-label">Объект ${String(selected.id).padStart(2, '0')} · ожидался ${inGauge(selected) ? 'СТОП' : 'не СТОП'}</span><h3>${esc(selected.name)}</h3></div>
+        <span class="gt-verdict ${matched(selected) ? '' : 'gt-verdict-miss'}">${matched(selected) ? 'совпал с эталоном' : 'расхождение с эталоном'}</span>
+      </div>
+      <div class="gt-detail-grid">
+        <div><span class="gt-detail-label">Решение</span><strong class="gt-level gt-level-${esc(selected.level)}">${label(selected.level)}</strong></div>
+        <div><span class="gt-detail-label">Первый СТОП</span><strong>${selected.first_stop_m == null ? '—' : num(selected.first_stop_m) + ' м'}</strong></div>
+        <div><span class="gt-detail-label">Доля кадров СТОП</span><strong>${share == null ? '—' : pct(100 * share, 0)}</strong><small>от первого СТОП до проезда объекта</small></div>
+      </div>
+      <div class="gt-explanation"><p>${selected.why ? esc(selected.why)
+        : inGauge(selected) ? 'Ожидаемый СТОП получен. Дальность первого решения и доля последующих кадров — выше.'
+        : 'СТОП не поднят, как и требуется по эталону: объект виден детектору, но вне зоны проверки.'}</p></div>
+      <details class="more"><summary>Кадры этого объекта и все ${objects.length} объектов</summary><div class="in">
+        ${timeline}
+        <div class="tbl-wrap"><table><thead><tr><th>№ / объект</th><th>Ожидание</th><th>Решение</th><th class="num">Первый СТОП</th><th class="num">Доля СТОП</th></tr></thead><tbody>${objects.map(o =>
+          `<tr><td><b>${o.id}.</b> ${esc(o.name)}</td><td>${inGauge(o) ? 'СТОП' : 'не СТОП'}</td><td>${label(o.level)}</td><td class="num">${o.first_stop_m == null ? '—' : num(o.first_stop_m) + ' м'}</td><td class="num">${o.stop_share == null ? '—' : pct(100 * o.stop_share, 0)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="note">Эталон: <code>evaluation/reference/cloud_with_fake_obj/objects.yaml</code>. Совпадение — наличие ожидаемого уровня хотя бы на части записи.${fo.stop_outside == null ? '' : ` СТОП вне окон размеченных объектов на этой записи: ${num(fo.stop_outside)} кадров.`}</p>
+      </div></details>
+    </div>`;
+  box.querySelectorAll('[data-object-id]').forEach(btn => btn.addEventListener('click', () => {
+    selectedGtObjectId = Number(btn.dataset.objectId);
+    gtObjects();
+    box.querySelector(`[data-object-id="${selectedGtObjectId}"]`).focus({ preventScroll: true });
+  }));
+}
+
+function ctReal() {
+  const box = $('#ct-real'), ob = Q.obstacle;
+  if (!ob || !F.ob) return box.remove();
+  const o = F.ob, n = o.n;
+  head(box, `Удержание СТОП: ${o.after.hit} из ${o.after.after} кадров`,
+    `Запись <code>doubleT_obstacle</code>, поезд стоит, клетка — кадр. Первые ${o.after.first} ${plural(o.after.first, 'кадр', 'кадра', 'кадров')} уходят на поиск оси и <b>в знаменатель не входят</b>: это удержание тревоги, не recall.`);
+  legend(box, [['sq', 'var(--ink-2)', 'объект на пути'], ['sq', 'var(--alarm)', 'СТОП'], ['sq', 'var(--grid)', 'СТОП нет']]);
+  const w = W(box), lw = w < 560 ? 96 : 190, rh = 22, gap = 10, cw = (w - lw) / n;
+  const rows = [['объект на пути', new Array(n).fill(1), 'var(--ink-2)', 'ink2'], ['исходная, ae38df6', ob.before, 'var(--alarm)', 'ink2'], ['итоговая', ob.after, 'var(--alarm)', 'ink b']];
+  const h = rows.length * (rh + gap) + 22;
+  const g = svgIn(box, w, h, 'Кадры с тревогой у объекта: эталон, исходная и итоговая версии');
+  rows.forEach(([name, vals, col, cls], r) => {
+    const y = r * (rh + gap);
+    t(g, 0, y + 15, name, { class: cls });
+    s('rect', { x: lw, y, width: w - lw, height: rh, fill: 'var(--grid)', rx: 2 }, g);
+    let i = 0;
+    while (i < n) {
+      if (!vals[i]) { i++; continue; }
+      let j = i; while (j < n && vals[j]) j++;
+      s('rect', { x: lw + i * cw, y, width: (j - i) * cw, height: rh, fill: col, opacity: r ? 1 : .5 }, g);
+      i = j;
+    }
+    for (let k = 0; k < n; k++) s('rect', { x: lw + k * cw, y, width: cw, height: rh, class: 'hit',
+      'data-tip': `<b>Кадр ${k}</b>, ${num(k / 10, 1)} с<br>${name}: ${r === 0 ? 'объект на пути' : vals[k] ? 'СТОП' : 'СТОП нет'}` }, g);
+  });
+  // граница первого подтверждения: слева от неё кадры в знаменатель метрики не входят
+  const yb = rows.length * (rh + gap) - gap;
+  s('rect', { x: lw, y: 0, width: o.after.first * cw, height: yb, fill: 'var(--ink-2)', opacity: .1 }, g);
+  s('line', { x1: lw + o.after.first * cw, x2: lw + o.after.first * cw, y1: 0, y2: yb, stroke: 'var(--ink)', 'stroke-width': 1.5 }, g);
+  const ya = rows.length * (rh + gap) + 10;
+  t(g, lw + o.after.first * cw + 5, 12, '↑ первое подтверждение', { class: 'band-lbl ink2' });
+  for (let i = 0; i <= n; i += 50) t(g, lw + Math.min(i, n - 1) * cw, ya, `${num(i / 10, 0)} с`, { 'text-anchor': 'middle' });
+  stats(box, [
+    { v: `${o.after.hit}/${o.after.after}`, k: 'кадров СТОП после первого подтверждения', d: `исходная: ${o.before.hit}/${o.before.after}` },
+    { v: o.after.longest, k: 'самый длинный провал, кадров', d: `исходная: ${o.before.longest} (${num(o.before.longest / 10, 1)} с)` },
+    { v: num(o.after.first / 10, 1), u: 'с', k: 'от начала записи до первого СТОП', d: 'детектор стартует с нуля' }
+  ]);
+  note(box, 'Запись использовалась при подборе параметров, поезд в ней стоит, покадровой разметки нет: эталон «объект на пути во всех кадрах» взят из описания записи и картинок кадров 10, 60 и 110.');
+}
+
+function ctApproach() {
+  const box = $('#ct-approach'), tr = (Q.trace || []).filter(x => x.shape === 'человек стоит' && x.start_m === 170), st = F.trP;
+  if (!tr.length || !st) return box.remove();
+  const near = st.bands[st.bands.length - 1];
+  head(box, `При подъезде СТОП держится в ${pct(100 * st.S / st.frames, 0)} кадров${near.n && !near.longest ? `, ближе ${near.hi} м — без провалов` : ''}`,
+    `Строка — окно движения, по горизонтали — дистанция до объекта, поезд приближается слева направо.`);
+  legend(box, [['sq', 'var(--alarm)', 'СТОП'], ['sq', 'var(--warn)', 'ВНИМАНИЕ: за концом оси пути или без подтверждения'], ['sq', 'var(--grid)', 'объект не найден']]);
+  const w = W(box), lw = w < 560 ? 70 : 170, rh = 16, gap = 7, max = 172, min = 0;
+  const x = lin(max, min, lw, w - 8);
+  const h = (tr.length + 1) * (rh + gap) + 26;
+  const g = svgIn(box, w, h, 'Решение детектора по кадрам подъезда к человеку, по окнам движения');
+  const col = { S: 'var(--alarm)', B: 'var(--warn)', C: 'var(--warn-soft)', N: 'var(--grid)' };
+  const name = { S: 'СТОП', B: 'виден, за концом оси — ВНИМАНИЕ', C: 'ВНИМАНИЕ, копит свидетельство', N: 'не найден' };
+  [150, 100, 50].forEach(v => s('line', { x1: x(v), x2: x(v), y1: 0, y2: h - 22, class: 'gridl' }, g));
+  t(g, 0, 12, 'объект на пути', { class: 'ink2' });
+  s('rect', { x: x(170), y: 0, width: x(Math.min(...tr.map(q => q.truth_m[q.truth_m.length - 1]))) - x(170), height: rh, fill: 'var(--ink-2)', opacity: .5, rx: 2 }, g);
+  tr.forEach((q, r) => {
+    const y = (r + 1) * (rh + gap);
+    t(g, 0, y + 12, `окно ${r + 1}`, { class: 'ink2' });
+    q.truth_m.forEach((d, i) => {
+      const d2 = i + 1 < q.truth_m.length ? q.truth_m[i + 1] : d - (q.truth_m[i - 1] - d || 1);
+      const c = q.cat[i];
+      s('rect', { x: x(d), y, width: Math.max(1, x(d2) - x(d) + .4), height: rh, fill: col[c],
+        'data-tip': `<b>${num(d, 1)} м до объекта</b><br>${name[c]}${q.path_m[i] != null ? `<br>ось пути в этом кадре — до ${num(q.path_m[i], 0)} м` : ''}${q.reason[i] === 'edge_line' ? '<br>объект принят за продольную конструкцию' : ''}` }, g);
+    });
+  });
+  [170, 150, 100, 50, 0].forEach(v => t(g, x(v), h - 6, v, { 'text-anchor': 'middle' }));
+  t(g, lw - 8, h - 6, 'м', { 'text-anchor': 'end' });
+  let tb = '<div class="tbl-wrap"><table><thead><tr><th>Дистанция до объекта</th><th class="num">Кадров</th><th class="num">СТОП</th><th class="num">Объект виден</th><th class="num">Самый длинный провал СТОП</th></tr></thead><tbody>';
+  st.bands.forEach(b => {
+    if (!b.n) return;
+    tb += `<tr><td>${b.lo ? `${b.hi}–${b.lo} м` : `ближе ${b.hi} м`}</td><td class="num">${b.n}</td><td class="num">${pct(100 * b.S / b.n, 0)}</td><td class="num">${pct(100 * b.seen / b.n, 0)}</td><td class="num">${b.longest} ${plural(b.longest, 'кадр', 'кадра', 'кадров')} (${num(b.longest / 10, 1)} с)</td></tr>`;
+  });
+  tb += '</tbody></table></div>';
+  box.insertAdjacentHTML('beforeend', tb);
+  note(box, `Считаются кадры после первого СТОП в каждом окне, ${st.trials} окон. «Объект виден» — детектор нашёл объект на его месте с любым уровнем, то есть система не сообщала «путь свободен».`);
+}
+
+function ctWhy() {
+  const box = $('#ct-why'), st = F.trP;
+  if (!st) return box.remove();
+  const bPct = 100 * st.B / st.miss;
+  box.classList.add('callout');
+  box.innerHTML = `<h4>Почему СТОП пропадает, хотя объект на месте</h4>
+    <p>Из ${st.miss} кадров без СТОП после первого подтверждения в <b>${st.B} (${pct(bPct, 0)})</b> объект найден и подтверждён, но лежит дальше конца оси пути, построенной в этом кадре. Ещё ${st.C} — трек перезапустился и заново копит свидетельство, ${st.N} — объект не найден${st.edge ? ` (из них ${st.edge} — принят за продольную конструкцию у края коридора)` : ''}.</p>
+    <p><b>Механизм.</b> Рельсы видны до ~40 м, дальше ось пути продлевается по стенам тоннеля, и её дальность от кадра к кадру скачет — в этих подъездах от ${num(st.pathMin, 0)} до ${num(st.pathMax, 0)} м. За концом известной оси СТОП не поднимается, только ВНИМАНИЕ (<code>path_margin = 0</code>): там коридор — догадка, и раньше на этот участок приходилось больше 80 % всех ложных тревог. Удержание тревоги (<code>alarm_hold</code>) продлевает СТОП только на кадры, где объекта нет совсем, а здесь объект есть, поэтому не срабатывает.</p>
+    <p><b>Что это значит.</b> Это не потеря детекции и не ошибка отрисовки: в эти кадры статус — ВНИМАНИЕ с дистанцией до объекта, а не «путь свободен». Чем ближе объект, тем реже ось обрывается раньше него: ${st.bands.map(b => `${b.lo ? `${b.hi}–${b.lo}` : `ближе ${b.hi}`} м — ${b.longest ? `провал до ${b.longest} ${plural(b.longest, 'кадра', 'кадров', 'кадров')}` : 'без провалов'}`).join(', ')}.</p>
+    <p><b>Возможное исправление, не проверено:</b> не снимать СТОП с трека, который уже был в тревоге, когда он оказывается за концом оси. Прежде чем включать, нужно проверить, сколько ложных тревог это добавит на <code>new_data</code>.</p>`;
+}
+
+/* =====================================================================
+   Скорость
+   ===================================================================== */
+function sBudget() {
+  const box = $('#s-budget'), e = S.e2e;
+  if (!e || !e.e2e_ms_p95) return box.remove();
+  const v = e.e2e_ms || [], dl = F.dl;
+  head(box, 'Полная задержка кадра',
+    `От публикации облака до публикации решения, запись <code>${e.bag}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц, ROS 2 в Docker. <b>100 мс — это период кадра</b>, а не время прежней версии.`);
+  const kv = document.createElement('div'); kv.className = 'kv';
+  kv.innerHTML = [
+    dl ? [pct(dl.hitPct, 1), '', `кадров уложились в дедлайн 100 мс (${dl.hit} из ${dl.n})`] : null,
+    [num(e.e2e_ms_p95, 0), 'мс', `p95; запас до следующего кадра ${num(BUDGET_MS - e.e2e_ms_p95, 0)} мс`],
+    [num(e.e2e_ms_p50, 0), 'мс', 'p50']
+  ].filter(Boolean).map(([vv, u, k]) => `<div><div class="v">${vv}${u ? `<span class="u">${u}</span>` : ''}</div><div class="k">${k}</div></div>`).join('');
+  box.appendChild(kv);
+  if (v.length) {
+    const w = W(box), h = 200, l = 38, r = 12, tp = 22, b = 28, bin = 5, hi = 160;
+    const bins = new Array(hi / bin).fill(0);
+    v.forEach(u => { bins[Math.min(bins.length - 1, Math.floor(u / bin))]++; });
+    const g = svgIn(box, w, h, 'Распределение полной задержки по кадрам');
+    const x = lin(0, hi, l, w - r), max = Math.ceil(Math.max(...bins) / 10) * 10, y = lin(0, max, h - b, tp);
+    t(g, x(BUDGET_MS) + 6, tp - 3, 'дедлайн 100 мс', { class: 'ink2 band-lbl' });
+    [0, max / 2, max].forEach(u => { s('line', { x1: l, x2: w - r, y1: y(u), y2: y(u), class: u ? 'gridl' : 'base' }, g); t(g, l - 6, y(u) + 4, u, { 'text-anchor': 'end' }); });
+    bins.forEach((c, i) => {
+      const over = i * bin >= BUDGET_MS;
+      if (c) s('rect', { x: x(i * bin) + 1, y: y(c), width: x(bin) - x(0) - 2, height: y(0) - y(c), rx: 2, fill: over ? 'var(--alarm)' : 'var(--now)' }, g);
+      s('rect', { x: x(i * bin), y: tp, width: x(bin) - x(0), height: h - b - tp, class: 'hit',
+        'data-tip': `<b>${i * bin}–${(i + 1) * bin} мс</b>${i === bins.length - 1 ? ' и больше' : ''}<br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} из ${v.length}` }, g);
+    });
+    s('line', { x1: x(BUDGET_MS), x2: x(BUDGET_MS), y1: tp - 14, y2: h - b, stroke: 'var(--ink)', 'stroke-width': 1.5 }, g);
+    [[e.e2e_ms_p50, 'p50'], [e.e2e_ms_p95, 'p95']].forEach(([u, lb]) => {
+      s('line', { x1: x(u), x2: x(u), y1: tp - 8, y2: h - b, stroke: 'var(--ink-2)', 'stroke-dasharray': '3 3' }, g);
+      t(g, x(u) - 4, tp - 3, lb, { class: 'ink2', 'text-anchor': 'end' });
+    });
+    for (let u = 0; u < hi; u += 20) t(g, x(u), h - b + 17, u, { 'text-anchor': 'middle' });
+    t(g, w - r, h - b + 17, `${hi} мс`, { 'text-anchor': 'end' });
+    const over = v.filter(u => u > BUDGET_MS).length;
+    const fo = S.e2e_fo;
+    note(box, `На ${over} ${plural(over, 'кадре', 'кадрах', 'кадрах')} дольше 100 мс пришёлся пересчёт пути в соседнем процессе. Очередь узла — один кадр: старый заменяется новым, задержка не накапливается. Обработано ${e.processed} из ${e.received} принятых${fo ? `; на бэге организаторов ${fo.processed} из ${fo.received}, p95 ${num(fo.e2e_ms_p95, 0)} мс` : ''}.`);
+  }
+}
+
+function sLimits() {
+  const box = $('#s-limits'), big = S.e2e_big;
+  head(box, 'Границы этого результата');
+  box.insertAdjacentHTML('beforeend', `<ul class="limits">
+    <li><b>«100 мс» — это период кадра, а не время старой версии.</b> Измеренного времени Python-версии около 100 мс в проекте нет. Сравнение Python и C++ есть только для разбора облака: ${F.parse ? `${num(F.parse.bigPy, 1)} → ${num(F.parse.bigCpp, 1)} мс на кадре 23 МБ (×${num(F.parse.bigPy / F.parse.bigCpp, 1)}), ${num(F.parse.smallPy, 1)} → ${num(F.parse.smallCpp, 1)} мс на кадре 8 МБ` : '—'}.</li>
+    ${big ? `<li><b>Кадры 23 МБ (полный оборот) в бюджет не укладываются</b> на стенде разработки: p95 полной задержки ${num(big.e2e_ms_p95, 0)} мс, обработано ${big.processed} из ${big.received}. По README причина — скорость чтения записи с диска в Docker на macOS; на стенде x86 это не проверено.</li>` : ''}
+    <li><b>Загрузка CPU/GPU</b>, которую ТЗ §8.3 просит оценить, не измерялась. Детектор работает на CPU, numpy в один поток, видеокарта не нужна.</li>
+    <li>Один стенд: ${esc(D.bench || '')}. На машине проверки цифры будут другими.</li>
+  </ul>`);
+}
+
+/* =====================================================================
+   Ложные тревоги
+   ===================================================================== */
+// Крупное резюме раздела: жюри должно прочитать вывод раньше графика.
+// Снимает мнимое противоречие «0 из 3 на эталоне» против «4,4 % на записи».
+function fReconcile() {
+  const box = $('#f-reconcile'), nd = Q.nd_full, f = F.fo;
+  if (!box) return;
+  if (!nd || !f || f.stopOutside == null || !f.frames) return box.remove();
+  head(box, `Почему «${f.outStop} из ${f.outG.length} объектов» и «${pct(nd.pct)} кадров СТОП» — разные показатели`,
+    'Это два разных знаменателя. Первое считается по размеченным объектам, второе — по всем кадрам отдельной записи.');
+  const w = W(box), rh = 78, h = 2 * rh + 8, lw = Math.min(310, Math.max(200, w * .3));
+  const g = svgIn(box, w, h, 'Два разных знаменателя: объекты эталона и кадры отложенной записи');
+  const bars = [
+    { lb: `эталон организаторов`, sub: `${f.outG.length} объекта без СТОП`,
+      val: f.outStop, of: f.outG.length, unit: 'объект', col: 'var(--good)',
+      res: `${f.outStop} из ${f.outG.length} ложных СТОП` },
+    { lb: `отложенная запись new_data`, sub: `${num(nd.frames)} кадров, без препятствий`,
+      val: nd.alarm_frames, of: nd.frames, unit: 'кадр', col: 'var(--alarm)',
+      res: `${num(nd.alarm_frames)} из ${num(nd.frames)} кадров — ${pct(nd.pct)}` }
+  ];
+  bars.forEach((b, i) => {
+    const y = i * rh + 6, bw = w - lw - 8;
+    t(g, 0, y + 14, b.lb, { class: 'ink b' });
+    t(g, 0, y + 30, b.sub, { class: 'band-lbl' });
+    s('rect', { x: lw, y: y + 8, width: bw, height: 20, rx: 3, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+    const frac = b.of ? Math.max(b.val / b.of, 0) : 0;
+    if (b.val) s('rect', { x: lw, y: y + 8, width: Math.max(3, bw * frac), height: 20, rx: 3, fill: b.col }, g);
+    t(g, lw, y + 44, b.res, { class: 'ink2' });
+    s('rect', { x: 0, y, width: w, height: rh, class: 'hit', 'data-tip': `<b>${esc(b.lb)}</b><br>${esc(b.sub)}<br>${esc(b.res)}` }, g);
+  });
+  box.insertAdjacentHTML('beforeend', `<p class="callout info">На бэге организаторов ложные СТОП тоже есть — просто не на размеченных объектах: <b>${f.stopOutside}</b> кадров из ${num(f.frames)} (${pct(100 * f.stopOutside / f.frames)}). «${f.outStop} из ${f.outG.length}» об уровне ложных срабатываний не говорит.</p>`);
+}
+
+function fMain() {
+  const box = $('#f-main'), nd = Q.nd_full;
+  if (!nd) return box.remove();
+  head(box, `${num(nd.alarm_frames)} кадров СТОП из ${num(nd.frames)} — ${pct(nd.pct)}`,
+    `Вся запись <code>new_data</code>, ${num(nd.minutes, 1)} мин. Эпизод — серия кадров СТОП, разрыв до двух кадров не прерывает эпизод. Столбец — кадры СТОП за 10 с (из 100).`);
+  stats(box, [
+    { v: num(nd.episodes), k: 'эпизодов СТОП' },
+    { v: num(nd.episodes / nd.minutes, 1), k: 'эпизодов в минуту', d: `${num(nd.per_hour)} в час` },
+    { v: num(nd.distance_median, 0), u: 'м', k: 'медиана дистанции ложного СТОП' }
+  ]);
+  const w = W(box), h = 170, l = 34, r = 8, tp = 12, b = 28, v = nd.per_100, n = v.length;
+  const g = svgIn(box, w, h, 'Кадры СТОП по времени на записи new_data');
+  const bw = (w - l - r) / n, max = Math.max(20, Math.ceil(Math.max(...v) / 10) * 10);
+  const y = lin(0, max, h - b, tp), x = i => l + i * bw;
+  [0, max / 2, max].forEach(u => { s('line', { x1: l, x2: w - r, y1: y(u), y2: y(u), class: u ? 'gridl' : 'base' }, g); t(g, l - 6, y(u) + 4, u, { 'text-anchor': 'end' }); });
+  v.forEach((c, i) => {
+    if (c) s('rect', { x: x(i) + .5, y: y(c), width: Math.max(1, bw - 1.5), height: y(0) - y(c), rx: Math.min(2, bw / 3), fill: 'var(--alarm)' }, g);
+    const m0 = i * 100 / 600;
+    s('rect', { x: x(i), y: tp, width: bw, height: h - b - tp, class: 'hit',
+      'data-tip': `<b>${Math.floor(m0)}:${String(Math.round((m0 % 1) * 60)).padStart(2, '0')}</b>, кадры ${num(i * 100)}–${num(i * 100 + 99)}<br>${c} ${plural(c, 'кадр', 'кадра', 'кадров')} СТОП` }, g);
+  });
+  for (let m = 0; m <= nd.minutes; m += 2) t(g, l + m * 6 * bw, h - b + 17, `${m}`, { 'text-anchor': 'middle' });
+  t(g, w - r, h - b + 17, 'мин', { 'text-anchor': 'end' });
+}
+
+function fCompare() {
+  const box = $('#f-compare');
+  const rows = [];
+  if (Q.empty) rows.push({ name: '5 пустых записей', sub: `${num(Q.empty.frames)} кадров; на них подбирали параметры`, was: Q.empty.before, now: Q.empty.after, wasName: 'исходная, ae38df6' });
+  if (Q.nd_full && F.ndBase != null) rows.push({ name: 'new_data, отложенная', sub: `${num(Q.nd_full.frames)} кадров; при подборе не использовалась`, was: F.ndBase, now: Q.nd_full.pct, wasName: 'до подбора, 97f7376' });
+  if (F.fo && F.base && F.base.fo_false != null && F.fo.frames) rows.push({ name: 'бэг организаторов', sub: 'кадры СТОП не на объекте', was: 100 * F.base.fo_false / F.fo.frames, now: 100 * F.fo.stopOutside / F.fo.frames, wasName: 'до подбора, 97f7376' });
+  if (!rows.length) return box.remove();
+  head(box, 'Снижение есть только там, где подбирали параметры', 'Доля кадров со СТОП без препятствия: прежняя версия и итоговая, один и тот же инструмент.');
+  legend(box, [['sq', 'var(--was)', 'прежняя версия'], ['sq', 'var(--now)', 'итоговая']]);
+  const w = W(box), lw = 0, bh = 11, rh = 2 * bh + 52, h = rows.length * rh;
+  const g = svgIn(box, w, h, 'Доля кадров с ложным СТОП: прежняя и итоговая версии');
+  const x = lin(0, Math.ceil(Math.max(...rows.map(r => r.was)) / 2) * 2, lw, w - 56);
+  rows.forEach((r, i) => {
+    const y = i * rh + 6;
+    t(g, 0, y + 10, r.name, { class: 'ink b' });
+    t(g, 0, y + 25, r.sub, { 'font-size': 12 });
+    [['was', 'var(--was)', r.wasName], ['now', 'var(--now)', 'итоговая']].forEach(([k, c], j) => {
+      const yy = y + 34 + j * (bh + 3);
+      s('rect', { x: lw, y: yy, width: Math.max(2, x(r[k]) - lw), height: bh, rx: 2, fill: c }, g);
+      t(g, x(r[k]) + 6, yy + bh - 1, pct(r[k]), { class: j ? 'ink b' : 'ink2', 'font-size': 12 });
+    });
+    s('rect', { x: 0, y: y - 4, width: w, height: rh - 6, class: 'hit', 'data-tip': `<b>${esc(r.name)}</b><br>${esc(r.wasName)}: ${pct(r.was)}<br>итоговая: ${pct(r.now)}` }, g);
+  });
+  note(box, 'Целевого уровня ложных тревог в ТЗ нет. Параметры зоны подбирались по пустым записям и бэгу организаторов, поэтому честная оценка — только на <code>new_data</code>.');
+}
+
+function fNature() {
+  const box = $('#f-nature'), sl = Q.selflabel, nd = Q.nd_full;
+  head(box, 'Что это за тревоги');
+  const bins = nd && nd.dist_bins;
+  box.insertAdjacentHTML('beforeend', `<ul class="limits">
+    ${sl ? `<li><b>Они действительно ложные.</b> ${sl.false_proven} из ${sl.episodes} треков СТОП доказанно ложные: поезд потом проехал это место и не остановился${sl.unresolved ? `, ${sl.unresolved} не разрешён` : ''}. Оговорка: пробег по нашей одометрии ${sl.odometry_km ? num(sl.odometry_km, 1) + ' км' : '—'}, у другой команды на той же записи — 13,0 км; расхождение не объяснено, поэтому инструмент помечает сводку как ненадёжную.</li>` : ''}
+    ${bins ? `<li><b>Они далеко.</b> Кадры СТОП по дистанции: ближе 40 м — ${bins[0]}, 40–80 м — ${bins[1]}, 80–130 м — ${bins[2]}, дальше 130 м — ${bins[3]}. Медиана — ${num(nd.distance_median, 0)} м.</li>` : ''}
+    <li><b>Это неподвижные конструкции у края зоны.</b> Дистанция до них уменьшается ровно на пройденный путь (наклон −1,00), то есть это не артефакты, едущие с поездом. Поэтому ЭГО-тест их почти не снимает: на <code>new_data</code> он убрал 6 кадров.</li>
+    <li><b>Что уже сделано.</b> За концом известной оси — только ВНИМАНИЕ; продольные конструкции (кабели, контактный рельс) отсеиваются цепочками; тревога поднимается по накопленному свидетельству, а не по одному кадру. На пустых записях подбора это дало ${Q.empty ? `${pct(Q.empty.before)} → ${pct(Q.empty.after)}` : '—'}.</li>
+  </ul>`);
+}
+
+/* =====================================================================
+   Источники
+   ===================================================================== */
+function srcTable() {
+  const box = $('#src-table');
+  head(box, 'Откуда каждое число с первого экрана');
+  const conf = { high: [ICON.ok, 'высокая'], mid: [ICON.warn, 'средняя'], low: [ICON_X, 'низкая'] };
+  const c = k => `<span class="conf ${k}">${conf[k][0]}${conf[k][1]}</span>`;
+  const rows = [];
+  if (F.p170) rows.push([`${num(F.p170.after.median, 0)} м`, 'медиана дистанции первого СТОП, человек, старт 170 м', `${Q.approach.windows} окон движения в записях <code>for_hackathon</code>, объект вставлен лучами датчика`, 'истинная дистанция вставки', `исходная версия <code>ae38df6</code>: ${num(F.p170.before.median, 0)} м, тот же инструмент`, '<code>evaluation/reference/approach_final.csv</code>, <code>approach_A_base.csv</code>; <code>evaluation/eval_approach.py</code>', c('mid'), 'синтетика на своей оси, 6 окон']);
+  if (F.fo) rows.push([`${F.fo.inStop} из ${F.fo.inG.length}; ${F.fo.outStop} из ${F.fo.outG.length}`, 'объекты, требующие СТОП, его получившие; ложные СТОП на объектах, его не требующих', '<code>cloud_with_fake_obj</code>, 1510 кадров, 10 объектов', 'список организаторов, <code>evaluation/reference/cloud_with_fake_obj/objects.yaml</code>', `<code>97f7376</code>: ${F.fo.baseIn} из ${F.fo.inG.length}`, '<code>fake_obj_fo_final.csv</code>; <code>evaluation/eval_fake_obj.py</code>', c('mid'), 'внешняя разметка, но зона подбиралась по этому же бэгу и объектов всего 10 — не независимый тест']);
+  if (F.ob) rows.push([`${F.ob.after.hit} из ${F.ob.after.after}`, `кадры СТОП после первого подтверждения (первые ${F.ob.after.first} кадров в знаменатель не входят) — удержание, не recall`, '<code>doubleT_obstacle</code>, 201 кадр, поезд стоит', 'объект на 56 м во всех кадрах: описание записи, картинки кадров 10, 60, 110', `<code>ae38df6</code>: ${F.ob.before.total} из ${F.ob.n}, провал ${F.ob.before.longest} кадров`, '<code>evaluation/reference/alarms_final.csv</code>, <code>alarms_A_base.csv</code>; <code>evaluation/alarms.py</code>', c('mid'), 'стационарная запись, использовалась при подборе; покадровой разметки нет']);
+  if (F.dl) rows.push([pct(F.dl.hitPct, 1), `кадров уложились в дедлайн 100 мс; не уложились ${F.dl.over} из ${num(F.dl.n)}`, `<code>${F.e2e.bag}</code>, ${F.e2e.received} кадров 8 МБ, Docker без сети`, 'бюджет 100 мс = период кадра при 10 Гц', 'прежней полной задержки в том же режиме нет', `<code>evaluation/reference/docker/${F.e2e.bag}_e2e.json</code>; <code>docker compose up</code>`, c('high'), 'один стенд, macOS + VM; кадры 23 МБ в бюджет не укладываются']);
+  if (F.trP) rows.push([`${F.trP.B} из ${F.trP.miss}`, 'кадры без СТОП при подъезде, где объект виден, но за концом оси', 'те же окна и вставки, что в замере дальности', 'истинная дистанция вставки', '—', '<code>evaluation/reference/approach_trace_final.json</code>; <code>evaluation/approach_trace.py</code>', c('high'), 'прогон текущего кода']);
+  if (F.parse) rows.push([`×${num(F.parse.bigPy / F.parse.bigCpp, 1)}`, 'разбор кадра 23 МБ: Python → C++. Только разбор облака, не весь конвейер детектора', '30 кадров каждой записи', 'побитное совпадение облака и результата', `Python <code>parse_pointcloud2</code>: ${num(F.parse.bigPy, 1)} мс`, '<code>evaluation/reference/check_preproc.json</code>; <code>evaluation/check_preproc.py</code>', c('high'), '']);
+  if (F.nd) rows.push([pct(F.nd.pct), 'доля кадров с ложным СТОП', `<code>new_data</code>, ${num(F.nd.frames)} кадров, отложенная`, 'препятствий нет; ложность подтверждена проездом', F.ndBase != null ? `<code>97f7376</code>: ${pct(F.ndBase)}` : '—', `<code>${esc(F.nd.file || '')}</code>; <code>docker compose --profile metrics up</code>`, c('high'), 'одна запись, одна линия']);
+  box.insertAdjacentHTML('beforeend', `<div class="tbl-wrap"><table class="srcs"><thead><tr><th>Число</th><th>Что это</th><th>Данные</th><th>Эталон</th><th>С чем сравнивали</th><th>Файл и инструмент</th><th>Доверие и оговорка</th></tr></thead><tbody>` +
+    rows.map(r => `<tr>${r.slice(0, 6).map(v => `<td>${v}</td>`).join('')}<td>${r[6]}${r[7] ? `<div class="src">${r[7]}</div>` : ''}</td></tr>`).join('') + '</tbody></table></div>');
+}
+
+function limCannot() {
+  const box = $('#lim-cannot');
+  if (!box) return;
+  box.className = 'panel';
+  head(box, 'Чего эти цифры не доказывают');
+  box.insertAdjacentHTML('beforeend', `<ul class="limits">
+    <li><b>Что ${F.p170 ? num(F.p170.after.median, 0) : '—'} м хватит на остановку.</b> Тормозной путь вне задачи (Q&A 16.09), характеристик состава нет.</li>
+    <li><b>Что это «${F.p170 ? num(F.p170.after.median / V85, 1) : '—'} с на реакцию машиниста».</b> Это расстояние, делённое на скорость.</li>
+    <li><b>Что обработка «в 12–14 раз быстрее».</b> 100 мс — период кадра, а не замер прежней версии. Измерен только разбор облака: ×${F.parse ? num(F.parse.bigPy / F.parse.bigCpp, 1) : '—'}.</li>
+    <li><b>Что эталон организаторов — валидация.</b> Зона подбиралась по нему же, объектов ${F.fo ? F.fo.inG.length + F.fo.outG.length : '—'}. Это не accuracy.</li>
+    <li><b>Что ${F.ob ? `${F.ob.after.hit}/${F.ob.after.after}` : '—'} — это 100 % обнаружения.</b> Удержание уже поднятого СТОП; первые ${F.ob ? F.ob.after.first : '—'} кадров в знаменатель не входят.</li>
+    <li><b>Дальность 200–300 м.</b> Со старта 220 м человек найден в ${F.p220 ? `${F.p220.after.found} из ${F.p220.after.n}` : '—'} окон.</li>
+    <li><b>Что ложных тревог мало.</b> ${F.nd ? pct(F.nd.pct) : '—'} кадров на одной отложенной записи. Нужна дальнейшая проверка и снижение ложных срабатываний.</li>
+  </ul>`);
+}
+
+function limData() {
+  const box = $('#lim-data'), big = S.e2e_big, dl = F.dl;
+  if (!box) return;
+  head(box, 'Чем ограничены данные и стенд');
+  box.insertAdjacentHTML('beforeend', `<ul class="limits">
+    <li><b>Дальность — синтетика.</b> Объект вставлен лучами датчика на ось, найденную самим детектором; ${Q.approach ? Q.approach.windows : '—'} окон. Реальных препятствий при движении в данных нет.</li>
+    <li><b>Единственный реальный объект снят со стоящего поезда</b> и на записи, использованной при подборе. Покадровой разметки нет.</li>
+    <li><b>Ложные СТОП — одна запись одной линии.</b>${Q.selflabel && Q.selflabel.unreliable ? ' Проверка проездом помечена инструментом как ненадёжная: расхождение в одометрии не объяснено.' : ''}</li>
+    ${dl ? `<li><b>${dl.over} ${plural(dl.over, 'кадр', 'кадра', 'кадров')} из ${num(dl.n)} дедлайн пропустили</b> — p95 ${num(F.e2e.e2e_ms_p95, 0)} мс этого не показывает.</li>` : ''}
+    ${big ? `<li><b>Кадры 23 МБ в бюджет не укладываются:</b> p95 ${num(big.e2e_ms_p95, 0)} мс, обработано ${big.processed} из ${big.received}.</li>` : ''}
+    <li><b>Загрузка CPU/GPU не измерялась</b> (ТЗ §8.3). Один стенд: ${esc(D.bench || '—')}.</li>
+    <li><b>Вход не соответствует контракту:</b> нет TF, штампы 2000 года, нули вместо NaN — <a href="#robust">подробно</a>.</li>
+  </ul>`);
+  note(box, 'План проверки: независимые записи других линий, реальные препятствия при движении и профилирование нагрузки на целевом компьютере.');
+}
+
+function sourcesMethod() {
+  const src = D.sources || {}, fromRef = Object.keys(src).filter(k => src[k] === 'reference'), fromRuns = Object.keys(src).filter(k => src[k] === 'runs');
+  const files = list => list.map(f => `<code>${esc(f)}</code>`).join(', ');
+  $('#method-body').innerHTML = `<h3>Методика и воспроизведение</h3><dl>
+    <dt>Версии</dt><dd>«Исходная» — коммит <code>ae38df6</code>, код команды до этой работы. «До подбора» — <code>97f7376</code>, до настройки зоны по бэгу организаторов. «Итоговая» — параметры по умолчанию (<code>config/detector.yaml</code>). Все прогнаны одними и теми же инструментами.</dd>
+    <dt>Дальность</dt><dd>Объект вставляется в реальные кадры лучами настоящего датчика, с тенью; поезд едет к нему со скоростью, оценённой по сцене. Первое подтверждение — первый кадр со СТОП на вставке.</dd>
+    <dt>Задержка</dt><dd>По времени публикации сообщений DDS: плеер опубликовал облако → детектор опубликовал результат. Штамп <code>header.stamp</code> в записях — 2000 год, от него задержку не посчитать.</dd>
+    <dt>Ложные тревоги</dt><dd>Эпизод — серия кадров СТОП, разрыв до двух кадров не прерывает эпизод. Проверка проездом — <code>evaluation/selflabel.py</code>.</dd>
+    <dt>Воспроизведение</dt><dd>
+            <code class="cmd">python -m evaluation approach-trace --tag final</code>
+      <code class="cmd">BAG=data/Датасет/archive/for_hackathon/doubleT_platform NAME=doubleT_platform docker compose up --build</code>
+      <code class="cmd">python -m evaluation preproc && python -m evaluation input</code>
+      <code class="cmd">python -m evaluation dashboard</code>
+    </dd>
+    <dt>Сборка страницы</dt><dd class="src">Сгенерировано ${esc(D.generated || '')}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}. Прогон на этой машине (<code>output/runs/</code>): ${files(fromRuns) || '—'}. Эталон с машины разработки (<code>evaluation/reference/</code>): ${files(fromRef) || '—'}.</dd>
+  </dl>`;
+}
+
+function qErr() {
+  const box = $('#q-err'), er = Q.dist_err;
+  if (!er) return box.remove();
+  head(box, 'Ошибка дистанции при первом подтверждении', `${er.values.length} ${plural(er.values.length, 'подтверждение', 'подтверждения', 'подтверждений')} синтетических объектов, текущая версия. Доля случаев с ошибкой не больше заданной.`);
+  stats(box, [{ v: num(er.median * 100, 0), u: 'см', k: 'медиана' }, { v: num(er.p95, 2), u: 'м', k: '95 % случаев — не больше' }]);
+  const w = W(box), h = 230, l = 40, r = 16, tp = 10, b = 30;
+  const g = svgIn(box, w, h, 'Распределение ошибки дистанции');
+  g.setAttribute('data-tipzone', '');
+  const lo = 0.01, hi = 2;
+  const x = v => l + (Math.log10(Math.max(lo, Math.min(hi, v))) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (w - l - r);
+  const y = lin(0, 1, h - b, tp);
+  [0, .25, .5, .75, 1].forEach(v => { s('line', { x1: l, x2: w - r, y1: y(v), y2: y(v), class: v ? 'gridl' : 'base' }, g); t(g, l - 8, y(v) + 4, `${v * 100}%`, { 'text-anchor': 'end' }); });
+  [[0.01, '≤1 см'], [0.03, '3 см'], [0.1, '10 см'], [0.3, '30 см'], [1, '1 м'], [2, '2 м']].forEach(([v, lb]) => t(g, x(v), h - b + 18, lb, { 'text-anchor': 'middle' }));
+  const vals = er.values, n = vals.length;
+  let d = `M${x(lo)},${y(0)}`;
+  vals.forEach((v, i) => { d += `H${x(v)}V${y((i + 1) / n)}`; });
+  d += `H${w - r}`;
+  s('path', { d, fill: 'none', stroke: 'var(--now)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, g);
+  [[er.median, .5, 'медиана'], [er.p95, .95, '95 %']].forEach(([v, q, lb]) => {
+    s('line', { x1: x(v), x2: x(v), y1: y(q), y2: h - b, stroke: 'var(--ink-2)', 'stroke-width': 1 }, g);
+    s('circle', { cx: x(v), cy: y(q), r: 4.5, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    t(g, x(v) + (q > .9 ? -8 : 8), y(q) - 8, lb, { class: 'ink2', 'text-anchor': q > .9 ? 'end' : 'start' });
+  });
+  const cross = s('line', { y1: tp, y2: h - b, stroke: 'var(--axis)', 'stroke-width': 1, visibility: 'hidden' }, g);
+  const hit = s('rect', { x: l, y: tp, width: w - l - r, height: h - b - tp, class: 'hit' }, g);
+  hit.addEventListener('pointermove', e => {
+    const pt = g.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(g.getScreenCTM().inverse());
+    const v = Math.pow(10, Math.log10(lo) + (p.x - l) / (w - l - r) * (Math.log10(hi) - Math.log10(lo)));
+    const k = vals.filter(u => u <= v).length;
+    cross.setAttribute('x1', p.x); cross.setAttribute('x2', p.x); cross.setAttribute('visibility', 'visible');
+    const vt = v < 1 ? num(v * 100, v < 0.1 ? 1 : 0) + ' см' : num(v, 2) + ' м';
+    showTip(`Ошибка не больше <b>${vt}</b><br>${num(100 * k / n, 0)} % подтверждений (${k} из ${n})`, e.clientX, e.clientY);
+  });
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+function sParse() {
+  const box = $('#s-parse'), p = S.parse;
+  if (!p) return box.remove();
+  head(box, 'Разбор кадра: Python → C++ (только разбор облака)',
+    'Среднее по 30 кадрам каждой записи, <code>evaluation/check_preproc.py</code>. Разбор включает удаление пустых лучей и дублей dual return. <b>Это ускорение одного шага приёма, а не всего конвейера детектора:</b> полная задержка измеряется отдельно, в графике выше.');
+  legend(box, [['', 'var(--was)', 'Python, parse_pointcloud2'], ['', 'var(--now)', 'C++, tunnel_od_preproc']]);
+  const rows = [...p].sort((a, b) => b.mb - a.mb || b.python - a.python);
+  const w = W(box), lw = w < 520 ? 150 : 230, rh = 30, h = rows.length * rh + 30;
+  const g = svgIn(box, w, h, 'Время разбора кадра по записям');
+  const x = lin(0, 24, lw, w - 60);
+  [0, 5, 10, 15, 20].forEach(v => { s('line', { x1: x(v), x2: x(v), y1: 0, y2: rows.length * rh, class: v ? 'gridl' : 'base' }, g); t(g, x(v), rows.length * rh + 16, v, { 'text-anchor': 'middle' }); });
+  t(g, x(24), rows.length * rh + 16, 'мс', { 'text-anchor': 'middle' });
+  rows.forEach((r, i) => {
+    const cy = i * rh + rh / 2;
+    const nm = r.bag.length > 24 && lw < 200 ? r.bag.slice(0, 20) + '…' : r.bag;
+    t(g, lw - 12, cy - 2, nm, { class: 'ink2', 'text-anchor': 'end' });
+    t(g, lw - 12, cy + 11, `${r.mb} МБ`, { 'text-anchor': 'end', 'font-size': 11 });
+    s('line', { x1: x(r.cpp), x2: x(r.python), y1: cy, y2: cy, stroke: 'var(--axis)', 'stroke-width': 2 }, g);
+    s('circle', { cx: x(r.python), cy, r: 5, fill: 'var(--was)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    s('circle', { cx: x(r.cpp), cy, r: 6, fill: 'var(--now)', stroke: 'var(--surface)', 'stroke-width': 2 }, g);
+    t(g, x(r.python) + 10, cy + 4, `×${num(r.python / r.cpp, 1)}`, { class: 'ink b' });
+    s('rect', { x: 0, y: cy - rh / 2, width: w, height: rh, class: 'hit',
+      'data-tip': `<b>${esc(r.bag)}</b>, кадр ${r.mb} МБ<br>Python: ${num(r.python, 1)} мс<br>C++: ${num(r.cpp, 1)} мс, в ${num(r.python / r.cpp, 1)} раза быстрее<br>после обрезки 2–250 м остаётся ${num(r.kept_after_crop * 100, 0)} % точек` }, g);
+  });
+  const d = S.deser;
+  if (d) note(box, `Кроме того, узел детектора больше не десериализует кадр 23 МБ в Python: −${num(d.p50, 1)} мс на кадр (p95 −${num(d.p95, 1)} мс). Раньше это время не попадало в замер.`);
+}
+function rBit() {
+  const box = $('#r-bit'), b = R.bitwise;
+  if (!b) return box.remove();
+  const N = b.reduce((x, r) => x + r.result_identical, 0), T = b.reduce((x, r) => x + r.frames, 0);
+  head(box, `Результат совпадает побитно: ${N} из ${T} кадров`, 'Для каждого кадра сравниваются облако после C++-разбора и весь результат <code>detect</code> против исходного Python-пути. <code>python -m evaluation preproc</code>.');
+  legend(box, [['sq', 'var(--good)', 'облако и результат совпали'], ['sq', 'var(--alarm)', 'расхождение']]);
+  const w = W(box), lw = w < 480 ? 130 : Math.min(w * .45, 12 + 6.6 * Math.max(...b.map(r => r.bag.length))), rh = 20, n = Math.max(...b.map(r => r.frames)), cw = Math.min(14, (w - lw - 40) / n), h = b.length * rh + 4;
+  const g = svgIn(box, w, h, 'Побитное совпадение по кадрам');
+  b.forEach((r, i) => {
+    const y = i * rh;
+    const nm = r.bag.length * 6.6 > lw - 12 ? r.bag.slice(0, Math.floor((lw - 20) / 6.6)) + '…' : r.bag;
+    t(g, lw - 10, y + 13, nm, { class: 'ink2', 'text-anchor': 'end', 'font-size': 12 });
+    for (let k = 0; k < r.frames; k++) {
+      const ok = k < r.result_identical && k < r.parse_bitwise;
+      s('rect', { x: lw + k * cw, y: y + 3, width: cw - 2, height: rh - 6, rx: 2, fill: ok ? 'var(--good)' : 'var(--alarm)', opacity: ok ? .85 : 1 }, g);
+    }
+    t(g, lw + r.frames * cw + 6, y + 13, `${r.result_identical}/${r.frames}`, { class: 'ink' });
+    s('rect', { x: 0, y, width: w, height: rh, class: 'hit', 'data-tip': `<b>${esc(r.bag)}</b><br>облако побитно: ${r.parse_bitwise} из ${r.frames}<br>результат detect: ${r.result_identical} из ${r.frames}` }, g);
+  });
+  const tt = R.tests;
+  if (tt) stats(box, [{ v: tt.gtest, k: 'тестов gtest в исходниках' }, { v: tt.pytest ?? '—', k: 'тестов pytest в исходниках' }]);
+}
+
+function rFlow() {
+  const box = $('#r-flow');
+  head(box, 'Три формата входа → одно облако', 'Формат определяется по полям, <code>height</code> и <code>width</code>, а не по размеру кадра.');
+  const w = W(box), narrow = w < 470, h = 262;
+  const g = svgIn(box, w, h, 'Схема приёма облака');
+  g.classList.add('flow');
+  const ins = [['legacy_hesai', 'текущие записи Hesai'], ['contract_v1', 'REP-103, 128 строк, return_id'], ['generic', 'произвольный x, y, z']];
+  const bw = narrow ? w * .44 : w * .38, bx = 0, cx = w * (narrow ? .54 : .5), cw2 = w - cx;
+  ins.forEach(([a, b2], i) => {
+    const y = 14 + i * 64;
+    s('rect', { x: bx, y, width: bw, height: 48, rx: 8, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+    t(g, bx + 12, y + 20, a, { class: 'ink b' });
+    t(g, bx + 12, y + 37, narrow && b2.length > 22 ? b2.slice(0, 20) + '…' : b2, { class: 'ink2', 'font-size': 12 });
+    s('path', { d: `M${bx + bw},${y + 24} C${bx + bw + 30},${y + 24} ${cx - 30},104 ${cx},104`, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 1.5 }, g);
+  });
+  s('rect', { x: cx, y: 74, width: cw2, height: 60, rx: 8, fill: 'var(--now)' }, g);
+  t(g, cx + 12, 98, 'tunnel_od_preproc', { style: 'fill:#fff;font-weight:600' });
+  t(g, cx + 12, 118, narrow ? 'C++: оси, дубли, NaN' : 'C++: оси, дубли, NaN, 2–250 м', { style: 'fill:rgba(255,255,255,.88);font-size:12px' });
+  s('line', { x1: cx + cw2 / 2, x2: cx + cw2 / 2, y1: 134, y2: 176, stroke: 'var(--axis)', 'stroke-width': 1.5 }, g);
+  s('rect', { x: cx, y: 176, width: cw2, height: 48, rx: 8, fill: 'var(--surface-2)', stroke: 'var(--border)' }, g);
+  t(g, cx + 12, 196, 'каноническое облако', { class: 'ink b' });
+  t(g, cx + 12, 213, narrow ? 'x, y, z' : 'x, y, z, /tunnel_od/cloud', { class: 'ink2', 'font-size': 12 });
+  t(g, cx + 12, 248, narrow ? '→ детектор' : '→ детектор и /input_diagnostics', { class: 'ink2', 'font-size': 12 });
+  note(box, 'Контракт v1, полученный из записи (<code>python -m evaluation contract</code>), даёт то же облако для детектора, что и исходный кадр.');
+}
+
+const MCOLS = ['format', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
+function shortCell(r, k) {
+  const lv = r.levels[k];
+  if (k === 'format') return (r.format || '').split('/')[0];
+  if (k === 'M1') return lv === 'ok' ? '128 строк' : `нули ${num(r.zero_share * 100, 0)}\u00a0%`;
+  if (k === 'M2') return lv === 'ok' ? 'return_id' : 'нет return_id';
+  if (k === 'M3') return lv === 'ok' ? 'TF есть' : 'нет TF';
+  if (k === 'M4') {
+    if (lv === 'ok') return `часы ${r.stamp_year}`;
+    const parts = [];
+    if (r.stamp_year && r.stamp_year < 2020) parts.push(`${r.stamp_year}\u00a0г.`);
+    if (r.gaps) parts.push(`${r.gaps}\u00a0${plural(r.gaps, 'разрыв', 'разрыва', 'разрывов')}`);
+    return parts.join(', ');
+  }
+  if (k === 'M5') return `${num(r.sector_deg, 0)}°`;
+  if (k === 'M6') return lv === 'ok' ? 'есть' : 'нет';
+  return lv;
+}
+function rMatrix() {
+  const box = $('#r-matrix'), inp = R.input;
+  if (!inp) return box.remove();
+  const frames = inp.reduce((x, r) => x + r.frames, 0);
+  const recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
+  const gaps = recs.reduce((x, r) => x + (r.gaps || 0), 0);
+  head(box, 'Проверка входного потока на соответствие контракту',
+    `<code>python -m evaluation input</code>, все кадры: ${num(recs.length)} ${plural(recs.length, 'запись', 'записи', 'записей')} организаторов (${num(frames - inp.filter(r => r.bag.startsWith('contract_v1')).reduce((x, r) => x + r.frames, 0))} кадров) и запись в формате контракта v1. Тот же код работает в узле и публикует <code>/tunnel_od/input_diagnostics</code>.`);
+  stats(box, [
+    { v: `${recs.filter(r => r.stamp_year && r.stamp_year < 2020).length} из ${recs.length}`, k: 'записей с часами в 2000 году' },
+    { v: `${recs.filter(r => r.levels.M1 === 'warn').length} из ${recs.length}`, k: 'с нулями вместо NaN' },
+    { v: `${recs.filter(r => r.levels.M3 === 'warn').length} из ${recs.length}`, k: 'без TF лидара' },
+    { v: num(gaps), k: `${plural(gaps, 'разрыв', 'разрыва', 'разрывов')} в штампах` },
+    { v: '0', k: 'нарушений в контракте v1' }
+  ]);
+  const titles = { format: 'формат', M1: 'M1 облако', M2: 'M2 отражения', M3: 'M3 TF', M4: 'M4 время', M5: 'M5 сектор', M6: 'M6 датчик' };
+  let html = '<div class="tbl-wrap"><table class="matrix"><thead><tr><th>Запись</th><th class="num">Кадров</th>' +
+    MCOLS.map(k => `<th>${titles[k]}</th>`).join('') + '</tr></thead><tbody>';
+  inp.forEach(r => {
+    const isC = r.bag.startsWith('contract_v1');
+    html += `<tr class="${isC ? 'contract' : ''}"><td>${esc(bagName(r.bag)).replace(/_/g, '_<wbr>')}</td><td class="num">${num(r.frames)}</td>` +
+      MCOLS.map(k => {
+        const lv = r.levels[k] || 'unknown';
+        return `<td class="c"><span class="cell ${lv}" data-tip="<b>${k === 'format' ? 'Формат' : k}</b>, ${esc(r.bag)}<br>${esc(r.messages[k] || '')}">${ICON[lv] || ICON.unknown}${esc(shortCell(r, k))}</span></td>`;
+      }).join('') + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  box.insertAdjacentHTML('beforeend', html);
+  note(box, 'M5 у <code>doubleT_obstacle</code> — полный оборот (сектор около 240°, кадр 23 МБ): это не нарушение, но облако втрое больше. Галочка — требование выполнено, треугольник — нарушено.');
+}
+
+function mTable() {
+  const inp = R.input || [], recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
+  const n = recs.length, cnt = f => recs.filter(f).length;
+  const zs = recs.map(r => r.zero_share * 100), gaps = recs.reduce((x, r) => x + (r.gaps || 0), 0);
+  const gapRecs = cnt(r => r.gaps > 0), pairs = recs.map(r => r.pair_share * 100);
+  const rng = a => a.length ? `${num(Math.min(...a), 0)}–${num(Math.max(...a), 0)} %` : '—';
+  const rows = [
+    ['M1', 'Упорядоченное облако: 128 строк по <code>ring</code>, пустой луч — NaN',
+      `${cnt(r => r.levels.M1 === 'warn')} из ${n}: <code>height = 1</code>, пустые лучи нулями — ${rng(zs)} точек`,
+      'Структура угадывается: дубли удаляются, только если кадр кратен 256 точкам. Нули неотличимы от точки на датчике. Вставка объектов лучами датчика требует полного облака.'],
+    ['M2', 'Single return или поле <code>return_id</code>',
+      `${cnt(r => r.levels.M2 === 'warn')} из ${n}: dual return без <code>return_id</code>, соседние столбцы совпадают в ${rng(pairs)} пар`,
+      'Если столбцы сдвинутся, дубли останутся: объект получит вдвое больше точек. Порог <code>12000 / d²</code> и вклад в свидетельство откалиброваны без дублей — подтверждение ускорится, появятся ложные тревоги.'],
+    ['M3', 'REP-103 и <code>/tf_static</code> лидара: высота, смещение от оси, тангаж, крен',
+      `${cnt(r => r.levels.M3 === 'warn')} из ${n}: TF нет, оси «вперёд = −y»`,
+      'Облако в REP-103 без адаптера повёрнуто на 90°: рельсы не найдены, тревог нет. Тангаж неизвестен — полотно оценивается в каждом кадре (на 80 м дно на 1,3 м ниже). Смещение неизвестно — на стрелках выбирается чужая пара рельсов.'],
+    ['M4', 'Часы PTP/GPS, монотонные штампы, шаг 100 ± 1 мс, время точки',
+      `${cnt(r => r.stamp_year < 2020)} из ${n}: штамп в 2000 году; ${num(gaps)} ${plural(gaps, 'разрыв', 'разрыва', 'разрывов')} в штампах в ${gapRecs} ${plural(gapRecs, 'записи', 'записях', 'записях')}`,
+      'Результат не сопоставить с журналом поезда и видео, задержку по штампу не посчитать. Разрывы 0,4–1,1 с ломают оценку скорости <code>EgoMotion</code> и прогноз трека.'],
+    ['M5', 'Постоянный сектор не меньше ±50°, 10 Гц',
+      `выполнено; <code>doubleT_obstacle</code> — полный оборот, ${num((recs.find(r => r.bag === 'doubleT_obstacle') || {}).sector_deg, 0)}°`,
+      'Треть точек полного оборота лежит позади и отбрасывается, кадр 23 МБ вместо 8. Параметры по кадрам (затухание, <code>confirm_hits</code>, <code>LAG</code>) рассчитаны на 10 Гц.'],
+    ['M6', 'Описание датчика: модель, режим отражений, таблица каналов',
+      `${cnt(r => r.levels.M6 === 'warn')} из ${n}: описания нет`,
+      'Углы каналов восстанавливаются по самому кадру медианой. Порог точек <code>12000 / d²</code> подогнан под 128 каналов и шаг 0,1°: для другого датчика его нужно пересчитать.']
+  ];
+  $('#m-table').innerHTML = '<table class="mtable"><thead><tr><th>Пункт</th><th>Требование контракта</th><th>Нарушено в записях</th><th>Что это ломает в алгоритме</th></tr></thead><tbody>' +
+    rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="viol">${r[2]}</td><td>${r[3]}</td></tr>`).join('') + '</tbody></table>' +
+    '<p class="note">Столбец «Нарушено» посчитан <code>python -m evaluation input</code> по всем кадрам записей. Запись в формате контракта v1 проходит все шесть пунктов.</p>';
+}
+function nav() {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const secs = [...document.querySelectorAll('section.slide')];
+  let prevGroup = null, current = 0;
+  const icons = ['◉','▤','▦','↗','◷','△','≋','◇','⌘','▤','≡'];
+  $('#nav').innerHTML = secs.map((sc,i) => {
+    const gr = sc.dataset.group, lab = gr !== prevGroup ? `<div class="gl">${gr}</div>` : '';
+    prevGroup = gr;
+    return `<li>${lab}<a href="#${sc.id}"><span class="nav-icon" aria-hidden="true">${icons[i]}</span>${sc.dataset.title}</a></li>`;
+  }).join('');
+  const route = () => {
+    const id = location.hash.slice(1) || 'top';
+    current = secs.findIndex(sc => sc.id === id);
+    if (current < 0) current = 0;
+    secs.forEach((sc,i) => { sc.hidden = i !== current; });
+    document.body.classList.toggle('demo-home', secs[current].id === 'top');
+    const demo = $('#hero-demo');
+    if (demo) demo.contentWindow.postMessage({type:'dashboard-visibility',visible:secs[current].id === 'top'}, '*');
+    document.querySelectorAll('#nav a').forEach(a => a.setAttribute('aria-current', a.hash === '#'+secs[current].id ? 'page':'false'));
+    $('#current-section').textContent = secs[current].dataset.title;
+    $('#section-count').textContent = `${current+1} / ${secs.length}`;
+    $('#prev-section').disabled = current === 0;
+    $('#next-section').disabled = current === secs.length-1;
+    document.title = secs[current].dataset.title + ' — Контроль пути';
+    window.scrollTo({top:0,behavior:'instant'});
+    renderCharts();
+    // браузер доводит до якоря уже после нашей прокрутки -- возвращаем начало раздела
+    requestAnimationFrame(() => window.scrollTo({top:0,behavior:'instant'}));
+  };
+  const step = n => { const target = secs[current+n]; if (target) location.hash = target.id; };
+  $('#prev-section').addEventListener('click', () => step(-1));
+  $('#next-section').addEventListener('click', () => step(1));
+  addEventListener('hashchange', route);
+  const present = $('#present');
+  const setPresent = on => {
+    document.body.classList.toggle('presenting',on);
+    present.setAttribute('aria-pressed',String(on));
+    present.querySelector('span').textContent = on ? 'Выйти из режима защиты' : 'Режим защиты';
+    renderCharts();
+  };
+  present.addEventListener('click', () => setPresent(!document.body.classList.contains('presenting')));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { setPresent(false); return; }
+    if (e.target.closest('input,textarea,select,[contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest('button,a,summary') && !e.target.closest('#present,#prev-section,#next-section')) return;
+    if (!document.body.classList.contains('presenting')) return;
+    if (['ArrowRight','PageDown','ArrowLeft','PageUp'].includes(e.key)) {
+      e.preventDefault(); step(['ArrowRight','PageDown'].includes(e.key)?1:-1);
+    }
+  });
+  $('#hero-demo').addEventListener('load', () => $('#hero-demo').contentWindow.postMessage({type:'dashboard-visibility',visible:!$('#top').hidden}, '*'));
+  heroFind();
+  route();
+}
+/* Титульный экран: решение детектора по текущему кадру приходит из встроенного плеера.
+   Ничего не досчитывается на странице -- показывается то, что вернул detect(). */
+function heroFind() {
+  const box = $('#hero-find'), frame = $('#hero-demo');
+  if (!box || !frame) return;
+  const numEl = $('#hf-num'), stEl = $('#hf-st'), subEl = $('#hf-sub');
+  const TXT = { stop: 'СТОП — препятствие в габарите', caution: 'ВНИМАНИЕ — объект без подтверждения',
+                clear: 'Путь свободен', unknown: 'Путь не определён' };
+  addEventListener('message', ev => {
+    if (ev.source !== frame.contentWindow || !ev.data || ev.data.type !== 'scene-frame') return;
+    const d = ev.data, o = d.main;
+    box.dataset.st = d.obstacle ? 'stop' : 'none';
+    numEl.innerHTML = d.obstacle ? `${num(d.distance_m, 1)}<small>м</small>`
+      : d.clear_to_m != null ? `${num(d.clear_to_m, 0)}<small>м</small>` : '—';
+    stEl.textContent = TXT[d.status] || 'Решения нет';
+    subEl.textContent = d.obstacle && o
+      ? `объект ${num(o.h, 1)} м, ${o.held ? 'удержан по треку' : `${o.n} ${plural(o.n, 'точка', 'точки', 'точек')}`} · кадр ${d.frame}`
+      : d.clear_to_m != null ? `проверено до этой дистанции · кадр ${d.frame}` : `кадр ${d.frame}`;
+  });
+}
+function theme() {
+  const b = $('#theme');
+  b.textContent = 'Тёмная тема';
+  b.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark':'light';
+    b.textContent = dark ? 'Светлая тема':'Тёмная тема';
+    renderCharts();
+  });
+}
+function renderCharts() {
+  [top, rgScale, rgNotes, gtObjects, ctReal, ctApproach, ctWhy, sBudget, sParse, sLimits,
+   fMain, fReconcile, fCompare, fNature, limCannot, limData,
+   rBit, rFlow, qErr, rMatrix, mTable, srcTable, sourcesMethod].forEach(fn => {
+    try { fn(); } catch (err) { console.error(fn.name, err); }
+  });
+}
+$('#stamp').textContent = D.generated ? `данные на ${D.generated.split('-').reverse().join('.')}${D.commit ? ', ' + D.commit : ''}` : '';
+theme(); nav();
+// The landing page plays the shared demo.html instead of a separate static scene.
+let rw = innerWidth, rt;
+addEventListener('resize', () => { if (innerWidth === rw) return; rw = innerWidth; clearTimeout(rt); rt = setTimeout(renderCharts, 150); });
+})();
+</script>
+</body>
+</html>

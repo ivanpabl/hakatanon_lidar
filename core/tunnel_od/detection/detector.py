@@ -81,13 +81,10 @@ class ObstacleDetector:
         self._path_range = None
         self._offset_measured = False
         self._frame = 0
-        # удержание дальней части оси: хвост предыдущей оси, если новая короче (splice_far_axis).
-        # Делается в check_frame, а не в update_path: путь поезда известен только здесь, а
-        # update_path в узле ROS считается в отдельном процессе (path_worker)
         self.path_hold = path_hold
         self._travel = 0.0
         self._seen_path_frame = None
-        self._held_axis = None           # (fwd, cl, кадр, когда хвост измерен, путь поезда тогда)
+        self._held_axis = None
         if tracker == 'evidence':
             self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits,
                                             hold=alarm_hold, hold_min=alarm_hold_min, ego_check=ego_check,
@@ -216,9 +213,6 @@ class ObstacleDetector:
         far_start = max(rails_end, 20.0) + self.far_from
         if self.edge_lines:
             mark_edge_lines(objects, far_start=far_start)
-        # за концом найденных рельсов ось и высота полотна -- оценка: объект у края
-        # коридора или целиком под сводом там скорее стена/свод при ошибке в десятки см.
-        # Фильтр по объектам, а не по точкам: иначе рвутся цепочки edge_line
         for o in objects:
             o['edge_line'] = o.get('edge_line', False) or bool(o['distance_m'] > far_start and (
                 (self.far_half_width is not None and abs(o['lateral_m']) > self.far_half_width)
@@ -239,8 +233,6 @@ class ObstacleDetector:
             rz = self._tor_at(np.array([o['distance_m'] for o in objects]), self._bed)
             for o, r in zip(objects, rz):
                 o['rail_z_m'] = float(r)
-        # объект с тревогой пропал на кадр-два (вдали на нём 2-3 точки): тревога держится
-        # alarm_hold кадров по прогнозу трека, объект помечается held
         for tr in self._tracker.held(min_distance=self.near_cutoff):
             d = float(tr['distance_m'])
             objects.append({'distance_m': d, 'far_m': d, 'lateral_m': float(tr['lateral_m']),
@@ -253,8 +245,6 @@ class ObstacleDetector:
         path_range = self._path_range if path_ok else None
         limit = (path_range if path_range is not None else 0.0) + self.path_margin
         for o in objects:
-            # удержанный объект поднимал тревогу в пределах оси и с тех пор только приблизился;
-            # короткая ось в этом кадре (её дальность скачет на 50-200 м) тревогу не снимает
             o['beyond_path'] = o['distance_m'] > limit and not o['held']
         curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
         dec = decide(objects, path_available=path_ok, path_range=path_range, curvature=curvature,

@@ -15,22 +15,22 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'evaluation'))
 
-from tunnel_od import ObstacleDetector, parse_pointcloud2          # noqa: E402
-from tunnel_od.pointcloud import COLUMN_HEIGHT, dedupe_rounded    # noqa: E402
-from tunnel_od_preproc.build_host import ensure                   # noqa: E402
+from tunnel_od import ObstacleDetector, parse_pointcloud2
+from tunnel_od.pointcloud import COLUMN_HEIGHT, dedupe_rounded
+from tunnel_od_preproc.build_host import ensure
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 if ensure() is None:
     pytest.skip('не собрать libtunnel_od_canonical (нет компилятора C++)', allow_module_level=True)
-from tunnel_od_preproc import native                              # noqa: E402
+from tunnel_od_preproc import native
 
 if not native.available():
     pytest.skip(f'libtunnel_od_canonical: {native.load_error}', allow_module_level=True)
 
-from to_contract_v1 import legacy_to_contract                     # noqa: E402
+from to_contract_v1 import legacy_to_contract
 
 
 class _F:
@@ -96,8 +96,6 @@ def test_parse_bitwise_equal_to_python(n, seed):
     fmt = 'legacy_hesai' if n % 256 == 0 else 'auto'
     native = native_legacy(data, fmt=fmt)
     if n % (2 * COLUMN_HEIGHT) != 0:
-        # облако не из столбцов парами -- C++ не запускает запасное удаление дублей (это делает
-        # конвейер снаружи: tools/bags.py cloud_parser('cpp'), ROS-нода), повторяем его здесь
         native = dedupe_rounded(*native)
     assert bits_equal(py, native)
 
@@ -130,7 +128,7 @@ def test_contract_v1_gives_same_canonical_cloud(seed):
 
 def test_crop_only_removes_points_outside_range():
     x, y, z = synthetic(64 * COLUMN_HEIGHT, 5)
-    y[: 20 * COLUMN_HEIGHT] = -np.abs(y[: 20 * COLUMN_HEIGHT]) % 12 - 2.5     # пол в окне 2..15 м
+    y[: 20 * COLUMN_HEIGHT] = -np.abs(y[: 20 * COLUMN_HEIGHT]) % 12 - 2.5
     x[: 20 * COLUMN_HEIGHT] = np.clip(x[: 20 * COLUMN_HEIGHT], -2, 2)
     data = legacy_cloud(x, y, z)
     full = native_legacy(data)
@@ -150,13 +148,11 @@ def test_required_range_covers_core_and_config():
     import inspect
     from tunnel_od.geometry import bed
     src = inspect.getsource(bed.estimate_floor_z)
-    # защита обрезки в C++ (kFloorGuard*) повторяет запасную оценку пола
     assert 'm.sum() < 50' in src
     sig = inspect.signature(bed.estimate_floor_z).parameters
     assert (sig['near'].default, sig['far'].default, sig['half_width'].default) == (2.0, 15.0, 3.0)
 
 
-# ------------------------------------------------------------------ реальные записи
 
 def _bag_or_skip(name):
     from bags import bag_path
@@ -202,13 +198,11 @@ def test_axes_sign_on_real_frame():
     tp = det.track_path()
     fwd = tp.fit_fwd[tp.fit_fwd < 40]
     lat = tp.center_at(fwd)
-    # точка оси в осях ядра (lat, -fwd) -> REP-103 поворотом +90 град вокруг z (TF, который публикует узел)
     q = (0.0, 0.0, math.sqrt(0.5), math.sqrt(0.5))
     R = np.array([[1 - 2 * (q[1] ** 2 + q[2] ** 2), 2 * (q[0] * q[1] - q[2] * q[3])],
                   [2 * (q[0] * q[1] + q[2] * q[3]), 1 - 2 * (q[0] ** 2 + q[2] ** 2)]])
     rep = R @ np.vstack([lat, -fwd])
     assert np.all(rep[0] > 1.0) and np.allclose(rep[0], fwd, atol=1e-6) and np.all(np.abs(rep[1]) < 1.0)
-    # то же -- формулой адаптера
     assert np.allclose(rep[1], lat, atol=1e-6)
 
     a = np.frombuffer(bytes(m.data), np.uint8).reshape(-1, m.point_step)
@@ -219,7 +213,7 @@ def test_axes_sign_on_real_frame():
     col = np.array([np.median(r[k]) if k.any() else np.nan for r, k in zip(az, ok)])
     good = np.isfinite(col)
     slope = np.polyfit(np.arange(len(col))[good], col[good], 1)[0]
-    assert slope < 0          # -0.05 град на столбец (0.1 на пару)
+    assert slope < 0
 
 
 def _stream_summary(bag, max_frames=None):
@@ -249,7 +243,7 @@ def test_diagnostics_finds_gaps(bag):
 def test_diagnostics_contract_recording_is_clean():
     from bags import DATA
     if not (DATA / 'contract_v1' / 'doubleT_platform').is_dir():
-        pytest.skip('нет записи контракта v1: tools/to_contract_v1.py --bag doubleT_platform '
+        pytest.skip('нет записи контракта v1: python -m evaluation contract --bag doubleT_platform '
                     '--out data/contract_v1/doubleT_platform --speed')
     s = _stream_summary('contract_v1/doubleT_platform')
     assert s['violations'] == [], s

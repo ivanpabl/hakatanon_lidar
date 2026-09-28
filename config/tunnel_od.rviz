@@ -1,0 +1,104 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Help Height: 0
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 10
+      Plane Cell Count: 30
+      Color: 160; 160; 164
+      Alpha: 0.3
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Cloud /lidar_points
+      Enabled: true
+      Topic:
+        Value: /lidar_points
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: AxisColor
+      Axis: Z
+      Use Fixed Frame: true
+      Autocompute Value Bounds: false
+      Min Value: -2
+      Max Value: 4
+      Decay Time: 0
+      Queue Size: 1
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Cloud /sensing/lidar/hesai128/pointcloud
+      Enabled: true
+      Topic:
+        Value: /sensing/lidar/hesai128/pointcloud
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: AxisColor
+      Axis: Z
+      Use Fixed Frame: true
+      Autocompute Value Bounds: false
+      Min Value: -2
+      Max Value: 4
+      Decay Time: 0
+      Queue Size: 1
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: tunnel_od markers
+      Enabled: true
+      Topic:
+        Value: /tunnel_od/markers
+        Depth: 5
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Namespaces:
+        tunnel_od: true
+        tunnel_od_text: true
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 36
+    Fixed Frame: hesai_lidar
+    Frame Rate: 15
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 45
+      Focal Point:
+        X: 0
+        Y: -30
+        Z: 0
+      Pitch: 0.35
+      Yaw: 1.5708
+      Near Clip Distance: 0.01
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1600
+  Hide Left Dock: false
+  Displays:
+    collapsed: false
