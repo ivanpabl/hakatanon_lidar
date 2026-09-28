@@ -1,9 +1,8 @@
 tunnel_od_detector:
   ros__parameters:
     topic: ""
-    refit_mode: async
+    refit_mode: sync
     refit_every: 1
-    alarm_range_fits: 3
     qos_reliability: reliable
     qos_depth: 5
     max_pending: 2

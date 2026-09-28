@@ -1,7 +1,8 @@
 """Строка статуса для записи видео: /tunnel_od/result -> три текстовых файла для ffmpeg drawtext.
 
 <dir>/alarm.txt -- «ПРЕПЯТСТВИЕ N м» (красным), <dir>/clear.txt -- «Путь свободен» (зелёным),
-<dir>/info.txt -- подпись, кадр, задержка, дальность оси, скорость (белым). ffmpeg перечитывает файлы
+<dir>/info.txt -- подпись, кадр, задержка, дальность оси, скорость (белым); <dir>/truth.txt -- истинная
+дистанция до синтетического объекта из /synthetic/object, если он есть в записи. ffmpeg перечитывает файлы
 на каждом кадре видео; запись через os.replace, чтобы он не прочитал файл наполовину.
 """
 import json
@@ -27,8 +28,15 @@ class StatusOverlay(Node):
         self.title = self.declare_parameter('title', '').value
         os.makedirs(self.dir, exist_ok=True)
         self._write(' ', 'ожидание кадров…', self.title)
-        self.create_subscription(String, '/tunnel_od/result', self._on_result,
-                                 QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+        _put(os.path.join(self.dir, 'truth.txt'), ' ')
+        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        self.create_subscription(String, '/tunnel_od/result', self._on_result, qos)
+        self.create_subscription(String, '/synthetic/object', self._on_truth, qos)
+
+    def _on_truth(self, msg):
+        t = json.loads(msg.data)
+        _put(os.path.join(self.dir, 'truth.txt'),
+             f"синтетика: {t.get('shape', 'объект')} на {t['distance_m']:.1f} м")
 
     def _write(self, alarm, clear, info):
         _put(os.path.join(self.dir, 'alarm.txt'), alarm)

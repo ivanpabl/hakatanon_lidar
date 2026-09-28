@@ -45,7 +45,8 @@ def _actions(context):
     vf = (f'crop={CROP},'
           f'drawtext={txt}:textfile={OVERLAY}/alarm.txt:fontcolor=0xff4040:fontsize=44:x=24:y=24,'
           f'drawtext={txt}:textfile={OVERLAY}/clear.txt:fontcolor=0x50ff70:fontsize=44:x=24:y=24,'
-          f'drawtext={txt}:textfile={OVERLAY}/info.txt:fontcolor=white:fontsize=22:x=24:y=h-56')
+          f'drawtext={txt}:textfile={OVERLAY}/info.txt:fontcolor=white:fontsize=22:x=24:y=h-56,'
+          f'drawtext={txt}:textfile={OVERLAY}/truth.txt:fontcolor=0xffd060:fontsize=28:x=w-tw-24:y=24')
     ffmpeg = ExecuteProcess(cmd=['ffmpeg', '-loglevel', 'error', '-y', '-f', 'x11grab', '-draw_mouse', '0',
                                  '-video_size', f'{W}x{H}', '-framerate', lc('fps'), '-i', DISPLAY,
                                  '-t', f'{length / rate + 2.0:.1f}', '-vf', vf,

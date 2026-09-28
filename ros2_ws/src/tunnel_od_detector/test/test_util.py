@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from tunnel_od_detector.util import (Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
-                                     limit_alarms, required_fwd_range, to_jsonable)
+                                     required_fwd_range, to_jsonable)
 
 
 def _target(self, near_cutoff=2.0, zone=None, method='zone', path_margin=10.0):
@@ -95,36 +95,3 @@ def test_default_crop_is_safe_for_core():
     lo, hi = required_fwd_range({})
     assert lo >= 2.0 - 1e-9 and hi <= 250.0 + 1e-9
     assert required_fwd_range({'max_range': 300.0})[1] == 300.0
-
-
-def _res(*objs):
-    return {'obstacle': True, 'distance_m': min(o['distance_m'] for o in objs if o['confirmed']),
-            'objects': [dict(o) for o in objs]}
-
-
-def test_limit_alarms_drops_far_candidate_keeps_near():
-    far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False}
-    near = {'distance_m': 56.0, 'confirmed': True, 'beyond_path': False}
-    res = limit_alarms(_res(far), 153.0)
-    assert res['obstacle'] is False and res['distance_m'] is None
-    assert res['objects'][0]['beyond_path'] and res['objects'][0]['beyond_recent_path']
-    res = limit_alarms(_res(far, near), 153.0)
-    assert res['obstacle'] is True and res['distance_m'] == 56.0 and res['alarm_range_m'] == 153.0
-
-
-def test_limit_alarms_ignores_unconfirmed_and_none_limit():
-    cand = {'distance_m': 90.0, 'confirmed': False, 'beyond_path': False}
-    near = {'distance_m': 40.0, 'confirmed': True, 'beyond_path': False}
-    res = limit_alarms(_res(cand, near), 50.0)
-    assert res['obstacle'] and res['distance_m'] == 40.0 and 'beyond_recent_path' not in res['objects'][0]
-    res = _res(near)
-    assert limit_alarms(res, None) is res and res['obstacle']
-
-
-def test_limit_alarms_only_near_end_of_axis():
-    near = {'distance_m': 56.0, 'confirmed': True, 'beyond_path': False}
-    res = limit_alarms(_res(near), 52.0, 0.8 * 121.0)
-    assert res['obstacle'] and res['distance_m'] == 56.0
-    far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False}
-    res = limit_alarms(_res(far), 153.0, 0.8 * 204.0)
-    assert not res['obstacle']

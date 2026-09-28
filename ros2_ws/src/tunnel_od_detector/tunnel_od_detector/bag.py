@@ -1,5 +1,6 @@
 """Что внутри записи ros2 bag: топик облака, frame_id, длительность. Нужно launch-файлам play и demo
 (RViz должен знать frame_id облака, плеер -- когда запись кончится)."""
+import re
 from pathlib import Path
 
 import yaml
@@ -17,7 +18,7 @@ def bag_info(path):
     meta = yaml.safe_load((Path(path) / 'metadata.yaml').read_text())['rosbag2_bagfile_information']
     duration = meta['duration']['nanoseconds'] / 1e9
     files = meta.get('relative_file_paths') or []
-    name = Path(files[0]).stem.rsplit('_', 1)[0] if files else Path(str(path).rstrip('/')).name
+    name = re.sub(r'_\d+$', '', Path(files[0]).stem) if files else Path(str(path).rstrip('/')).name
     topics = [t['topic_metadata']['name'] for t in meta['topics_with_message_count']
               if t['topic_metadata']['type'] == CLOUD_TYPE]
     if not topics:

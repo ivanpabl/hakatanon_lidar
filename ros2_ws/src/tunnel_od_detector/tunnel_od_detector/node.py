@@ -16,9 +16,12 @@
 (счётчик dropped_stale, предупреждение в лог). Так задержка не растёт без предела,
 даже если детектор надолго не успевает.
 
-Путь (update_path, ~80 мс) по умолчанию пересчитывается в отдельном процессе по самому
-свежему кадру (refit_mode: async, см. path_worker.py) -- тогда задержка кадра = разбор +
-проверка. refit_mode: sync -- как в ядре: detect(refit_path=(i % refit_every == 0)).
+Путь по умолчанию пересчитывается на каждом кадре в том же вызове (refit_mode: sync,
+detect(refit_path=(i % refit_every == 0))) -- узел решает ровно как офлайн-оценка, на
+которой измерены дальность и ложные тревоги; задержка кадра = разбор + путь + проверка.
+refit_mode: async -- путь в отдельном процессе по самому свежему кадру (path_worker.py):
+задержка ниже, но путь опаздывает на кадр, а конец оси скачет от кадра к кадру, и решения
+у конца оси отличаются от офлайн (больше ложных тревог вдали, тревоги могут пропадать).
 
 Параметры ObstacleDetector -- всё, что лежит под `detector.` в config/detector.yaml,
 плюс JSON-строка `detector_json` (перекрывает). Ничего не зашито в код.
@@ -40,7 +43,7 @@ from visualization_msgs.msg import MarkerArray
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 
 from .markers import build_markers
-from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, limit_alarms, percentile
+from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, percentile
 
 CLOUD_TYPE = 'sensor_msgs/msg/PointCloud2'
 
@@ -49,20 +52,16 @@ def _stamp_sec(header):
     return header.stamp.sec + header.stamp.nanosec * 1e-9
 
 
-END_OF_AXIS = 0.8
-
-
 class DetectorNode(Node):
     def __init__(self):
         super().__init__('tunnel_od_detector',
                          automatically_declare_parameters_from_overrides=True)
         p = self._param
         self.topic = p('topic', '')
-        self.refit_mode = str(p('refit_mode', 'async')).lower()
+        self.refit_mode = str(p('refit_mode', 'sync')).lower()
         if self.refit_mode not in ('async', 'sync'):
             raise ValueError(f'refit_mode: async | sync, получено {self.refit_mode!r}')
         self.refit_every = max(1, int(p('refit_every', 1)))
-        self._recent_ranges = deque(maxlen=max(1, int(p('alarm_range_fits', 3))))
         self.stats_period = float(p('stats_period_s', 5.0))
         self.publish_markers = bool(p('publish_markers', True))
         self.max_marker_objects = int(p('marker_max_objects', 30))
@@ -249,13 +248,6 @@ class DetectorNode(Node):
         else:
             refit = self._frame % self.refit_every == 0
         res = self.det.detect(x, y, z, refit_path=refit, stamp=stamp)
-        if self.fitter:
-            if (refit or path_updated) and res.get('path_available') and res.get('path_range_m') is not None:
-                self._recent_ranges.append(res['path_range_m'])
-            ranges = list(self._recent_ranges)
-            if self._recent_ranges.maxlen > 1 and ranges and res.get('path_available'):
-                lo = min(ranges) if len(ranges) == self._recent_ranges.maxlen else END_OF_AXIS * max(ranges)
-                limit_alarms(res, lo + self.det.path_margin, END_OF_AXIS * max(ranges))
         t2 = time.monotonic()
 
         out = dict(res)

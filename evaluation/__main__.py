@@ -16,6 +16,7 @@
     demo         3D-плеер output/report/demo.html (demo.py)
     site         главная страница отчёта output/report/index.html (site.py)
     inject-demo  картинки кадра до и после вставки объекта (inject_demo.py)
+    inject-bag   запись ros2 bag с синтетическим объектом: испытание подъезда для видео (inject_bag.py)
 
 Результаты шагов -- в output/runs (TUNNEL_OD_RUNS). Нужны: pip install -e "core[eval]".
 """
@@ -28,6 +29,7 @@ COMMANDS = {
     'all': 'run_all', 'alarms': 'alarms', 'approach': 'eval_approach', 'injection': 'eval_injection',
     'benchmark': 'benchmark', 'preproc': 'check_preproc', 'input': 'input_report', 'contract': 'to_contract_v1',
     'dashboard': 'dashboard', 'demo': 'demo', 'site': 'site', 'inject-demo': 'inject_demo',
+    'inject-bag': 'inject_bag',
 }
 
 
