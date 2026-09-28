@@ -17,6 +17,10 @@
     site         главная страница отчёта output/report/index.html (site.py)
     inject-demo  картинки кадра до и после вставки объекта (inject_demo.py)
     inject-bag   запись ros2 bag с синтетическим объектом: испытание подъезда для видео (inject_bag.py)
+    fake-obj     объекты организаторов в cloud_with_fake_obj: первый СТОП, ложные кадры (eval_fake_obj.py)
+    selflabel    эпизоды СТОП на new_data, доказанно ложные проездом (selflabel.py)
+    trace        решение по каждому кадру подъезда: где СТОП и почему нет (approach_trace.py)
+    compare      строка сводной таблицы вариантов (compare_row.py)
 
 Результаты шагов -- в output/runs (TUNNEL_OD_RUNS). Нужны: pip install -e "core[eval]".
 """
@@ -29,7 +33,8 @@ COMMANDS = {
     'all': 'run_all', 'alarms': 'alarms', 'approach': 'eval_approach', 'injection': 'eval_injection',
     'benchmark': 'benchmark', 'preproc': 'check_preproc', 'input': 'input_report', 'contract': 'to_contract_v1',
     'dashboard': 'dashboard', 'demo': 'demo', 'site': 'site', 'inject-demo': 'inject_demo',
-    'inject-bag': 'inject_bag',
+    'inject-bag': 'inject_bag', 'fake-obj': 'eval_fake_obj', 'selflabel': 'selflabel', 'trace': 'approach_trace',
+    'compare': 'compare_row',
 }
 
 

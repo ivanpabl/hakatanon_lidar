@@ -11,6 +11,7 @@ tunnel_od_detector:
     marker_max_objects: 30
     markers_every: 1
     log_alarms: true
+    skip_repeated: true
     stats_period_s: 5.0
     result_file: ""
     stats_file: ""
@@ -22,7 +23,7 @@ tunnel_od_detector:
       max_range: 250.0
       half_width: 1.0
       clearance: 0.15
-      height: 2.0
+      height: 2.5
       far_axis: true
       path_margin: 0.0
       far_from: 20.0
@@ -32,8 +33,17 @@ tunnel_od_detector:
       tracker: evidence
       evidence_threshold: 2.2
       evidence_decay: 0.8
+      alarm_hold: 3
+      alarm_hold_min: 5
+      path_hold: 0
+      ego_check: true
+      ego_min_travel: 4.0
+      ego_max_slope: -0.35
       confirm_hits: 3
       confirm_window: 5
+      plausibility: true
+      plausible_min_dist: 60.0
+      plausible_behind_n: 2
       max_path_age: 30
       default_rail_offset: 0.5
       min_points_k: 12000.0

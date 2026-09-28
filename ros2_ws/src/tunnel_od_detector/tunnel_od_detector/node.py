@@ -8,7 +8,10 @@
        публикации исходного кадра, скорость поезда (S1) и сводка проверки входа.
        Без него облако разбирается здесь: нативной библиотекой tunnel_od_preproc (тот же
        код, что в C++-узле; parse_backend: auto|native) или parse_pointcloud2 (python).
-Выход: /tunnel_od/result  -- std_msgs/String, JSON на каждый обработанный кадр;
+Выход: /tunnel_od/result  -- std_msgs/String, JSON на каждый обработанный кадр: решение `status`
+       (stop | caution | unknown | clear), `level`/`reason` объектов, `sight_m`, `clear_to_m`,
+       `caution_distance_m`; побитовый повтор облака (skip_repeated) -- прошлый результат с
+       `repeated: true`, детектор не вызывается;
        /tunnel_od/markers -- visualization_msgs/MarkerArray для RViz.
 
 Кадры обрабатываются в отдельном потоке. Колбэк подписки только кладёт сообщение в
@@ -41,9 +44,11 @@ from std_msgs.msg import String
 from visualization_msgs.msg import MarkerArray
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2
+from tunnel_od.pointcloud import FrameRepeat, dedupe_rounded, hesai_columns
 
 from .markers import build_markers
-from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, percentile
+from .util import (Stats, build_detector_kwargs, canonical_xyz, dumps, percentile, raw_hesai_format,
+                   raw_point_count, unordered_raw)
 
 CLOUD_TYPE = 'sensor_msgs/msg/PointCloud2'
 
@@ -75,8 +80,11 @@ class DetectorNode(Node):
         self.meta_topic = p('meta_topic', '/tunnel_od/input_meta')
         self.max_pending = max(1, int(p('max_pending', 2)))
         self.parse_backend = str(p('parse_backend', 'auto')).lower()
+        self.skip_repeated = bool(p('skip_repeated', True))
         p('detector_json', '')
         self._parse = self._make_parser()
+        self._repeat = FrameRepeat()
+        self._last_out = None
 
         det_params = {name: prm.value for name, prm in self.get_parameters_by_prefix('detector').items()}
         kwargs = build_detector_kwargs(det_params, self.get_parameter('detector_json').value,
@@ -148,6 +156,7 @@ class DetectorNode(Node):
         """Разбор входного облака. Возвращает функцию msg -> (x, y, z)."""
         if self.canonical_input:
             self.get_logger().info('вход: каноническое облако tunnel_od_preproc (np.frombuffer без копии)')
+            self._parse_kind = 'canonical'
             return canonical_xyz
         if self.parse_backend not in ('auto', 'native', 'python'):
             raise ValueError(f'parse_backend: auto | native | python, получено {self.parse_backend!r}')
@@ -156,6 +165,7 @@ class DetectorNode(Node):
                 from tunnel_od_preproc import native
                 if native.available():
                     self.get_logger().info('разбор облака: нативная библиотека tunnel_od_preproc (ctypes)')
+                    self._parse_kind = 'native'
                     return native.parse_msg
                 err = native.load_error
             except ImportError as e:
@@ -165,6 +175,7 @@ class DetectorNode(Node):
             self.get_logger().warning(f'нативный разбор недоступен ({err}) -- parse_pointcloud2')
         else:
             self.get_logger().info('разбор облака: parse_pointcloud2 (Python)')
+        self._parse_kind = 'python'
         return lambda msg: parse_pointcloud2(msg.data, msg.point_step, msg.fields)
 
     def _param(self, name, default):
@@ -236,9 +247,27 @@ class DetectorNode(Node):
 
     def _process(self, msg, t_recv):
         t0 = time.monotonic()
-        x, y, z = self._parse(msg)
-        t1 = time.monotonic()
         stamp = _stamp_sec(msg.header)
+        with self._lock:
+            meta = self._meta.pop((msg.header.stamp.sec, msg.header.stamp.nanosec), None)
+        if self.skip_repeated and self._repeat.check(msg.data) and self._last_out is not None:
+            out = dict(self._last_out, frame=self._frame, stamp=stamp, repeated=True,
+                       queue_ms=(t0 - t_recv) * 1e3, latency_ms=(time.monotonic() - t_recv) * 1e3)
+            text = dumps(out)
+            self.pub_result.publish(String(data=text))
+            with self._lock:
+                self.stats.on_processed(out['latency_ms'], 0.0, out.get('obstacle'), out.get('distance_m'))
+            self._frame += 1
+            if self._result_fh:
+                self._result_fh.write(text + '\n')
+            return
+        x, y, z = self._parse(msg)
+        if self._parse_kind != 'python':
+            n_raw = raw_point_count(msg.width * msg.height, meta, self.canonical_input)
+            hesai = raw_hesai_format(meta) if self.canonical_input else hesai_columns(n_raw, msg.fields)
+            if unordered_raw(n_raw, hesai):
+                x, y, z = dedupe_rounded(x, y, z)
+        t1 = time.monotonic()
         path_updated = False
         if self.fitter:
             path_updated = self.fitter.apply(self.det)
@@ -263,10 +292,10 @@ class DetectorNode(Node):
             'parse_ms': (t1 - t0) * 1e3,
             'detect_ms': (t2 - t1) * 1e3,
             'queue_ms': (t0 - t_recv) * 1e3,
+            'repeated': False,
         })
         with self._lock:
             out['dropped_total'] = self.stats.dropped
-            meta = self._meta.pop((msg.header.stamp.sec, msg.header.stamp.nanosec), None)
         if self.canonical_input:
             parse = (meta or {}).get('parse') or {}
             out.update({
@@ -282,6 +311,7 @@ class DetectorNode(Node):
                 self._e2e.append(out['e2e_ms'])
         out['latency_ms'] = (time.monotonic() - t_recv) * 1e3
         text = dumps(out)
+        self._last_out = out
         self.pub_result.publish(String(data=text))
         with self._lock:
             self.stats.on_processed(out['latency_ms'], (t2 - t0) * 1e3, res.get('obstacle'), res.get('distance_m'))
@@ -299,12 +329,12 @@ class DetectorNode(Node):
                 self.get_logger().warning(f'маркеры не построены: {e}', throttle_duration_sec=10.0)
 
         if self.log_alarms and res.get('obstacle'):
-            n_conf = sum(1 for o in res.get('objects') or [] if o.get('confirmed') and not o.get('beyond_path'))
+            n_stop = sum(1 for o in res.get('objects') or [] if o.get('level') == 'stop')
             pr = res.get('path_range_m')
             self.get_logger().warning(
-                f'ТРЕВОГА кадр {self._frame - 1}: препятствие {float(res["distance_m"]):.1f} м, '
-                f'подтверждённых объектов {n_conf}, ось до {pr if pr is None else round(pr)} м, '
-                f'задержка {out["latency_ms"]:.0f} мс')
+                f'СТОП кадр {self._frame - 1}: препятствие {float(res["distance_m"]):.1f} м, '
+                f'объектов stop {n_stop}, ось до {pr if pr is None else round(pr)} м, '
+                f'свободно до {res.get("clear_to_m") or 0:.0f} м, задержка {out["latency_ms"]:.0f} мс')
 
     def _print_period(self):
         now = time.monotonic()

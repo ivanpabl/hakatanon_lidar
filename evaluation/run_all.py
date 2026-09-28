@@ -131,6 +131,8 @@ def main():
         print(f'\nНЕТ ЗАПИСЕЙ: {", ".join(missing)}\nОжидается data/Датасет/archive/for_hackathon/<запись>/metadata.yaml '
               f'и data/new_data/metadata.yaml (или --data <каталог>; без new_data -- --skip-new-data).', file=sys.stderr)
         sys.exit(2)
+    fake_obj = not args.quick and (data / 'cloud_with_fake_obj' / 'metadata.yaml').is_file()
+    print(f'запись организаторов cloud_with_fake_obj: {"есть" if fake_obj else "нет -- оценка по 10 объектам пропущена"}')
     compiler = has_compiler()
     print(f'компилятор C++ для библиотеки разбора: {"есть" if compiler else "нет -- проверка входа и замер разбора C++ из baseline.json"}')
 
@@ -156,12 +158,22 @@ def main():
             steps.append(Step('alarms_nd', ['evaluation/alarms.py', '--tag', f'nd_{TAG}', '--bags', 'new_data', '--segments',
                                             '8', '--seglen', '400', '--workers', '1'], logs))
         if not args.skip_full and not args.skip_new_data:
-            steps.append(Step('alarms_nd_full', ['evaluation/alarms.py', '--tag', 'final_nd_full', '--bags', 'new_data',
+            steps.append(Step('alarms_nd_full', ['evaluation/alarms.py', '--tag', 'nd_final', '--bags', 'new_data',
                                                  '--workers', '1'], logs))
+        if fake_obj:
+            steps.append(Step('alarms_fo', ['evaluation/alarms.py', '--tag', 'fo_final', '--bags', 'cloud_with_fake_obj',
+                                            '--workers', '1', '--all-objects'], logs))
     if compiler:
         steps.append(Step('input_report', ['evaluation/input_report.py', *only_six], logs))
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
+    after = []
+    if fake_obj and 'alarms_fo' not in failed:
+        after.append(Step('fake_obj', ['evaluation/eval_fake_obj.py', 'eval', '--tag', 'fo_final'], logs))
+    if not args.quick and not args.skip_full and not args.skip_new_data and 'alarms_nd_full' not in failed:
+        after.append(Step('selflabel', ['evaluation/selflabel.py', '--tag', 'nd_final'], logs))
+    if after and not run_parallel(after, env):
+        failed += [s.name for s in after if not s.ok]
 
     if compiler:
         print('\n[3/4] разбор C++ против Python: побитное совпадение и время')
@@ -175,7 +187,8 @@ def main():
     metrics, demo = args.out / 'metrics.html', args.out / 'demo.html'
     steps = [Step('dashboard', ['evaluation/dashboard.py', '--out', str(metrics)], logs),
              Step('demo', ['evaluation/demo.py', '--out', str(demo), '--workers', '2',
-                           *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30'] if args.quick else [])],
+                           *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30',
+                              '--approach', f'{QUICK_APPROACH}:32:person:60'] if args.quick else [])],
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]

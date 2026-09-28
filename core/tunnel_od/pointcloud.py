@@ -13,12 +13,19 @@ Layout в записях: x,y,z,intensity (float32), ring (uint16), timestamp (f
 
 Система координат: x -- вбок, вперёд = -y (не +y!), z -- вверх. Во всём пакете
 продольная координата fwd = -y, поперечная lat = x.
+
+Синтетика организаторов (cloud_with_fake_obj) -- 16-байтные точки x, y, z, intensity, без поля
+timestamp; это не Hesai-облако из столбцов, даже если число точек кратно 256 (замер на
+cloud_with_fake_obj, кадр 2: 307200 точек, из них парный дедуп -- 117781, округление -- 89343;
+объекты синтетики не dual-return пары, дедуп по столбцам их не снимает и оставляет мусор). Дубли
+снимаются запасным способом (hesai_columns=False): одна точка на ячейку 1 см.
 """
 import numpy as np
 
 COLUMN_HEIGHT = 128
 DUAL_RETURN_DUP_M = 0.01
 AZ_STEP_DEG = 0.1
+DEDUPE_CELL_M = 0.01
 
 _DEFAULT_OFFSETS = {'x': 0, 'y': 4, 'z': 8, 'intensity': 12}
 
@@ -29,6 +36,18 @@ def xyz_views(buf, fields=None):
     if fields is not None:
         offs.update({f.name: f.offset for f in fields if f.name in offs})
     return {k: buf[:, o:o + 4].view(np.float32)[:, 0] for k, o in offs.items()}
+
+
+def hesai_columns(n, fields) -> bool:
+    """Облако -- пары столбцов Hesai dual return: точек кратно 2*COLUMN_HEIGHT и есть поле
+    timestamp (fields=None -- запись без явных полей, это старый 26-байтный layout по
+    умолчанию, тоже Hesai). Иначе (в т.ч. синтетика организаторов) -- не Hesai, даже если
+    число точек случайно делится на 256: дедуп по столбцам тогда снимает не то."""
+    if n % (2 * COLUMN_HEIGHT) != 0:
+        return False
+    if fields is None:
+        return True
+    return any(f.name == 'timestamp' for f in fields)
 
 
 def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_return=True):
@@ -42,14 +61,46 @@ def parse_pointcloud2(data: bytes, point_step: int, fields=None, dedupe_dual_ret
     valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & ((x != 0) | (y != 0) | (z != 0))
 
     n = len(x)
-    if dedupe_dual_return and n % (2 * COLUMN_HEIGHT) == 0:
+    if dedupe_dual_return and hesai_columns(n, fields):
         cols = lambda a: a.reshape(-1, 2, COLUMN_HEIGHT)
         xa, ya, za = cols(x), cols(y), cols(z)
         dup = ((np.abs(xa[:, 1] - xa[:, 0]) < DUAL_RETURN_DUP_M)
                & (np.abs(ya[:, 1] - ya[:, 0]) < DUAL_RETURN_DUP_M)
                & (np.abs(za[:, 1] - za[:, 0]) < DUAL_RETURN_DUP_M))
         valid.reshape(-1, 2, COLUMN_HEIGHT)[:, 1] &= ~dup
-    return x[valid], y[valid], z[valid]
+        return x[valid], y[valid], z[valid]
+    x, y, z = x[valid], y[valid], z[valid]
+    if dedupe_dual_return:
+        return dedupe_rounded(x, y, z)
+    return x, y, z
+
+
+def dedupe_rounded(x, y, z, cell=DEDUPE_CELL_M):
+    """Дубли облака не из столбцов: точки, совпавшие после округления до cell, -- одна точка.
+    Порядок оставшихся точек -- как во входе (первое вхождение)."""
+    if len(x) == 0:
+        return x, y, z
+    q = lambda a: (np.round(np.asarray(a, np.float64) / cell).astype(np.int64) + 32768) & 0xFFFF
+    key = (q(x) << 32) | (q(y) << 16) | q(z)
+    _, first = np.unique(key, return_index=True)
+    keep = np.sort(first)
+    return x[keep], y[keep], z[keep]
+
+
+class FrameRepeat:
+    """Облако, побитово совпадающее с предыдущим: в бэге организаторов кадры повторяются
+    («объекты замирают»), и повтор нельзя подавать в детектор как новый кадр -- трекер и
+    оценка скорости посчитают его кадром с нулевым движением."""
+
+    def __init__(self):
+        self._prev = None
+
+    def check(self, data) -> bool:
+        cur = np.frombuffer(data, np.uint8)
+        same = self._prev is not None and len(cur) == len(self._prev) and np.array_equal(cur, self._prev)
+        if not same:
+            self._prev = cur.copy()
+        return same
 
 
 def beam_directions(x, y, z):

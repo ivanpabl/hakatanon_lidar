@@ -178,6 +178,26 @@ def extend_path_by_walls(x, y, z, fit_fwd, cl, tor_fn, far=250.0, far_extend=Tru
     return np.concatenate([fit_fwd, ext_f[tail]]), np.concatenate([cl, c_t])
 
 
+def splice_far_axis(new_fwd, new_cl, old_fwd, old_cl, shift, min_gain=5.0, overlap=20.0, max_dlat=0.3):
+    """Продление короткой новой оси хвостом предыдущей: (fwd, cl, склеено ли).
+
+    Дальность оси по стенам от кадра к кадру скачет (на стоящем поезде -- от 50 до 200 м), и
+    объект за концом короткой оси тревогу не поднимает. Предыдущая ось сдвигается на путь
+    поезда shift; хвост берётся, если она длиннее новой на min_gain и на последних overlap
+    метрах новой оси расходится с ней по медиане не больше max_dlat (иначе это другая ось,
+    например за стрелкой). Хвост сдвигается вбок так, чтобы на стыке не было ступеньки."""
+    of = np.asarray(old_fwd) - shift
+    end = new_fwd[-1]
+    if of[-1] < end + min_gain:
+        return new_fwd, new_cl, False
+    ov = (new_fwd >= end - overlap) & (new_fwd >= of[0])
+    if ov.sum() < 3 or np.median(np.abs(new_cl[ov] - np.interp(new_fwd[ov], of, old_cl))) > max_dlat:
+        return new_fwd, new_cl, False
+    tail = of > end
+    off = new_cl[-1] - np.interp(end, of, old_cl)
+    return np.concatenate([new_fwd, of[tail]]), np.concatenate([new_cl, np.asarray(old_cl)[tail] + off]), True
+
+
 @dataclass
 class TrackPath:
     """Снимок геометрии пути на момент кадра (копия, не меняется вместе с детектором).

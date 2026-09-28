@@ -6,6 +6,8 @@ from geometry_msgs.msg import Point
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
+from .util import LEVEL_COLOR, status_text
+
 NS = 'tunnel_od'
 NS_TEXT = 'tunnel_od_text'
 AXIS_STEP_M = 2.0
@@ -81,40 +83,23 @@ def build_markers(result, track, det, header, max_objects=30):
             frames.points += [_pt(a[0], -fwd[i], a[1]), _pt(b[0], -fwd[i], b[1])]
     arr.markers.append(frames)
 
-    objects = sorted(result.get('objects') or [], key=lambda o: o.get('distance_m', 1e9))
-    alarm_objs = [o for o in objects if o.get('confirmed') and not o.get('beyond_path')]
-    alarm_ids = {id(o) for o in alarm_objs}
-    shown = alarm_objs + [o for o in objects if id(o) not in alarm_ids]
+    rank = {'stop': 0, 'caution': 1}
+    shown = sorted(result.get('objects') or [], key=lambda o: (rank.get(o.get('level'), 2), o.get('distance_m', 1e9)))
     for i, o in enumerate(shown[:max_objects]):
         d = float(o.get('distance_m', 0.0))
         lat = float(o.get('lateral_m', 0.0) or 0.0)
         h = max(float(o.get('height_m', 0.3) or 0.3), 0.2)
         base = float(track.rail_top_at(d)[0])
         x = float(track.center_at(d)) + lat
-        if id(o) in alarm_ids:
-            col = _color(1.0, 0.1, 0.1, 0.9)
-        elif o.get('too_small') or o.get('beyond_path'):
-            col = _color(0.6, 0.6, 0.6, 0.5)
-        else:
-            col = _color(1.0, 0.85, 0.1, 0.7)
-        box = _marker(header, 100 + i, Marker.CUBE, col, (0.6, 0.6, h))
+        box = _marker(header, 100 + i, Marker.CUBE, _color(*LEVEL_COLOR.get(o.get('level'), LEVEL_COLOR[None])),
+                      (0.6, 0.6, h))
         box.pose.position = _pt(x, -(d + 0.3), base + h / 2)
         arr.markers.append(box)
 
-    if result.get('obstacle'):
-        text = f"OBSTACLE {float(result['distance_m']):.1f} m"
-        col = _color(1.0, 0.2, 0.2)
-    else:
-        text = 'track clear'
-        col = _color(0.3, 1.0, 0.3)
-    extra = []
-    if result.get('clear_to_m') is not None:
-        extra.append(f"view {float(result['clear_to_m']):.0f} m")
+    text, rgb = status_text(result)
     if path_range:
-        extra.append(f'axis {float(path_range):.0f} m')
-    if extra:
-        text += ' (' + ', '.join(extra) + ')'
-    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, col, (0, 0, 1.0), ns=NS_TEXT)
+        text += f' (axis {float(path_range):.0f} m)'
+    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, 1.0), ns=NS_TEXT)
     label.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 1.5)
     label.text = text
     arr.markers.append(label)
