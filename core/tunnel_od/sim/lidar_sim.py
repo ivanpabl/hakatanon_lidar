@@ -80,7 +80,8 @@ def intersect_sphere(dx, dy, dz, center, radius):
     return t
 
 
-def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=None, obstacle_radius=0.25):
+def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=None, obstacle_radius=0.25, shapes=()):
+    """shapes -- фигуры sim.shapes (координаты lat=x, fwd, z; головка рельса z=Z_FLOOR+RAIL_HEIGHT)."""
     dx, dy, dz, ring = build_rays()
 
     t_wall = intersect_cylinder(dx, dy, dz)
@@ -96,6 +97,13 @@ def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=
         hit_obs = t_obs < t
         t = np.minimum(t, t_obs)
         surface = np.where(hit_obs, 3, surface)
+
+    if len(shapes):
+        d = np.stack([dx, dy, dz], axis=1)
+        for sh in shapes:
+            t_sh = sh.intersect(d)
+            surface = np.where(t_sh < t, 3, surface)
+            t = np.minimum(t, t_sh)
 
     valid = np.isfinite(t) & (t < MAX_RANGE)
     t = t[valid]
@@ -115,7 +123,7 @@ def simulate_frame(obstacle_forward=None, obstacle_lateral=0.0, obstacle_height=
     y_out = (-Y).astype(np.float32)
     z_out = Z.astype(np.float32)
 
-    n_obstacle_hits = int((surfv == 3).sum()) if obstacle_forward is not None else 0
+    n_obstacle_hits = int((surfv == 3).sum())
     return x_out, y_out, z_out, intensity, ringv.astype(np.uint16), n_obstacle_hits
 
 

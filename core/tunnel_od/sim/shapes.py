@@ -1,4 +1,4 @@
-"""Простые фигуры для вставки в кадр: ящик, вертикальный цилиндр, шар.
+"""Простые фигуры для вставки в кадр: ящик, вертикальный цилиндр, шар, свисающий кабель.
 
 Координаты (lat, fwd, z): lat = x (вбок), fwd = -y (вперёд), z -- вверх.
 """
@@ -94,12 +94,75 @@ class Sphere:
         return np.where((disc >= 0) & (t > 1e-3), t, np.inf)
 
 
+def _capsule(d, a, b, r):
+    """Лучи из начала координат (d -- единичные направления, N x 3) и отрезок a-b толщиной r
+    с полусферами на концах: дальность до первого пересечения, inf -- мимо."""
+    ba, oa = b - a, -a
+    baba, baoa, oaoa = ba @ ba, ba @ oa, oa @ oa
+    bard, rdoa = d @ ba, d @ oa
+    k2 = baba - bard ** 2
+    k1 = baba * rdoa - baoa * bard
+    k0 = baba * oaoa - baoa ** 2 - r ** 2 * baba
+    h = k1 ** 2 - k2 * k0
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t = (-k1 - np.sqrt(np.maximum(h, 0))) / k2
+    y = baoa + t * bard
+    t = np.where((h >= 0) & (k2 > 1e-12) & (y > 0) & (y < baba) & (t > 1e-3), t, np.inf)
+    for c in (a, b):
+        oc = -c
+        bb = d @ oc
+        disc = bb ** 2 - (oc @ oc - r ** 2)
+        tc = -bb - np.sqrt(np.maximum(disc, 0))
+        t = np.minimum(t, np.where((disc >= 0) & (tc > 1e-3), tc, np.inf))
+    return t
+
+
+@dataclass
+class Cable:
+    """Оборванный кабель, свисающий со свода в габарит: полилиния толщиной diameter.
+    Нижний конец -- (lat, fwd, z0 + bottom), z0 -- головка рельса; вверх уходит на length,
+    отклоняясь от вертикали на tilt_deg вбок (к +lat); sag -- провис: середина кабеля
+    отходит от прямой вбок (к -lat) на sag, м (0 -- прямой)."""
+    fwd: float
+    lat: float
+    z0: float
+    diameter: float
+    length: float
+    tilt_deg: float = 0.0
+    bottom: float = 2.0
+    sag: float = 0.0
+    n_seg: int = 8
+
+    def points(self):
+        a = np.radians(self.tilt_deg)
+        s = np.linspace(0.0, 1.0, self.n_seg + 1)
+        u = np.array([np.sin(a), 0.0, np.cos(a)])
+        side = np.array([-np.cos(a), 0.0, np.sin(a)])
+        base = np.array([self.lat, self.fwd, self.z0 + self.bottom])
+        return base + np.outer(s * self.length, u) + np.outer(4 * self.sag * s * (1 - s), side)
+
+    def bound(self):
+        p = self.points()
+        c = p.mean(axis=0)
+        return c, float(np.linalg.norm(p - c, axis=1).max()) + self.diameter / 2
+
+    def intersect(self, d):
+        p = self.points()
+        t = np.full(len(d), np.inf)
+        for a, b in zip(p[:-1], p[1:]):
+            t = np.minimum(t, _capsule(d, a, b, self.diameter / 2))
+        return t
+
+
 def make_shape(kind, dims, fwd, lat, z0, yaw_deg=0.0):
-    """kind: box (length,width,height) | cylinder (radius,height) | sphere (radius)."""
+    """kind: box (length,width,height) | cylinder (radius,height) | sphere (radius) |
+    cable (diameter,length[,tilt_deg[,bottom[,sag]]])."""
     if kind == 'box':
         return Box(fwd, lat, z0, *dims, yaw_deg=yaw_deg)
     if kind == 'cylinder':
         return Cylinder(fwd, lat, z0, *dims)
     if kind == 'sphere':
         return Sphere(fwd, lat, z0, *dims)
+    if kind == 'cable':
+        return Cable(fwd, lat, z0, *dims)
     raise ValueError(kind)
