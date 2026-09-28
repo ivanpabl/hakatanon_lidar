@@ -40,13 +40,16 @@ from visualization_msgs.msg import MarkerArray
 from tunnel_od import ObstacleDetector, parse_pointcloud2
 
 from .markers import build_markers
-from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, percentile
+from .util import Stats, build_detector_kwargs, canonical_xyz, dumps, limit_alarms, percentile
 
 CLOUD_TYPE = 'sensor_msgs/msg/PointCloud2'
 
 
 def _stamp_sec(header):
     return header.stamp.sec + header.stamp.nanosec * 1e-9
+
+
+END_OF_AXIS = 0.8        # «конец оси» для limit_alarms: последние 20 % её дальности
 
 
 class DetectorNode(Node):
@@ -59,6 +62,9 @@ class DetectorNode(Node):
         if self.refit_mode not in ('async', 'sync'):
             raise ValueError(f'refit_mode: async | sync, получено {self.refit_mode!r}')
         self.refit_every = max(1, int(p('refit_every', 1)))
+        # async: тревога -- не дальше минимума дальности оси по стольким последним пересчётам пути
+        # (путь приходит с опозданием на кадр, конец оси скачет; 1 -- как у ядра, без ограничения)
+        self._recent_ranges = deque(maxlen=max(1, int(p('alarm_range_fits', 3))))
         self.stats_period = float(p('stats_period_s', 5.0))
         self.publish_markers = bool(p('publish_markers', True))
         self.max_marker_objects = int(p('marker_max_objects', 30))
@@ -247,6 +253,16 @@ class DetectorNode(Node):
         else:
             refit = self._frame % self.refit_every == 0
         res = self.det.detect(x, y, z, refit_path=refit, stamp=stamp)
+        if self.fitter:
+            # дальность берётся только у пересчёта, путь которого действителен в этом кадре
+            if (refit or path_updated) and res.get('path_available') and res.get('path_range_m') is not None:
+                self._recent_ranges.append(res['path_range_m'])
+            ranges = list(self._recent_ranges)
+            if self._recent_ranges.maxlen > 1 and ranges and res.get('path_available'):
+                # пока пересчётов меньше нужного (старт: фоновый процесс ещё поднимается), сравнить
+                # конец оси не с чем -- последние 20 % оси считаются ненадёжными
+                lo = min(ranges) if len(ranges) == self._recent_ranges.maxlen else END_OF_AXIS * max(ranges)
+                limit_alarms(res, lo + self.det.path_margin, END_OF_AXIS * max(ranges))
         t2 = time.monotonic()
 
         # 1) результат -- сразу после детектора: задержка = приём -> публикация решения

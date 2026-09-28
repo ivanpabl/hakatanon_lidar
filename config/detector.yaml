@@ -11,6 +11,9 @@ tunnel_od_detector:
     #   sync  -- в том же вызове detect() раз в refit_every кадров (как в ядре).
     refit_mode: async
     refit_every: 1           # только для sync
+    alarm_range_fits: 3      # async: объект у конца оси (последние 20 %) -- тревога, только если он внутри оси
+                             #   по N последним пересчётам; пока пересчётов меньше N -- без тревоги у конца оси
+                             #   (путь опаздывает на кадр, а конец оси скачет от кадра к кадру); 1 -- без этого
     qos_reliability: reliable   # reliable | best_effort (ros2 bag play публикует RELIABLE)
     qos_depth: 5
     max_pending: 2           # очередь кадров к детектору; полна -- отбрасывается самый старый
