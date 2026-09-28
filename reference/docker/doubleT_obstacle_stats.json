@@ -1,0 +1,151 @@
+{
+  "received": 201,
+  "processed": 191,
+  "dropped_stale": 10,
+  "stamp_gaps": 4,
+  "errors": 0,
+  "alarm_frames": 183,
+  "min_alarm_distance_m": 55.53746795654297,
+  "latency_ms_p50": 48.99372199724894,
+  "latency_ms_p95": 174.78681999637047,
+  "latency_ms_max": 395.15674200083595,
+  "proc_ms_p50": 45.36847300187219,
+  "proc_ms_p95": 107.35102000035113,
+  "topic": "/tunnel_od/cloud",
+  "refit_mode": "async",
+  "refit_every": 1,
+  "path_fits_async": 98,
+  "wall_s": 29.99535434000427,
+  "max_pending": 2,
+  "canonical_input": true,
+  "e2e_ms_p50": 87.73271199999999,
+  "e2e_ms_p95": 242.712917,
+  "e2e_ms_max": 430.4998,
+  "preproc": {
+    "received": 201,
+    "published": 200,
+    "dropped": 0,
+    "errors": 0,
+    "seq_supported": true,
+    "unrotated": 0
+  },
+  "input": {
+    "frames": 201,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 201,
+        "frames": 201,
+        "rejected": 0,
+        "frame_id": "lidar_livox",
+        "height": 1,
+        "width": 921600,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 8.7
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 201,
+        "empty_share": 0.624,
+        "zero_share": 0.624,
+        "nan_share": 0.0,
+        "ring_checked_frames": 201,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 97.7% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9773,
+        "frames": 201
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'lidar_livox'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год); 2 разрывов, 0.4 с",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 2,
+        "gap_total_s": 0.4,
+        "gap_max_s": 0.4,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 65.4,
+        "first_point_after_stamp_ms": 17.44,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -122..118 град, 10.0 Гц",
+        "az_min_deg": -121.6,
+        "az_max_deg": 117.6,
+        "sector_deg": 239.2,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.93
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 201,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "gap": {
+        "count": 2,
+        "text": "M4: разрыв в штампах 0.20 с (потерянные кадры)"
+      },
+      "no_description": {
+        "count": 182,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 182,
+        "text": "M3: нет /tf_static base_link -> 'lidar_livox' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 201,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 201,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  }
+}

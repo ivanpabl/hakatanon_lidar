@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FastDDS: большие кадры (8-23 МБ) через shared memory с большим сегментом
+     + UDP для обнаружения/обмена с другими хостами. Нужен /dev/shm >= segment_size:
+     docker run --shm-size=1g (или --ipc=host). -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>shm_big</transport_id>
+      <type>SHM</type>
+      <segment_size>268435456</segment_size>
+      <maxMessageSize>67108864</maxMessageSize>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>udp_big</transport_id>
+      <type>UDPv4</type>
+      <sendBufferSize>33554432</sendBufferSize>
+      <receiveBufferSize>33554432</receiveBufferSize>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="tunnel_od_participant" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>shm_big</transport_id>
+        <transport_id>udp_big</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>

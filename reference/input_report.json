@@ -1,0 +1,925 @@
+{
+  "doubleT_obstacle": {
+    "frames": 201,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 201,
+        "frames": 201,
+        "rejected": 0,
+        "frame_id": "lidar_livox",
+        "height": 1,
+        "width": 921600,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 8.7
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 201,
+        "empty_share": 0.624,
+        "zero_share": 0.624,
+        "nan_share": 0.0,
+        "ring_checked_frames": 201,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 97.7% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9773,
+        "frames": 201
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'lidar_livox'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год); 2 разрывов, 0.4 с",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 2,
+        "gap_total_s": 0.4,
+        "gap_max_s": 0.4,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 65.4,
+        "first_point_after_stamp_ms": 17.44,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -122..118 град, 10.0 Гц",
+        "az_min_deg": -121.6,
+        "az_max_deg": 117.6,
+        "sector_deg": 239.2,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.81
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 201,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "gap": {
+        "count": 2,
+        "text": "M4: разрыв в штампах 0.20 с (потерянные кадры)"
+      },
+      "no_description": {
+        "count": 182,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 182,
+        "text": "M3: нет /tf_static base_link -> 'lidar_livox' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 201,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 201,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "doubleT_platform": {
+    "frames": 345,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 345,
+        "frames": 345,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 0.3
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 345,
+        "empty_share": 0.459,
+        "zero_share": 0.459,
+        "nan_share": 0.0,
+        "ring_checked_frames": 345,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 96.9% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9687,
+        "frames": 345
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год)",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 0,
+        "gap_total_s": 0.0,
+        "gap_max_s": 0.0,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.99
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 345,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "no_description": {
+        "count": 326,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 326,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 345,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 345,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "roundT_doubleT": {
+    "frames": 252,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 252,
+        "frames": 252,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 0.5
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 252,
+        "empty_share": 0.385,
+        "zero_share": 0.385,
+        "nan_share": 0.0,
+        "ring_checked_frames": 252,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 97.8% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9779,
+        "frames": 252
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год)",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 0,
+        "gap_total_s": 0.0,
+        "gap_max_s": 0.0,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 10.01
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 252,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "no_description": {
+        "count": 233,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 233,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 252,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 252,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "roundT_pressureGate_roundT": {
+    "frames": 268,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 268,
+        "frames": 268,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 0.4
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 268,
+        "empty_share": 0.387,
+        "zero_share": 0.387,
+        "nan_share": 0.0,
+        "ring_checked_frames": 268,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 98.6% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9862,
+        "frames": 268
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год)",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 0,
+        "gap_total_s": 0.0,
+        "gap_max_s": 0.0,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 10.0
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 268,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "no_description": {
+        "count": 249,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 249,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 268,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 268,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "roundT_squareT_pressureGate_squareT": {
+    "frames": 545,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 545,
+        "frames": 545,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 0.4
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 545,
+        "empty_share": 0.392,
+        "zero_share": 0.392,
+        "nan_share": 0.0,
+        "ring_checked_frames": 545,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 98.6% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9856,
+        "frames": 545
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год); 1 разрывов, 1.0 с",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 1,
+        "gap_total_s": 1.0,
+        "gap_max_s": 1.1,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.82
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 545,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "gap": {
+        "count": 1,
+        "text": "M4: разрыв в штампах 1.10 с (потерянные кадры)"
+      },
+      "no_description": {
+        "count": 526,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 526,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "unordered": {
+        "count": 545,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 545,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "squareT_platform_squareT_switch": {
+    "frames": 877,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 877,
+        "frames": 877,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": -2.5
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 877,
+        "empty_share": 0.456,
+        "zero_share": 0.456,
+        "nan_share": 0.0,
+        "ring_checked_frames": 877,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 96.5% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9653,
+        "frames": 877
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год); 1 разрывов, 0.6 с",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 1,
+        "gap_total_s": 0.6,
+        "gap_max_s": 0.7,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.93
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 877,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "gap": {
+        "count": 1,
+        "text": "M4: разрыв в штампах 0.70 с (потерянные кадры)"
+      },
+      "no_description": {
+        "count": 858,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 858,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "sector": {
+        "count": 1,
+        "text": "M5: сектор -50..48 град, нужно не меньше +-50 град"
+      },
+      "unordered": {
+        "count": 877,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 877,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "new_data": {
+    "frames": 11271,
+    "rejected": 0,
+    "violations": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M6"
+    ],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "legacy_hesai/legacy",
+        "frames:legacy_hesai/legacy": 11271,
+        "frames": 11271,
+        "rejected": 0,
+        "frame_id": "hesai_lidar",
+        "height": 1,
+        "width": 307200,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 1.1
+      },
+      "M1": {
+        "level": "warn",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "неупорядоченное (height=1); нули вместо NaN",
+        "unordered_frames": 11271,
+        "empty_share": 0.404,
+        "zero_share": 0.404,
+        "nan_share": 0.0,
+        "ring_checked_frames": 11271,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "warn",
+        "title": "режим отражений",
+        "message": "dual return без return_id, дубли по расстоянию; совпало 97.7% пар",
+        "mode": "dual_by_distance",
+        "pair_coincident_share": 0.9765,
+        "frames": 11271
+      },
+      "M3": {
+        "level": "warn",
+        "title": "оси и /tf_static",
+        "message": "нет /tf_static для 'hesai_lidar'",
+        "tf_children_seen": ""
+      },
+      "M4": {
+        "level": "warn",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "часы не синхронизированы (2000 год); 23 разрывов, 72.8 с",
+        "stamp_year": 2000,
+        "nonmonotonic": 0,
+        "gaps": 23,
+        "gap_total_s": 72.8,
+        "gap_max_s": 7.1,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.0,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -49.7,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.6,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.39
+      },
+      "M6": {
+        "level": "warn",
+        "title": "описание датчика",
+        "message": "нет"
+      },
+      "S1": {
+        "level": "unknown",
+        "title": "скорость поезда",
+        "message": "speed_topic не задан"
+      }
+    },
+    "warnings": {
+      "clock": {
+        "count": 1,
+        "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"
+      },
+      "dual_by_distance": {
+        "count": 11271,
+        "text": "M2: нет return_id -- дубли dual return удаляются по совпадению соседних столбцов (< 1 см)"
+      },
+      "gap": {
+        "count": 23,
+        "text": "M4: разрыв в штампах 3.00 с (потерянные кадры)"
+      },
+      "no_description": {
+        "count": 11252,
+        "text": "M6: нет описания датчика"
+      },
+      "no_tf": {
+        "count": 11252,
+        "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"
+      },
+      "sector": {
+        "count": 1,
+        "text": "M5: сектор -46..50 град, нужно не меньше +-50 град"
+      },
+      "unordered": {
+        "count": 11271,
+        "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"
+      },
+      "zeros": {
+        "count": 11271,
+        "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"
+      }
+    }
+  },
+  "contract_v1/doubleT_platform": {
+    "frames": 345,
+    "rejected": 0,
+    "violations": [],
+    "checks": {
+      "format": {
+        "level": "ok",
+        "title": "распознанный формат и оси",
+        "message": "contract_v1/rep103",
+        "frames:contract_v1/rep103": 345,
+        "frames": 345,
+        "rejected": 0,
+        "frame_id": "lidar",
+        "height": 128,
+        "width": 2400,
+        "frame_id_changes": 0,
+        "layout_changes": 0,
+        "size_changes": 0,
+        "sector_center_deg": 0.3
+      },
+      "M1": {
+        "level": "ok",
+        "title": "упорядоченное облако, NaN для пустых лучей",
+        "message": "соответствует",
+        "unordered_frames": 0,
+        "empty_share": 0.721,
+        "zero_share": 0.0,
+        "nan_share": 0.721,
+        "ring_checked_frames": 345,
+        "ring_mismatch_frames": 0,
+        "dense_mismatch_frames": 0
+      },
+      "M2": {
+        "level": "ok",
+        "title": "режим отражений",
+        "message": "dual return по return_id",
+        "mode": "return_id",
+        "second_nan_share": 0.9831,
+        "second_coincident_points": 0
+      },
+      "M3": {
+        "level": "ok",
+        "title": "оси и /tf_static",
+        "message": "base_link -> lidar",
+        "parent": "base_link",
+        "x": 0.0,
+        "y": 0.0,
+        "z": 1.109,
+        "roll_deg": 0.0,
+        "pitch_deg": 0.0,
+        "yaw_deg": 0.0
+      },
+      "M4": {
+        "level": "ok",
+        "title": "время: синхронизация, шаг 100 +- 1 мс, время точек",
+        "message": "соответствует",
+        "stamp_year": 2026,
+        "nonmonotonic": 0,
+        "gaps": 0,
+        "gap_total_s": 0.0,
+        "gap_max_s": 0.0,
+        "off_step": 0,
+        "step_median_ms": 100.0,
+        "sweep_ms_median": 30.2,
+        "first_point_after_stamp_ms": 1.28,
+        "frames_without_point_time": 0
+      },
+      "M5": {
+        "level": "ok",
+        "title": "сектор и частота",
+        "message": "сектор -50..50 град, 10.0 Гц",
+        "az_min_deg": -50.0,
+        "az_max_deg": 49.9,
+        "sector_deg": 99.9,
+        "rate_hz_stamp": 10.0,
+        "rate_hz_received": 9.99
+      },
+      "M6": {
+        "level": "ok",
+        "title": "описание датчика",
+        "message": "получено",
+        "bytes": 6748
+      },
+      "S1": {
+        "level": "ok",
+        "title": "скорость поезда",
+        "message": "0.00 м/с, 10.0 Гц",
+        "messages": 340,
+        "rate_hz": 10.0,
+        "last_mps": 0.0
+      }
+    },
+    "warnings": {}
+  }
+}
