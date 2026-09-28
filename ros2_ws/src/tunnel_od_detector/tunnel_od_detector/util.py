@@ -123,6 +123,13 @@ def raw_hesai_format(meta) -> bool:
     return ((meta or {}).get('parse') or {}).get('format') == 'legacy_hesai'
 
 
+def preproc_deduped(meta) -> bool:
+    """C++-приём уже снял дубли по сетке 1 см (meta parse.dedupe_rounded, параметр dedupe_rounded
+    узла tunnel_od_preproc) -- dedupe_rounded в узле не нужен. Нет meta или старый C++ без поля --
+    False: дубли снимает узел (повтор безвреден, dedupe_rounded идемпотентен)."""
+    return bool(((meta or {}).get('parse') or {}).get('dedupe_rounded'))
+
+
 def status_text(result):
     """Строка решения для RViz и логов и её цвет. Латиница: шрифт RViz не рисует кириллицу."""
     s = result.get('status')

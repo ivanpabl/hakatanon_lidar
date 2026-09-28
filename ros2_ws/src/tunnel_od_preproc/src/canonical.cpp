@@ -456,4 +456,60 @@ size_t parse_cloud(
   return n_out;
 }
 
+bool needs_dedupe_rounded(Format format, uint64_t n_in)
+{
+  return n_in != 0 && !(format == Format::LegacyHesai && n_in % (2 * kColumnHeight) == 0);
+}
+
+namespace
+{
+
+inline uint64_t cell_q(float v)
+{
+  // Как np.round(np.float64(v) / cell).astype(np.int64): деление в double, rint к ближайшему чётному
+  // (режим округления по умолчанию), затем int64. Вне диапазона int64 numpy на x86 даёт INT64_MIN --
+  // повторяем, чтобы не было UB (такие точки -- мусор дальше 9e16 м, в облаке их не бывает).
+  const double r = std::nearbyint(static_cast<double>(v) / kDedupeCellM);
+  const int64_t q = (r > -9223372036854775808.0 && r < 9223372036854775808.0) ?
+    static_cast<int64_t>(r) : std::numeric_limits<int64_t>::min();
+  return (static_cast<uint64_t>(q) + 32768u) & 0xFFFFu;   // сложение по модулю 2^64 -- как int64 numpy
+}
+
+constexpr uint64_t kEmptyKey = ~uint64_t{0};   // ключ < 2^48, пустая ячейка таблицы не совпадёт
+
+}
+
+uint64_t dedupe_cell_key(float x, float y, float z)
+{
+  return (cell_q(x) << 32) | (cell_q(y) << 16) | cell_q(z);
+}
+
+size_t RoundedDeduper::run(float * x, float * y, float * z, size_t stride, size_t n)
+{
+  if (n == 0) {return 0;}
+  size_t cap = 1024;
+  while (cap < 2 * n) {cap <<= 1;}
+  if (table_.size() != cap) {table_.assign(cap, kEmptyKey);} else {std::fill(table_.begin(), table_.end(), kEmptyKey);}
+  const uint64_t mask = cap - 1;
+  int shift = 64;
+  for (size_t c = cap; c > 1; c >>= 1) {--shift;}
+  uint64_t * t = table_.data();
+
+  size_t w = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const uint64_t key = dedupe_cell_key(x[i * stride], y[i * stride], z[i * stride]);
+    uint64_t h = (key * 0x9E3779B97F4A7C15ull) >> shift;
+    while (t[h] != kEmptyKey && t[h] != key) {h = (h + 1) & mask;}
+    if (t[h] != kEmptyKey) {continue;}   // ячейка уже занята более ранней точкой
+    t[h] = key;
+    if (w != i) {
+      x[w * stride] = x[i * stride];
+      y[w * stride] = y[i * stride];
+      z[w * stride] = z[i * stride];
+    }
+    ++w;
+  }
+  return w;
+}
+
 }

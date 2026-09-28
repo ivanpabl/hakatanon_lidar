@@ -10,6 +10,7 @@ namespace tunnel_od
 
 constexpr uint32_t kColumnHeight = 128;
 constexpr float kDualReturnDupM = 0.01f;
+constexpr double kDedupeCellM = 0.01;
 
 enum PointFieldType : uint8_t
 {
@@ -105,6 +106,8 @@ struct ParseStats
   uint64_t n_cropped = 0;
   uint64_t n_out = 0;
   bool dedupe_applied = false;
+  bool dedupe_rounded = false;
+  uint64_t n_dup_rounded = 0;
   bool crop_applied = false;
   bool crop_guard = false;
   uint64_t pairs_both_valid = 0;
@@ -125,5 +128,26 @@ size_t parse_cloud(
   const ParseOptions & opt, double stamp_s,
   float * out_x, float * out_y, float * out_z, size_t out_stride,
   ParseStats * stats, std::string * error);
+
+// Дубли облака не из пар столбцов Hesai (синтетика организаторов, generic, contract_v1): одна точка
+// на ячейку сетки kDedupeCellM. Точно тот же отбор, что в tunnel_od.pointcloud.dedupe_rounded:
+// ключ ячейки q(v) = (int64(rint(double(v) / cell)) + 32768) & 0xFFFF (rint -- к ближайшему чётному,
+// как np.round), key = q(x) << 32 | q(y) << 16 | q(z); остаётся первое вхождение ключа, порядок точек --
+// как во входе. Узел детектора тогда dedupe_rounded не вызывает (meta parse.dedupe_rounded).
+// Нужен ли он кадру -- как tunnel_od_detector.util.unordered_raw(n_in, format == legacy_hesai).
+bool needs_dedupe_rounded(Format format, uint64_t n_in);
+
+uint64_t dedupe_cell_key(float x, float y, float z);
+
+class RoundedDeduper
+{
+public:
+  // На месте: x/y/z -- указатели на первую точку, шаг out_stride float'ов (в узле 3). Возвращает
+  // число оставшихся точек; они уплотнены в начало. Таблица переиспользуется между кадрами.
+  size_t run(float * x, float * y, float * z, size_t stride, size_t n);
+
+private:
+  std::vector<uint64_t> table_;
+};
 
 }

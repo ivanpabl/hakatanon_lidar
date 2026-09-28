@@ -7,7 +7,7 @@ import pytest
 
 from tunnel_od_detector.util import (LEVEL_COLOR, Stats, build_detector_kwargs, canonical_xyz, dumps, is_canonical,
                                      limit_alarms, raw_hesai_format, raw_point_count, required_fwd_range,
-                                     status_text, to_jsonable, unordered_raw)
+                                     preproc_deduped, status_text, to_jsonable, unordered_raw)
 
 
 def _target(self, near_cutoff=2.0, zone=None, method='zone', path_margin=10.0):
@@ -110,6 +110,12 @@ def test_unordered_raw_not_hesai_even_if_multiple_of_256():
     assert unordered_raw(307200, hesai=False) and not unordered_raw(307200, hesai=True)
     assert raw_hesai_format({'parse': {'format': 'legacy_hesai'}})
     assert not raw_hesai_format({'parse': {'format': 'generic'}}) and not raw_hesai_format(None)
+
+
+def test_preproc_deduped_from_meta():
+    assert preproc_deduped({'parse': {'dedupe_rounded': True, 'n_dup_rounded': 5}})
+    assert not preproc_deduped({'parse': {'dedupe_rounded': False}})
+    assert not preproc_deduped({'parse': {'format': 'generic'}}) and not preproc_deduped(None)
 
 
 def test_status_text():

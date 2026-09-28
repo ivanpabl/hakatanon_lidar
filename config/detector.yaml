@@ -71,6 +71,7 @@ tunnel_od_preproc:
     input_format: auto
     input_axes: auto
     dedupe_dual_return: true
+    dedupe_rounded: true  # дубли по сетке 1 см (облако не из пар столбцов Hesai) снимает C++, а не узел (−25..35 мс/кадр)
     crop_enabled: true
     crop_fwd_min: 2.0
     crop_fwd_max: 250.0

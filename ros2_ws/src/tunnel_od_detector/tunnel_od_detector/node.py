@@ -54,7 +54,7 @@ from tunnel_od.pointcloud import FrameRepeat, dedupe_rounded, hesai_columns
 from .input_guard import Warmup, Watchdog, annotate, catch_up_enabled, fault_result, take_latest
 from .markers import build_markers, build_state_markers
 from .util import (Stats, build_detector_kwargs, canonical_xyz, dumps, limit_alarms, percentile,
-                   raw_hesai_format, raw_point_count, unordered_raw)
+                   preproc_deduped, raw_hesai_format, raw_point_count, unordered_raw)
 
 CLOUD_TYPE = 'sensor_msgs/msg/PointCloud2'
 
@@ -314,7 +314,8 @@ class DetectorNode(Node):
                 # meta кадра потерялась -- формат по прошлой meta (в потоке он не меняется)
                 n_raw = raw_point_count(msg.width * msg.height, fmt_meta, self.canonical_input)
                 hesai = raw_hesai_format(fmt_meta) if self.canonical_input else hesai_columns(n_raw, msg.fields)
-            if unordered_raw(n_raw, hesai):
+            # C++-узел с dedupe_rounded: true снял дубли по сетке сам (meta parse.dedupe_rounded)
+            if unordered_raw(n_raw, hesai) and not (self.canonical_input and preproc_deduped(fmt_meta)):
                 x, y, z = dedupe_rounded(x, y, z)
         t1 = time.monotonic()
         path_updated = False
@@ -360,6 +361,7 @@ class DetectorNode(Node):
                 'transport_ms': meta.get('transport_ms') if meta else None,
                 'n_points_raw': parse.get('n_in'),
                 'n_points_valid': parse.get('n_valid'),
+                'n_points_dedup': parse.get('n_dup_rounded'),
                 'input_format': parse.get('format'),
             })
             if meta and meta.get('source_ts_ns'):

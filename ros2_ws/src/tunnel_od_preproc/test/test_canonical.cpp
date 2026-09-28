@@ -294,3 +294,51 @@ TEST(Canonical, RejectsUnusableClouds)
   Layout f64 = tunnel_od::make_layout({{"x", 0, 8, 1}, {"y", 8, 8, 1}, {"z", 16, 8, 1}});
   EXPECT_NE(tunnel_od::validate(c, f64), "");
 }
+
+TEST(DedupeRounded, KeepsFirstPointPerCellInInputOrder)
+{
+  // Как tunnel_od.pointcloud.dedupe_rounded: ячейка 1 см, первое вхождение, порядок входа.
+  std::vector<float> b = {
+    1.000f, -5.000f, 0.100f,      // 0
+    2.000f, -5.000f, 0.100f,      // 1
+    1.004f, -5.004f, 0.096f,      // 2: та же ячейка, что 0 -- дубль
+    1.006f, -5.000f, 0.100f,      // 3: соседняя ячейка по x (1.01) -- остаётся
+    2.000f, -5.000f, 0.100f,      // 4: дубль 1
+    0.000f, 0.000f, 0.000f,       // 5
+  };
+  tunnel_od::RoundedDeduper d;
+  const size_t n = d.run(b.data(), b.data() + 1, b.data() + 2, 3, 6);
+  ASSERT_EQ(n, 4u);
+  EXPECT_FLOAT_EQ(b[0], 1.000f);
+  EXPECT_FLOAT_EQ(b[3], 2.000f);
+  EXPECT_FLOAT_EQ(b[6], 1.006f);
+  EXPECT_FLOAT_EQ(b[9], 0.0f);
+  EXPECT_EQ(d.run(b.data(), b.data() + 1, b.data() + 2, 3, n), n);   // идемпотентен
+  EXPECT_EQ(d.run(b.data(), b.data() + 1, b.data() + 2, 3, 0), 0u);
+}
+
+TEST(DedupeRounded, RoundsHalfToEvenLikeNumpyAndWrapsKeyTo16Bits)
+{
+  using tunnel_od::dedupe_cell_key;
+  // 0.005 / 0.01 в double = 0.5000000000000001 -> 1; 0.025f = 0.025000000372529 -> 3 (не половина);
+  // ровно половина только у точных двоичных: 0.125 / 0.01 = 12.5 -> 12 (к чётному), 0.375 / 0.01 = 37.5 -> 38.
+  EXPECT_EQ(dedupe_cell_key(0.125f, 0, 0), dedupe_cell_key(0.12f, 0, 0));
+  EXPECT_NE(dedupe_cell_key(0.125f, 0, 0), dedupe_cell_key(0.13f, 0, 0));
+  EXPECT_EQ(dedupe_cell_key(0.375f, 0, 0), dedupe_cell_key(0.38f, 0, 0));
+  EXPECT_EQ(dedupe_cell_key(-0.125f, 0, 0), dedupe_cell_key(-0.12f, 0, 0));
+  EXPECT_EQ(dedupe_cell_key(0, 0, 0), (uint64_t{32768} << 32) | (uint64_t{32768} << 16) | 32768);
+  EXPECT_EQ(dedupe_cell_key(0, 0, -0.01f), (uint64_t{32768} << 32) | (uint64_t{32768} << 16) | 32767);
+  // 16 бит на ось: 655.36 м и 0 м -- одна ячейка (так же в numpy: & 0xFFFF)
+  EXPECT_EQ(dedupe_cell_key(655.36f, 0, 0), dedupe_cell_key(0, 0, 0));
+  EXPECT_EQ(dedupe_cell_key(1e30f, 0, 0) >> 32, uint64_t{32768});   // вне int64: как numpy на x86
+}
+
+TEST(DedupeRounded, NeededExactlyWhenPythonNodeWouldDedupe)
+{
+  using tunnel_od::needs_dedupe_rounded;
+  EXPECT_FALSE(needs_dedupe_rounded(Format::LegacyHesai, 512));
+  EXPECT_TRUE(needs_dedupe_rounded(Format::LegacyHesai, 300));
+  EXPECT_TRUE(needs_dedupe_rounded(Format::Generic, 307200));
+  EXPECT_TRUE(needs_dedupe_rounded(Format::ContractV1, 512));
+  EXPECT_FALSE(needs_dedupe_rounded(Format::Generic, 0));
+}

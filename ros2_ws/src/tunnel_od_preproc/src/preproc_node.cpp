@@ -114,6 +114,9 @@ public:
       throw std::invalid_argument("input_axes: auto|legacy|rep103, получено " + axes);
     }
     opt_.dedupe_dual_return = declare_parameter<bool>("dedupe_dual_return", true);
+    // Дубли по сетке 1 см (облако не из пар столбцов Hesai) снимаются здесь, а не в Python-узле
+    // (там dedupe_rounded стоил 25-35 мс на кадр); false -- как раньше, узел снимает их сам.
+    dedupe_rounded_ = declare_parameter<bool>("dedupe_rounded", true);
     opt_.crop.enabled = declare_parameter<bool>("crop_enabled", true);
     opt_.crop.fwd_min = declare_parameter<double>("crop_fwd_min", 2.0);
     opt_.crop.fwd_max = declare_parameter<double>("crop_fwd_max", 250.0);
@@ -171,8 +174,10 @@ public:
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(stats_period_)),
       [this] {report();});
     RCLCPP_INFO(get_logger(),
-      "формат %s, оси %s, dual return %s, обрезка %s [%.1f, %.1f] м, apply_mount_tf %s, выход %s",
+      "формат %s, оси %s, dual return %s, дубли по сетке 1 см %s, обрезка %s [%.1f, %.1f] м, "
+      "apply_mount_tf %s, выход %s",
       to_string(opt_.format), to_string(opt_.axes), opt_.dedupe_dual_return ? "удалять" : "оставлять",
+      dedupe_rounded_ ? "удалять здесь" : "оставлять узлу",
       opt_.crop.enabled ? "да" : "нет", opt_.crop.fwd_min, opt_.crop.fwd_max,
       apply_mount_tf_ ? "да" : "нет", output_topic_.c_str());
   }
@@ -342,8 +347,14 @@ private:
     const size_t cap = c.n_points() * 3;
     if (buf_.size() < cap) {buf_.resize(cap);}
     const double stamp_s = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9;
-    const size_t n = parse_cloud(msg.data.data(), c, layout_, opt, stamp_s,
+    size_t n = parse_cloud(msg.data.data(), c, layout_, opt, stamp_s,
         buf_.data(), buf_.data() + 1, buf_.data() + 2, 3, &st, &err);
+    if (dedupe_rounded_ && err.empty() && needs_dedupe_rounded(st.format, st.n_in)) {
+      const size_t kept = deduper_.run(buf_.data(), buf_.data() + 1, buf_.data() + 2, 3, n);
+      st.dedupe_rounded = true;
+      st.n_dup_rounded = n - kept;
+      n = kept;
+    }
 
     FrameInfo fi;
     fi.stamp_ns = stamp_ns;
@@ -363,9 +374,11 @@ private:
     }
     if (first_frame_) {
       first_frame_ = false;
+      const std::string dd = st.dedupe_rounded ?
+        " (дубли по сетке 1 см: -" + std::to_string(st.n_dup_rounded) + ")" : std::string();
       RCLCPP_INFO(get_logger(), "первый кадр: %s, %ux%u, point_step %u, fields [%s] -> формат %s, оси %s, "
-        "%zu -> %zu точек", input_topic_.c_str(), c.height, c.width, c.point_step, layout_.signature.c_str(),
-        to_string(st.format), to_string(st.axes), static_cast<size_t>(st.n_in), n);
+        "%zu -> %zu точек%s", input_topic_.c_str(), c.height, c.width, c.point_step, layout_.signature.c_str(),
+        to_string(st.format), to_string(st.axes), static_cast<size_t>(st.n_in), n, dd.c_str());
     }
 
     auto out = std::make_unique<sensor_msgs::msg::PointCloud2>();
@@ -543,6 +556,8 @@ private:
   std::string input_topic_, output_topic_, meta_topic_, diag_topic_, base_frame_, core_suffix_;
   std::string speed_topic_, speed_type_, description_topic_, stats_file_;
   ParseOptions opt_;
+  bool dedupe_rounded_ = true;
+  RoundedDeduper deduper_;
   bool apply_mount_tf_ = false;
   double stats_period_ = 5.0, speed_max_age_s_ = 1.0;
   rclcpp::QoS qos_{5};

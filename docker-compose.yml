@@ -10,6 +10,7 @@ x-common: &common
     TUNNEL_OD_TOPIC: ${TOPIC:-}               # топик PointCloud2 ("" -- единственный в записи / автопоиск)
     TUNNEL_OD_REFIT_MODE: ${REFIT_MODE:-}     # sync -- детерминированный пересчёт пути ("" -- из config)
     TUNNEL_OD_MAX_PENDING: ${MAX_PENDING:-}   # напр. 100000 -- кадры не отбрасываются ("" -- из config)
+    TUNNEL_OD_DEDUPE_ROUNDED: ${DEDUPE_ROUNDED:-}   # false -- дубли по сетке снимает Python-узел, а не C++ ("" -- из config)
   shm_size: 2g
   volumes:
     - ./config:/opt/tunnel_od/config:ro

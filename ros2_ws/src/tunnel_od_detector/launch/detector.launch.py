@@ -95,6 +95,8 @@ def _nodes(context):
             v = lc(name)
             if v:
                 pre[name] = v
+        if lc('dedupe_rounded'):
+            pre['dedupe_rounded'] = lc('dedupe_rounded').lower() in ('1', 'true', 'yes', 'on')
         if lc('topic'):
             pre['input_topic'] = lc('topic')
         if lc('stats_file'):
@@ -114,7 +116,7 @@ def _nodes(context):
         if lc('topic'):
             det['topic'] = lc('topic')
         det['canonical_input'] = False
-        for name in ('input_format', 'input_axes', 'speed_topic'):
+        for name in ('input_format', 'input_axes', 'speed_topic', 'dedupe_rounded'):
             if lc(name):
                 actions.append(LogInfo(msg=f'[tunnel_od] {name} действует только с use_cpp_preproc:=true'))
 
@@ -135,6 +137,8 @@ def generate_launch_description():
         arg('use_cpp_preproc', 'true', 'C++-приём облака (tunnel_od_preproc): true | false'),
         arg('input_format', '', 'auto | legacy_hesai | contract_v1 | generic ("" -- из config)'),
         arg('input_axes', '', 'auto | legacy | rep103 ("" -- из config)'),
+        arg('dedupe_rounded', os.environ.get('TUNNEL_OD_DEDUPE_ROUNDED', ''),
+            'C++-узел снимает дубли по сетке 1 см сам: true | false ("" -- из config; false -- их снимает узел)'),
         arg('speed_topic', '', 'скорость поезда (TwistStamped / Odometry), только запись в результат'),
         arg('intra_process', 'false', 'intra-process в контейнере компонентов (для драйвера-компонента)'),
         arg('parse_backend', '', 'без C++-узла: auto | native | python'),

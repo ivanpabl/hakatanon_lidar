@@ -510,6 +510,7 @@ std::string to_json(const ParseStats & s)
     << "\",\"n_in\":" << s.n_in << ",\"n_nonfinite\":" << s.n_nonfinite << ",\"n_zero\":" << s.n_zero
     << ",\"n_dup\":" << s.n_dup << ",\"n_valid\":" << s.n_valid << ",\"n_cropped\":" << s.n_cropped
     << ",\"n_out\":" << s.n_out << ",\"dedupe_applied\":" << (s.dedupe_applied ? "true" : "false")
+    << ",\"dedupe_rounded\":" << (s.dedupe_rounded ? "true" : "false") << ",\"n_dup_rounded\":" << s.n_dup_rounded
     << ",\"crop_applied\":" << (s.crop_applied ? "true" : "false")
     << ",\"crop_guard\":" << (s.crop_guard ? "true" : "false")
     << ",\"pairs_both_valid\":" << s.pairs_both_valid << ",\"pairs_coincident\":" << s.pairs_coincident
