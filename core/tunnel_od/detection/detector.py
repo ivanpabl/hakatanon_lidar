@@ -11,6 +11,8 @@
 Пересчёт пути (update_path) -- десятки мс, проверка кадра (check_frame) -- единицы мс,
 поэтому путь можно пересчитывать не на каждом кадре.
 """
+from collections import deque
+
 import numpy as np
 
 from ..geometry.ego_motion import S_RANGE as EGO_S_RANGE, EgoMotion
@@ -47,6 +49,7 @@ class ObstacleDetector:
                  features=True, plausibility=True, plausible_min_dist=60.0, plausible_behind_n=2,
                  persist_hits=6, persist_slope=(-1.25, -0.75), persist_edge_margin=0.25, min_sight_m=30.0,
                  sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25,
+                 far_acc_from=None, far_acc_floor=1.5, far_acc_min_hits=4, range_hold=0,
                  persist_min_top_m=0.0, front_lift_caution_m=None, front_lift_max_low_m=2.0,
                  stop_confirm_far_m=None):
         """Правила против ложных СТОП (fp_autopsy R1-R3), по умолчанию ВЫКЛЮЧЕНЫ:
@@ -91,6 +94,19 @@ class ObstacleDetector:
         self.path_margin = path_margin
         self.min_points_k = min_points_k
         self.min_points_floor = min_points_floor
+        # Накопление свидетельства вдали (exp4), по умолчанию ВЫКЛЮЧЕНО:
+        # far_acc_from (м, None -- выкл.): дальше этой дальности ожидаемый минимум точек НА КАДР --
+        #   far_acc_floor вместо min_points_at (там 3): объект из 1-2 точек копит evidence по нескольким
+        #   кадрам (EvidenceTracker, прогноз на путь поезда); чтобы одиночные повторы шума не подтверждались,
+        #   там же нужно far_acc_min_hits кадров с объектом.
+        # range_hold (кадров, 0 -- выкл.): граница «за концом оси» (beyond_path) -- наибольшая из дальностей
+        #   оси за последние range_hold кадров, сдвинутых на путь поезда с тех пор: дальность оси вдали скачет
+        #   100 <-> 200 м от кадра к кадру, и подтверждённый дальний объект получает ВНИМАНИЕ вместо СТОП
+        #   в кадрах с короткой осью. Геометрия оси (коридор) остаётся текущей.
+        self.far_acc_from = far_acc_from
+        self.far_acc_floor = far_acc_floor
+        self.range_hold = int(range_hold or 0)
+        self._range_hist = deque(maxlen=max(self.range_hold, 1))
         self.rail_offset = default_rail_offset
         self._fit_fwd = None
         self._fitted_cl = None
@@ -109,6 +125,8 @@ class ObstacleDetector:
             self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits,
                                             hold=alarm_hold, hold_min=alarm_hold_min, ego_check=ego_check,
                                             ego_min_travel=ego_min_travel, ego_max_slope=ego_max_slope,
+                                            far_min_hits=None if far_acc_from is None
+                                            else (float(far_acc_from), int(far_acc_min_hits)),
                                             persist_hits=persist_hits, persist_slope=tuple(persist_slope),
                                             persist_max_lat=(None if persist_edge_margin is None
                                                              else max(hw for _, _, hw in self.zone) - persist_edge_margin),
@@ -247,8 +265,7 @@ class ObstacleDetector:
         if hasattr(self._tracker, 'persist_max_d'):
             self._tracker.persist_max_d = far_start
         self._tracker.update([o for o in objects if not o.get('edge_line')], self._displacement,
-                             lambda d: min_points_at(d, self.min_points_k, self.min_points_floor),
-                             travel=self._travel if self._displacement is not None else None)
+                             self._expected_points, travel=self._travel if self._displacement is not None else None)
         for o in objects:
             o.setdefault('confirmed', False)
             o['held'] = False
@@ -273,7 +290,7 @@ class ObstacleDetector:
                             'rail_z_m': float(self._tor_at(np.array([d]), self._bed)[0])})
         self._add_output_fields(objects)
         path_range = self._path_range if path_ok else None
-        limit = (path_range if path_range is not None else 0.0) + self.path_margin
+        limit = (self._held_range(path_range) or 0.0) + self.path_margin
         for o in objects:
             o['beyond_path'] = o['distance_m'] > limit and not o['held']
         curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
@@ -305,6 +322,26 @@ class ObstacleDetector:
             'travel_m': self._travel,
             'stamp': stamp,
         }
+
+    def _expected_points(self, d):
+        """Ожидаемый минимум точек объекта на кадр для накопления свидетельства (EvidenceTracker):
+        дальше far_acc_from -- far_acc_floor, иначе min_points_at."""
+        if self.far_acc_from is not None and d > self.far_acc_from:
+            return self.far_acc_floor
+        return min_points_at(d, self.min_points_k, self.min_points_floor)
+
+    def _held_range(self, path_range):
+        """Граница beyond_path с учётом range_hold: max(текущая дальность оси, дальности оси прошлых
+        кадров минус путь поезда с тех пор). range_hold=0 -- как есть; без оценки пути поезда
+        (displacement None) история сбрасывается."""
+        if not self.range_hold:
+            return path_range
+        if path_range is None or self._displacement is None:
+            self._range_hist.clear()
+            return path_range
+        held = max((r - (self._travel - t) for t, r in self._range_hist), default=path_range)
+        self._range_hist.append((self._travel, path_range))
+        return max(path_range, held)
 
     def _axis_union(self, fwd, x, lat):
         """sensor_axis_union_m: ближе этой дальности точка в зоне, если она в зоне от оси пути ИЛИ

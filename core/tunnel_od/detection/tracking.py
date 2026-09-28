@@ -87,7 +87,7 @@ class EvidenceTracker:
     кадров: подтверждённый трек за концом оси тревоги не поднимал, и его прогноз не должен поднять
     её, когда ось в следующем кадре длиннее; ложная вспышка на 1-3 кадра не должна удлиняться."""
 
-    def __init__(self, threshold=2.2, decay=0.8, min_hits=3, gate_fwd=1.0, gate_rel=0.02,
+    def __init__(self, threshold=2.2, decay=0.8, min_hits=3, far_min_hits=None, gate_fwd=1.0, gate_rel=0.02,
                  gate_lat=0.6, max_miss=10, hold=0, hold_min=5, ego_check=False, ego_min_travel=4.0,
                  ego_max_slope=-0.35, persist_hits=0, persist_slope=(-1.25, -0.75), persist_max_d=None, persist_max_lat=None,
                  persist_min_top=0.0):
@@ -96,6 +96,9 @@ class EvidenceTracker:
         self.persist_hits = persist_hits
         self.persist_slope = persist_slope
         self.persist_max_d = persist_max_d
+        # far_min_hits -- (дальность, м; кадров): дальше этой дальности подтверждение по evidence требует
+        # не меньше стольких кадров с объектом (накопление вдали, см. ObstacleDetector far_acc_*). None -- выкл.
+        self.far_min_hits = far_min_hits
         self.ego_check = ego_check
         self.ego_min_travel = ego_min_travel
         self.ego_max_slope = ego_max_slope
@@ -174,7 +177,10 @@ class EvidenceTracker:
                                     and (self.persist_max_lat is None
                                          or max(abs(ob.get('lat_min_m', ob['lateral_m'])),
                                                 abs(ob.get('lat_max_m', ob['lateral_m']))) <= self.persist_max_lat))
-            ob['confirmed'] = (tr['score'] >= self.threshold and tr['hits'] >= self.min_hits) or ob['persistent']
+            hits_need = self.min_hits
+            if self.far_min_hits is not None and d > self.far_min_hits[0]:
+                hits_need = max(hits_need, self.far_min_hits[1])
+            ob['confirmed'] = (tr['score'] >= self.threshold and tr['hits'] >= hits_need) or ob['persistent']
         self.tracks = [tr for tr in self.tracks
                        if tr['miss'] <= self.max_miss and tr['distance_m'] > -5.0 and tr['score'] > 0.05]
 
