@@ -55,7 +55,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_canonical test/test_canonical.cpp test/test_monitor.cpp)
   target_link_libraries(test_canonical tunnel_od_canonical)
-  # копия теста в install -- чтобы ./run.sh test запускал его в готовом образе
+  # копия теста в install -- чтобы docker compose run test запускал его в готовом образе
   install(TARGETS test_canonical DESTINATION lib/${PROJECT_NAME})
 endif()
 

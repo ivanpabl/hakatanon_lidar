@@ -1,7 +1,9 @@
-# ROS 2 Humble + ядро tunnel_od + узел tunnel_od_detector.
+# ROS 2 Humble + ядро tunnel_od + узлы tunnel_od_preproc (C++) и tunnel_od_detector (Python).
+# Две стадии:
+#   detector -- всё для обработки записи и живого лидара (docker compose up play / detector);
+#   viz      -- + RViz2, виртуальный экран и noVNC для показа в браузере (docker compose up demo).
 # Все зависимости ставятся при сборке; при запуске сеть не нужна.
-#   docker build -t tunnel-od .      (или ./run.sh build)
-FROM ros:humble-ros-base-jammy
+FROM ros:humble-ros-base-jammy AS detector
 
 SHELL ["/bin/bash", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -12,26 +14,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RCUTILS_COLORIZED_OUTPUT=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-pip python3-numpy python3-pytest python3-yaml \
+        python3-pip python3-pytest python3-yaml \
         ros-humble-rosbag2-storage-default-plugins \
         ros-humble-sensor-msgs ros-humble-visualization-msgs \
         ros-humble-rclcpp-components ros-humble-diagnostic-msgs ros-humble-nav-msgs ros-humble-tf2-msgs \
-        ros-humble-ament-cmake-gtest \
-        ros-humble-rmw-fastrtps-cpp ros-humble-rmw-cyclonedds-cpp \
+        ros-humble-ament-cmake-gtest ros-humble-rmw-fastrtps-cpp \
     && rm -rf /var/lib/apt/lists/*
 
-# ядро (без ROS, зависимость -- numpy)
+# Ядро (без ROS, зависимость -- numpy). pip из jammy (22.0) собирает pyproject.toml как "UNKNOWN" --
+# берём новый pip. numpy >= 1.23 (view(float32) на срезе буфера), < 2 (сообщения Humble собраны под ABI 1.x).
 COPY core /opt/tunnel_od/core
-# pip из jammy (22.0) собирает pyproject.toml ядра как "UNKNOWN" -- берём новый pip.
-# numpy из jammy (1.21) не умеет view(float32) на срезе буфера (parse_pointcloud2),
-# нужен >= 1.23; < 2 -- модули сообщений Humble собраны под ABI numpy 1.x.
 RUN python3 -m pip install --upgrade "pip>=23" \
-    && python3 -m pip install "numpy>=1.23,<2" \
-    && python3 -m pip install /opt/tunnel_od/core && python3 -c "import tunnel_od; import numpy; print('tunnel_od OK, numpy', numpy.__version__)"
+    && python3 -m pip install "numpy>=1.23,<2" /opt/tunnel_od/core \
+    && python3 -c "import tunnel_od, numpy; print('tunnel_od OK, numpy', numpy.__version__)"
 
-# рабочее пространство ROS 2: tunnel_od_preproc (C++) + tunnel_od_detector (Python).
-# -march=x86-64-v2, не native: образ собирают на одной машине, а запускают на другой.
-# gtest пакета tunnel_od_preproc -- здесь же; бинарник теста остаётся в install для ./run.sh test.
+# Рабочее пространство ROS 2. -march=x86-64-v2, не native: образ собирают на одной машине, а
+# запускают на другой. gtest tunnel_od_preproc запускается здесь же, бинарник остаётся для тестов.
 COPY ros2_ws/src /ws/src
 RUN source /opt/ros/humble/setup.bash && cd /ws \
     && colcon build --event-handlers console_direct- \
@@ -39,13 +37,24 @@ RUN source /opt/ros/humble/setup.bash && cd /ws \
     && ./build/tunnel_od_preproc/test_canonical \
     && rm -rf build log
 
+# Окружение: стандартный /ros_entrypoint.sh базового образа подключает ROS, дописываем рабочее
+# пространство. DDS -- FastDDS с большим сегментом shared memory под кадры 8-23 МБ.
+# HOME и ROS_HOME в /tmp: контейнер запускается от имени пользователя хоста (файлы в out -- его).
 COPY config /opt/tunnel_od/config
-COPY docker /opt/tunnel_od/docker
-RUN chmod +x /opt/tunnel_od/docker/*.sh
-
+RUN sed -i 's|^exec "\$@"|source /ws/install/setup.bash\nexec "$@"|' /ros_entrypoint.sh
 ENV TUNNEL_OD_CONFIG=/opt/tunnel_od/config/detector.yaml \
-    TUNNEL_OD_DDS=fastdds_shm \
-    PATH=/opt/tunnel_od/docker:$PATH
+    TUNNEL_OD_RVIZ=/opt/tunnel_od/config/tunnel_od.rviz \
+    RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
+    FASTRTPS_DEFAULT_PROFILES_FILE=/opt/tunnel_od/config/fastdds.xml \
+    HOME=/tmp \
+    ROS_HOME=/tmp/ros
 WORKDIR /ws
-ENTRYPOINT ["/opt/tunnel_od/docker/entrypoint.sh"]
 CMD ["ros2", "launch", "tunnel_od_detector", "detector.launch.py"]
+
+
+FROM detector AS viz
+# RViz2 на виртуальном экране (Xvfb, программный OpenGL) + VNC этого экрана в браузере (noVNC).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-rviz2 xvfb x11vnc novnc websockify libgl1-mesa-dri \
+    && rm -rf /var/lib/apt/lists/*
+EXPOSE 6080
