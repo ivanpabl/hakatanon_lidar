@@ -1,7 +1,9 @@
 # ROS 2 Humble + ядро tunnel_od + узел tunnel_od_detector.
 # Все зависимости ставятся при сборке; при запуске сеть не нужна.
-#   docker build -t tunnel-od .      (или ./run.sh build)
-FROM ros:humble-ros-base-jammy
+# Собирается через docker compose (см. docker-compose.yml), вручную не требуется.
+#   detector -- сдаваемое решение: узел + плеер, минимальный образ
+#   tools    -- то же плюс matplotlib/rosbags для офлайн-метрик (профиль metrics)
+FROM ros:humble-ros-base-jammy AS detector
 
 SHELL ["/bin/bash", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -31,7 +33,7 @@ RUN python3 -m pip install --upgrade "pip>=23" \
 
 # рабочее пространство ROS 2: tunnel_od_preproc (C++) + tunnel_od_detector (Python).
 # -march=x86-64-v2, не native: образ собирают на одной машине, а запускают на другой.
-# gtest пакета tunnel_od_preproc -- здесь же; бинарник теста остаётся в install для ./run.sh test.
+# gtest пакета tunnel_od_preproc -- здесь же; бинарник теста остаётся в install для профиля test.
 COPY ros2_ws/src /ws/src
 RUN source /opt/ros/humble/setup.bash && cd /ws \
     && colcon build --event-handlers console_direct- \
@@ -49,3 +51,11 @@ ENV TUNNEL_OD_CONFIG=/opt/tunnel_od/config/detector.yaml \
 WORKDIR /ws
 ENTRYPOINT ["/opt/tunnel_od/docker/entrypoint.sh"]
 CMD ["ros2", "launch", "tunnel_od_detector", "detector.launch.py"]
+
+
+# ---- образ для офлайн-метрик: те же зависимости плюс чтение bag без ROS и графики. ----
+# Сами инструменты не копируются -- профиль metrics монтирует tools/, gui/ и reference/,
+# поэтому правка инструмента не требует пересборки образа.
+FROM detector AS tools
+RUN python3 -m pip install "matplotlib" "rosbags" \
+    && python3 -c "import matplotlib, rosbags; print('tools OK')"

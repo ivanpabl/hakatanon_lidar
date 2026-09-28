@@ -1,9 +1,14 @@
-# данные (bag-файлы ~22ГБ + ~84ГБ, картинки разметки) -- не в репозитории, см. tools/bags.py
+# данные (bag-файлы ~22ГБ + ~84ГБ) -- не в репозитории, см. tools/bags.py
 /data/
 *.db3
 
-# результаты инструментов (csv/png) -- пересобираются из tools/
+# результаты запуска: docker compose пишет сюда
+/out/
 /runs/
+
+# сгенерированные страницы (пересобираются: docker compose --profile metrics up)
+/gui/demo.html
+/gui/dashboard.html
 
 # виртуальное окружение
 venv/
@@ -17,13 +22,11 @@ __pycache__/
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
-
-# служебная папка Claude Code
-.claude/
 ros2_ws/src/tunnel_od_preproc/build_host/
 
-# Windows: окружение run_all.bat, результаты run_all.py
-.venv-win/
-/results/
+# служебное
+.claude/
+.pytest_cache/
+.superpowers/
 .DS_Store
 tunnel_od_image.tar.gz

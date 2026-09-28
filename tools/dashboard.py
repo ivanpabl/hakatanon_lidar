@@ -5,17 +5,17 @@
     python tools/dashboard.py --scene-frame 60 --out /tmp/d.html
 
 Цифры берутся из результатов инструментов в runs/, а не переписываются руками. Итоговая версия
-называется final (research/compare.sh) или P_ev_f20 (tools/run_all.py) -- берётся более свежий файл:
+называется final (исторический прогон, копии в reference/) или P_ev_f20 (tools/run_all.py) -- берётся более свежий файл:
   alarms_A_base.csv / alarms_<итог>.csv        тревоги исходной и итоговой версии на 6 записях
   alarms_final_nd_full.csv                     вся new_data, итоговая версия
   approach_A_base.csv / approach_<итог>.csv    дальность при подъезде (eval_approach.py)
   fake_obj_fo_{base,final}.csv, alarms_fo_final.csv, fake_obj_truth.csv
                                                бэг организаторов с 10 объектами (eval_fake_obj.py)
   selflabel_nd_final.csv                       эпизоды СТОП на new_data, проверенные проездом (selflabel.py)
-  compare_table.md                             варианты параметров, одна строка -- один прогон compare.sh
+  compare_table.md                             варианты параметров, одна строка -- один прогон подбора параметров
   check_preproc.json                           побитное совпадение и время разбора (check_preproc.py)
   input_report.json                            проверка входного потока (input_report.py)
-  docker/<запись>_*                            e2e в Docker с C++-приёмом (./run.sh play)
+  docker/<запись>_*                            e2e в Docker с C++-приёмом (docker compose up)
 Файла нет в runs/ -- берётся из reference/ (результаты с машины разработки, в git): исходная
 версия A_base (её код -- ae38df6, текущим не воспроизводится), e2e в Docker, проверка входа
 и замер разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
@@ -54,14 +54,14 @@ TEMPLATE = ROOT / 'gui' / 'template.html'
 REFERENCE = ROOT / 'reference'
 OUT = ROOT / 'gui' / 'dashboard.html'
 BEFORE = 'A_base'                              # исходная версия (ae38df6)
-AFTER_TAGS = ('final', 'P_ev_f20')             # итоговая версия: compare.sh / run_all.py
+AFTER_TAGS = ('final', 'P_ev_f20')             # итоговая версия: исторический прогон / run_all.py
 FRAME_MB = {'doubleT_obstacle': 23}            # остальные записи -- 8 МБ
 GAP = 2                                        # как tools/alarms.py: разрыв до 2 кадров -- тот же эпизод
 
 # Замеры, которых нет в runs/: значение и откуда оно.
 DOCUMENTED = {
     'deser_ms': {'p50': 5.5, 'p95': 10.6,
-                 'src': 'research/ingest_timing.py: десериализация 23 МБ в Python, которой больше нет в узле'},
+                 'src': 'замер десериализации 23 МБ в Python, которой больше нет в узле'},
     'bench': 'Intel i5-1038NG7, 4 ядра / 8 потоков, Docker в VM OrbStack',
 }
 
@@ -291,7 +291,7 @@ def quality():
 
 
 def nd_full_name():
-    """Вся new_data итоговой версии: compare.sh пишет alarms_nd_final.csv, run_all.py --
+    """Вся new_data итоговой версии: исторический прогон писал alarms_nd_final.csv, run_all.py --
     alarms_final_nd_full.csv. Берётся самый свежий файл со всей записью (не отрезки), runs/ раньше reference/."""
     found = []
     for name in ('alarms_nd_final.csv', 'alarms_final_nd_full.csv'):

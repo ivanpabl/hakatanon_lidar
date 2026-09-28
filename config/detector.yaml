@@ -33,7 +33,7 @@ tunnel_od_detector:
       max_range: 250.0
       half_width: 1.0        # м, прямоугольная зона: полуширина от оси,
       clearance: 0.15        #    низ и верх над головкой рельса
-      height: 2.5            #    подобрано по cloud_with_fake_obj, см. docs/PLAN.md
+      height: 2.5            #    подобрано по записи cloud_with_fake_obj
       # zone: GAUGE_METRO    # своя зона: имя константы ядра или плоский список троек
       #                      # [низ, верх, полуширина, низ, верх, полуширина, ...]
       far_axis: true         # продление оси по стенам дальше пошагового (до 150-200 м)
@@ -51,7 +51,7 @@ tunnel_od_detector:
                              #    на doubleT_platform тревог 68 -> 105 кадров)
       ego_check: true        # ЭГО-тест: подтверждённый объект, держащий дистанцию при движении поезда
       ego_min_travel: 4.0    #    (наклон дистанции по пробегу > ego_max_slope), -- ВНИМАНИЕ, не СТОП.
-      ego_max_slope: -0.35   #    Включён по итогам cloud_with_fake_obj (спека 4.4, docs/PLAN.md)
+      ego_max_slope: -0.35   #    Включён по итогам записи cloud_with_fake_obj
       confirm_hits: 3        # для evidence -- минимум кадров с объектом до тревоги
       confirm_window: 5      # только для hits
       plausibility: true     # подтверждённый объект в дальней зоне, за которым НА ЕГО ВЫСОТЕ

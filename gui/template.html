@@ -1538,10 +1538,10 @@ function srcTable() {
   if (F.p170) rows.push([`${num(F.p170.after.median, 0)} м`, 'медиана дистанции первого СТОП, человек, старт 170 м', `${Q.approach.windows} окон движения в записях <code>for_hackathon</code>, объект вставлен лучами датчика`, 'истинная дистанция вставки', `исходная версия <code>ae38df6</code>: ${num(F.p170.before.median, 0)} м, тот же инструмент`, '<code>reference/approach_final.csv</code>, <code>approach_A_base.csv</code>; <code>tools/eval_approach.py</code>', c('mid'), 'синтетика на своей оси, 6 окон']);
   if (F.fo) rows.push([`${F.fo.inStop} из ${F.fo.inG.length}; ${F.fo.outStop} из ${F.fo.outG.length}`, 'объекты, требующие СТОП, его получившие; ложные СТОП на объектах, его не требующих', '<code>cloud_with_fake_obj</code>, 1510 кадров, 10 объектов', 'список организаторов, <code>reference/cloud_with_fake_obj/objects.yaml</code>', `<code>97f7376</code>: ${F.fo.baseIn} из ${F.fo.inG.length}`, '<code>fake_obj_fo_final.csv</code>; <code>tools/eval_fake_obj.py</code>', c('mid'), 'внешняя разметка, но зона подбиралась по этому же бэгу и объектов всего 10 — не независимый тест']);
   if (F.ob) rows.push([`${F.ob.after.hit} из ${F.ob.after.after}`, `кадры СТОП после первого подтверждения (первые ${F.ob.after.first} кадров в знаменатель не входят) — удержание, не recall`, '<code>doubleT_obstacle</code>, 201 кадр, поезд стоит', 'объект на 56 м во всех кадрах: описание записи, картинки кадров 10, 60, 110', `<code>ae38df6</code>: ${F.ob.before.total} из ${F.ob.n}, провал ${F.ob.before.longest} кадров`, '<code>reference/alarms_final.csv</code>, <code>alarms_A_base.csv</code>; <code>tools/alarms.py</code>', c('mid'), 'стационарная запись, использовалась при подборе; покадровой разметки нет']);
-  if (F.dl) rows.push([pct(F.dl.hitPct, 1), `кадров уложились в дедлайн 100 мс; не уложились ${F.dl.over} из ${num(F.dl.n)}`, `<code>${F.e2e.bag}</code>, ${F.e2e.received} кадров 8 МБ, Docker без сети`, 'бюджет 100 мс = период кадра при 10 Гц', 'прежней полной задержки в том же режиме нет', `<code>reference/docker/${F.e2e.bag}_e2e.json</code>; <code>./run.sh play</code>`, c('high'), 'один стенд, macOS + VM; кадры 23 МБ в бюджет не укладываются']);
+  if (F.dl) rows.push([pct(F.dl.hitPct, 1), `кадров уложились в дедлайн 100 мс; не уложились ${F.dl.over} из ${num(F.dl.n)}`, `<code>${F.e2e.bag}</code>, ${F.e2e.received} кадров 8 МБ, Docker без сети`, 'бюджет 100 мс = период кадра при 10 Гц', 'прежней полной задержки в том же режиме нет', `<code>reference/docker/${F.e2e.bag}_e2e.json</code>; <code>docker compose up</code>`, c('high'), 'один стенд, macOS + VM; кадры 23 МБ в бюджет не укладываются']);
   if (F.trP) rows.push([`${F.trP.B} из ${F.trP.miss}`, 'кадры без СТОП при подъезде, где объект виден, но за концом оси', 'те же окна и вставки, что в замере дальности', 'истинная дистанция вставки', '—', '<code>reference/approach_trace_final.json</code>; <code>tools/approach_trace.py</code>', c('high'), 'прогон текущего кода']);
   if (F.parse) rows.push([`×${num(F.parse.bigPy / F.parse.bigCpp, 1)}`, 'разбор кадра 23 МБ: Python → C++. Только разбор облака, не весь конвейер детектора', '30 кадров каждой записи', 'побитное совпадение облака и результата', `Python <code>parse_pointcloud2</code>: ${num(F.parse.bigPy, 1)} мс`, '<code>reference/check_preproc.json</code>; <code>tools/check_preproc.py</code>', c('high'), '']);
-  if (F.nd) rows.push([pct(F.nd.pct), 'доля кадров с ложным СТОП', `<code>new_data</code>, ${num(F.nd.frames)} кадров, отложенная`, 'препятствий нет; ложность подтверждена проездом', F.ndBase != null ? `<code>97f7376</code>: ${pct(F.ndBase)}` : '—', `<code>${esc(F.nd.file || '')}</code>; <code>research/compare.sh final</code>`, c('high'), 'одна запись, одна линия']);
+  if (F.nd) rows.push([pct(F.nd.pct), 'доля кадров с ложным СТОП', `<code>new_data</code>, ${num(F.nd.frames)} кадров, отложенная`, 'препятствий нет; ложность подтверждена проездом', F.ndBase != null ? `<code>97f7376</code>: ${pct(F.ndBase)}` : '—', `<code>${esc(F.nd.file || '')}</code>; <code>docker compose --profile metrics up</code>`, c('high'), 'одна запись, одна линия']);
   box.insertAdjacentHTML('beforeend', `<div class="tbl-wrap"><table class="srcs"><thead><tr><th>Число</th><th>Что это</th><th>Данные</th><th>Эталон</th><th>С чем сравнивали</th><th>Файл и инструмент</th><th>Доверие и оговорка</th></tr></thead><tbody>` +
     rows.map(r => `<tr>${r.slice(0, 6).map(v => `<td>${v}</td>`).join('')}<td>${r[6]}${r[7] ? `<div class="src">${r[7]}</div>` : ''}</td></tr>`).join('') + '</tbody></table></div>');
 }
@@ -1587,9 +1587,8 @@ function sourcesMethod() {
     <dt>Задержка</dt><dd>По времени публикации сообщений DDS: плеер опубликовал облако → детектор опубликовал результат. Штамп <code>header.stamp</code> в записях — 2000 год, от него задержку не посчитать.</dd>
     <dt>Ложные тревоги</dt><dd>Эпизод — серия кадров СТОП, разрыв до двух кадров не прерывает эпизод. Проверка проездом — <code>tools/selflabel.py</code>.</dd>
     <dt>Воспроизведение</dt><dd>
-      <code class="cmd">research/compare.sh final '{}'</code>
-      <code class="cmd">python tools/approach_trace.py --tag final</code>
-      <code class="cmd">NETWORK=none ./run.sh play data/Датасет/archive/for_hackathon/doubleT_platform</code>
+            <code class="cmd">python tools/approach_trace.py --tag final</code>
+      <code class="cmd">BAG=data/Датасет/archive/for_hackathon/doubleT_platform NAME=doubleT_platform docker compose up --build</code>
       <code class="cmd">python tools/check_preproc.py && python tools/input_report.py</code>
       <code class="cmd">python tools/dashboard.py</code>
     </dd>
@@ -1658,7 +1657,7 @@ function sParse() {
       'data-tip': `<b>${esc(r.bag)}</b>, кадр ${r.mb} МБ<br>Python: ${num(r.python, 1)} мс<br>C++: ${num(r.cpp, 1)} мс, в ${num(r.python / r.cpp, 1)} раза быстрее<br>после обрезки 2–250 м остаётся ${num(r.kept_after_crop * 100, 0)} % точек` }, g);
   });
   const d = S.deser;
-  if (d) note(box, `Кроме того, узел детектора больше не десериализует кадр 23 МБ в Python: −${num(d.p50, 1)} мс на кадр (p95 −${num(d.p95, 1)} мс). Раньше это время не попадало в замер. Источник — <code>research/ingest_timing.py</code>.`);
+  if (d) note(box, `Кроме того, узел детектора больше не десериализует кадр 23 МБ в Python: −${num(d.p50, 1)} мс на кадр (p95 −${num(d.p95, 1)} мс). Раньше это время не попадало в замер.`);
 }
 function rBit() {
   const box = $('#r-bit'), b = R.bitwise;

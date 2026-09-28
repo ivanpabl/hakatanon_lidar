@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'research'))
 
 from bags import EMPTY_BAGS, read_problems, safe_messages          # noqa: E402
 from eval_fake_obj import evaluate, group_x, summary_line          # noqa: E402
@@ -128,22 +127,6 @@ def test_label_false_proven_only_in_same_segment():
     assert label(ep, rows[:60], seg[:60]) == 'unresolved'
     rows2 = _rows(200, none_at=range(20, 40))              # сегмент рвётся до проезда X
     assert label(episodes([(10, 10, 1, 50.0, 'in_gauge')])[0], rows2, segments(rows2)) == 'unresolved'
-
-
-@pytest.mark.parametrize('network', ['', 'none'])
-def test_run_sh_shell_with_and_without_network(tmp_path, network):
-    """run.sh под set -u: пустой массив NET не должен ронять bash 3.2 (macOS)."""
-    import os
-    import subprocess
-    stub = tmp_path / 'docker'
-    stub.write_text('#!/bin/sh\necho "$@"\n')
-    stub.chmod(0o755)
-    env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', NETWORK=network)
-    root = Path(__file__).resolve().parent.parent
-    r = subprocess.run(['/bin/bash', str(root / 'run.sh'), 'shell', '-c', 'true'], env=env,
-                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
-    assert r.returncode == 0, r.stderr
-    assert ('--network none' in r.stdout) == (network == 'none')
 
 
 def _read_json(tmp_path, tag, data):

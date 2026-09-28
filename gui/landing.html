@@ -486,9 +486,8 @@ footer p { width: var(--col); margin: 0; }
   <section class="panel" id="run" data-scene="run">
     <div class="card">
       <h2>Запустить на&nbsp;своей записи</h2>
-      <p>Образ на&nbsp;ROS&nbsp;2 Humble, сеть не&nbsp;нужна. Результат каждого кадра пишется в&nbsp;<code>runs/docker/</code>.</p>
-<pre><code>docker load -i tunnel_od_image.tar.gz
-NETWORK=none ./run.sh play /путь/к/записи</code></pre>
+      <p>Образ на&nbsp;ROS&nbsp;2 Humble, сеть не&nbsp;нужна. Результат каждого кадра пишется в&nbsp;<code>out/</code>.</p>
+<pre><code>BAG=/путь/к/записи docker compose up --build</code></pre>
       <details>
         <summary>Ядро на&nbsp;Python, без ROS</summary>
         <div class="more">

@@ -1,0 +1,102 @@
+# Обнаружение препятствий в тоннеле метро по облаку 3D-лидара.
+# Единственная точка входа. Собирается и запускается одной командой:
+#
+#   BAG=/путь/к/записи docker compose up --build
+#
+# BAG -- каталог записи ros2 bag (внутри metadata.yaml и *.db3). Результат -- в ./out:
+#   <имя>_result.jsonl        решение по каждому кадру
+#   <имя>_stats.json          итог по записи
+#   <имя>_stats_preproc.json  C++-приём кадров и проверка входного потока
+#   <имя>_e2e.json            задержка «кадр опубликован -> результат опубликован»
+#
+# Профили:
+#   docker compose --profile test up --build      gtest + pytest внутри образа
+#   docker compose --profile live up --build      только узел: внешний плеер или живой лидар
+#   docker compose --profile metrics up --build   пересобрать метрики и демо в ./out (нужен ./data)
+#
+# Необязательные переменные:
+#   NAME           имя записи в путях результата (по умолчанию input)
+#   RATE           скорость воспроизведения (1.0)
+#   TOPIC          топик PointCloud2 ("" -- автопоиск по типу сообщения)
+#   TUNNEL_OD_DDS  fastdds_shm (по умолчанию) | cyclone | default
+#   LAUNCH_ARGS    доп. аргументы detector.launch.py, например "use_cpp_preproc:=false"
+#   PROBE          0 -- без замера e2e-задержки
+#   DATA           каталог с записями для профиля metrics (по умолчанию ./data)
+
+services:
+  # Сдаваемое решение: узел детектора и плеер записи в одном контейнере.
+  detector:
+    build:
+      context: .
+      target: detector
+    image: tunnel-od
+    # Кадры 8-23 МБ: сегменты FastDDS в разделяемой памяти и большие буферы сокетов под UDP.
+    shm_size: 2gb
+    sysctls:
+      net.core.rmem_max: 134217728
+      net.core.wmem_max: 134217728
+    environment:
+      TUNNEL_OD_DDS: ${TUNNEL_OD_DDS:-fastdds_shm}
+      TOPIC: ${TOPIC:-}
+      READ_AHEAD: ${READ_AHEAD:-20}
+      PLAY_DELAY: ${PLAY_DELAY:-3}
+      LAUNCH_ARGS: ${LAUNCH_ARGS:-}
+      PROBE: ${PROBE:-1}
+    volumes:
+      - ${BAG:?укажите каталог записи, например BAG=/data/doubleT_platform}:/bags/${NAME:-input}:ro
+      - ./config:/opt/tunnel_od/config:ro
+      - ./out:/out
+    command: play.sh /bags/${NAME:-input} ${RATE:-1.0}
+
+  # Только узел: плеер или драйвер лидара снаружи. Сеть и разделяемая память -- хоста,
+  # иначе кадры из другого контейнера до узла не дойдут.
+  live:
+    profiles: [live]
+    build:
+      context: .
+      target: detector
+    image: tunnel-od
+    network_mode: host
+    ipc: host
+    environment:
+      TUNNEL_OD_DDS: ${TUNNEL_OD_DDS:-fastdds_shm}
+    volumes:
+      - ./config:/opt/tunnel_od/config:ro
+      - ./out:/out
+    command: ros2 launch tunnel_od_detector detector.launch.py ${LAUNCH_ARGS:-}
+
+  # gtest канонизации облака (C++) и pytest обоих пакетов ROS 2.
+  test:
+    profiles: [test]
+    build:
+      context: .
+      target: detector
+    image: tunnel-od
+    command:
+      - bash
+      - -o
+      - pipefail
+      - -c
+      - /ws/install/tunnel_od_preproc/lib/tunnel_od_preproc/test_canonical 2>&1 | tail -3
+        && python3 -m pytest -q -p no:cacheprovider
+        /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test
+
+  # Офлайн-метрики: прогон по записям, дашборд и демонстрация. Инструменты монтируются,
+  # а не копируются в образ -- правка tools/ не требует пересборки.
+  metrics:
+    profiles: [metrics]
+    build:
+      context: .
+      target: tools
+    image: tunnel-od-tools
+    working_dir: /work
+    environment:
+      TUNNEL_OD_DATA: /data
+      PYTHONUTF8: '1'
+    volumes:
+      - ./tools:/work/tools:ro
+      - ./gui:/work/gui:ro
+      - ./reference:/work/reference:ro
+      - ${DATA:-./data}:/data:ro
+      - ./out:/out
+    command: python3 tools/run_all.py --out /out --runs /out/runs

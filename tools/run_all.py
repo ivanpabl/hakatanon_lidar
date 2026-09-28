@@ -1,5 +1,5 @@
 """Полный прогон на датасете одной командой: тесты, метрики, дашборд и демонстрация.
-Работает на Windows, Linux и macOS без ROS 2 и Docker (на Windows запускается из run_all.bat).
+Запускается в контейнере: docker compose --profile metrics up --build (ROS 2 не нужен).
 
     python tools/run_all.py                         # всё: ~30-60 мин, результат в results/
     python tools/run_all.py --quick                 # проверка окружения: пара минут, runs/quick
