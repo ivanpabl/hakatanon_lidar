@@ -32,6 +32,7 @@ import numpy as np
 
 from bags import ROOT, open_cloud_bag
 from dashboard import frame_view, git_rev, host, zone_params
+from approach_trace import category
 from eval_injection import front_of
 
 TEMPLATE = ROOT / 'gui' / 'demo_template.html'
@@ -123,7 +124,7 @@ def run_approach(job):
                            'objects': fv['objects'], 'n_zone': int(res['n_points']),
                            'parse_ms': round((b - a) * 1e3, 1), 'check_ms': round((e - b) * 1e3, 1),
                            'speed_mps': None if r['speed_mps'] is None else round(r['speed_mps'], 1),
-                           'travelled_m': round(travelled, 1), 'truth_m': round(front, 2),
+                           'travelled_m': round(travelled, 1), 'truth_m': round(front, 2), 'truth_cat': category(res, front)[0],
                            'truth_points': int(info['points_on_object']),
                            'truth_box': [round(p, 2) for p in truth_box(kind, dims, d, lat, z0)]})
             if len(frames) % 50 == 0:

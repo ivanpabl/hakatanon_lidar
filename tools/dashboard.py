@@ -4,14 +4,18 @@
     python tools/dashboard.py --no-scene             # без 3D-сцены (не нужны записи в data/)
     python tools/dashboard.py --scene-frame 60 --out /tmp/d.html
 
-Цифры берутся из результатов инструментов в runs/, а не переписываются руками:
-  alarms_A_base.csv / alarms_P_ev_f20.csv      тревоги исходной и текущей версии на 6 записях
-  alarms_nd_A_base.csv / alarms_nd_P_ev_f20.csv  отрезки new_data (8 x 400 кадров)
-  alarms_final_nd_full.csv                     вся new_data, текущая версия
-  approach_A_base.csv / approach_P_ev_f20.csv  дальность при подъезде (eval_approach.py)
+Цифры берутся из результатов инструментов в runs/, а не переписываются руками. Итоговая версия
+называется final (research/compare.sh) или P_ev_f20 (tools/run_all.py) -- берётся более свежий файл:
+  alarms_A_base.csv / alarms_<итог>.csv        тревоги исходной и итоговой версии на 6 записях
+  alarms_final_nd_full.csv                     вся new_data, итоговая версия
+  approach_A_base.csv / approach_<итог>.csv    дальность при подъезде (eval_approach.py)
+  fake_obj_fo_{base,final}.csv, alarms_fo_final.csv, fake_obj_truth.csv
+                                               бэг организаторов с 10 объектами (eval_fake_obj.py)
+  selflabel_nd_final.csv                       эпизоды СТОП на new_data, проверенные проездом (selflabel.py)
+  compare_table.md                             варианты параметров, одна строка -- один прогон compare.sh
   check_preproc.json                           побитное совпадение и время разбора (check_preproc.py)
   input_report.json                            проверка входного потока (input_report.py)
-  smoke/doubleT_platform_*                     e2e в Docker с C++-приёмом (./run.sh play)
+  docker/<запись>_*                            e2e в Docker с C++-приёмом (./run.sh play)
 Файла нет в runs/ -- берётся из reference/ (результаты с машины разработки, в git): исходная
 версия A_base (её код -- ae38df6, текущим не воспроизводится), e2e в Docker, проверка входа
 и замер разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
@@ -49,7 +53,8 @@ def zone_params():
 TEMPLATE = ROOT / 'gui' / 'template.html'
 REFERENCE = ROOT / 'reference'
 OUT = ROOT / 'gui' / 'dashboard.html'
-BEFORE, AFTER = 'A_base', 'P_ev_f20'           # исходная версия (ae38df6) и текущая по умолчанию
+BEFORE = 'A_base'                              # исходная версия (ae38df6)
+AFTER_TAGS = ('final', 'P_ev_f20')             # итоговая версия: compare.sh / run_all.py
 FRAME_MB = {'doubleT_obstacle': 23}            # остальные записи -- 8 МБ
 GAP = 2                                        # как tools/alarms.py: разрыв до 2 кадров -- тот же эпизод
 
@@ -57,7 +62,6 @@ GAP = 2                                        # как tools/alarms.py: раз�
 DOCUMENTED = {
     'deser_ms': {'p50': 5.5, 'p95': 10.6,
                  'src': 'research/ingest_timing.py: десериализация 23 МБ в Python, которой больше нет в узле'},
-    'pytest': {'n': 35, 'src': 'последний прогон тестов: ./run.sh test и pytest tests'},
     'bench': 'Intel i5-1038NG7, 4 ядра / 8 потоков, Docker в VM OrbStack',
 }
 
@@ -73,6 +77,18 @@ def source(name):
             SOURCES[name] = kind
             return p
     return RUNS / name
+
+
+def after_tag(prefix, ext='.csv'):
+    """Тег итоговой версии для файлов prefix<тег><ext>: самый свежий из AFTER_TAGS."""
+    found = []
+    for tag in AFTER_TAGS:
+        for base in (RUNS, REFERENCE):
+            p = base / f'{prefix}{tag}{ext}'
+            if p.exists():
+                found.append((base == RUNS, p.stat().st_mtime, tag))
+                break
+    return max(found)[2] if found else AFTER_TAGS[0]
 
 
 def read_csv(name):
@@ -120,9 +136,89 @@ def alarm_share(rows):
             'episodes': episodes(a), 'per_hour': episodes(a) / hours if hours else 0}
 
 
+def status_mix(bag, rows):
+    st = [r.get('status') or ('stop' if r['alarm'] == '1' else 'clear') for r in rows]
+    n = len(st)
+    return {'bag': bag, 'frames': n, **{k: 100 * st.count(k) / n if n else 0 for k in ('stop', 'caution', 'unknown', 'clear')}}
+
+
+# Объекты бэга организаторов: коротко, как в README («Объекты организаторов»). Полное описание -- в csv.
+FAKE_SHORT = {1: 'куб 2×2 м по оси', 2: 'предмет 0,3 м на высоте лидара, в кривой', 3: 'предмет 0,3 м на правом рельсе',
+              4: 'предмет 0,3 м справа у края', 5: 'предмет 0,3 м слева за краем', 6: 'короб 2×2×2 м справа, уходит в стену',
+              7: 'короб 2×2×2 м слева, уходит в стену', 8: 'короб над путём у свода', 9: 'плита 2,0×0,5×0,25 м поперёк пути',
+              10: 'стержень 5 см со свода'}
+FAKE_WHY = {4: 'край объекта на 0,96–1,0 м от нашей оси: зона ±1,0 м даёт ВНИМАНИЕ. Шире нельзя — СТОП получит объект 5 за габаритом',
+            10: 'низ на 2,7 м над головкой рельса, выше зоны 2,5 м. Зона 3,0 м его видит, но даёт СТОП на объекте 8 у свода',
+            6: 'СТОП вспышкой на 186 м, дальше ВНИМАНИЕ: край короба идёт по краю зоны',
+            2: 'в кривой дальше 50 м генератор уводит объект с нашей оси — в зону он входит ближе 45 м',
+            3: 'в кривой на 50–80 м генератор поднимает объект на 2,4 м — в зону он входит ближе 50 м'}
+
+
+def fake_obj():
+    """Бэг организаторов: итог по 10 объектам и дистанция каждого объекта по кадрам с решением детектора."""
+    fin, base = read_csv('fake_obj_fo_final.csv'), read_csv('fake_obj_fo_base.csv')
+    if not fin:
+        return None
+    lvl0 = {int(r['id']): r['level'] for r in base or []}
+    f = lambda v: float(v) if v not in ('', None) else None
+    objs = [{'id': int(r['id']), 'name': FAKE_SHORT.get(int(r['id']), r['desc'][:40]), 'expect': r['expect'],
+             'level': r['level'] or 'none', 'base_level': lvl0.get(int(r['id'])) or None, 'first_stop_m': f(r['first_stop_m']),
+             'sight_m': f(r['sight_m']), 'stop_share': f(r['stop_share']), 'ok': r['ok'] == 'True',
+             'why': FAKE_WHY.get(int(r['id']))} for r in fin]
+    out = {'objects': objs}
+    frames, truth = read_csv('alarms_fo_final.csv'), read_csv('fake_obj_truth.csv')
+    if frames and truth:
+        code = {'clear': 0, 'caution': 1, 'stop': 2, 'unknown': 3}
+        out['frames'] = [[code.get(r['status'], 0), f(r['distance_m']), f(r['caution_distance_m']), f(r['sight_m'])] for r in frames]
+        tracks = {}
+        for r in truth:
+            i, o, d = int(r['frame']), int(r['obj']), float(r['dist_m'])
+            if not 0 < d <= 300 or i >= len(frames):
+                continue
+            st, dist, cdist, _ = out['frames'][i]
+            s_ = 2 if st == 2 and dist is not None and abs(dist - d) < 5 else \
+                 1 if cdist is not None and abs(cdist - d) < 5 else 0
+            tracks.setdefault(o, []).append([i, round(d, 1), s_])
+        out['tracks'] = tracks
+        out['stop_outside'] = sum(1 for i, fr in enumerate(out['frames']) if fr[0] == 2 and not any(
+            p[0] == i and p[2] == 2 for t in tracks.values() for p in t))
+    return out
+
+
+def experiments():
+    """Строки compare_table.md: тег, параметры, итог на бэге организаторов и прочих наборах."""
+    p = source('compare_table.md')
+    if not p.exists():
+        return None
+    rows, seen = [], {}
+    for line in p.read_text(encoding='utf-8').splitlines():
+        c = [x.strip() for x in line.strip().strip('|').split('|')]
+        if len(c) < 8 or c[0] in ('тег', '') or set(c[0]) <= set('-'):
+            continue
+        m = re.search(r'СТОП (\d+)/(\d+); СТОП вне габарита: ([^;]+); ложных СТОП-кадров (\d+)', c[2])
+        row = {'tag': c[0], 'params': c[1].strip('`'), 'fo_in': int(m.group(1)) if m else None,
+               'fo_n': int(m.group(2)) if m else None, 'fo_out': m.group(3).strip() if m else None,
+               'fo_false': int(m.group(4)) if m else None, 'empty': c[3], 'nd': c[4], 'person': c[5], 'cube': c[6]}
+        seen[(row['tag'], row['params'])] = len(rows)
+        rows.append(row)
+    # повторный прогон того же варианта (полный после быстрого) заменяет прежнюю строку
+    return [rows[i] for i in sorted(set(seen.values()))]
+
+
+def work():
+    """Объём проделанной работы: коммиты, тесты, записи и кадры, на которых проверялся детектор."""
+    try:
+        commits = int(subprocess.run(['git', 'rev-list', '--count', 'HEAD'], cwd=ROOT, capture_output=True,
+                                     text=True).stdout.strip() or 0)
+    except (OSError, ValueError):
+        commits = None
+    pytest = sum(len(re.findall(r'^\s*def test_', f.read_text(encoding='utf-8'), re.M)) for f in (ROOT / 'tests').glob('test_*.py'))
+    return {'commits': commits, 'pytest': pytest}
+
+
 def quality():
     q = {}
-    before, after = read_csv(f'alarms_{BEFORE}.csv'), read_csv(f'alarms_{AFTER}.csv')
+    before, after = read_csv(f'alarms_{BEFORE}.csv'), read_csv(f'alarms_{after_tag("alarms_")}.csv')
     if before and after:
         ob = lambda rows: [r for r in rows if r['bag'] == 'doubleT_obstacle']
         dist = [float(r['distance_m']) for r in ob(after) if r['alarm'] == '1']
@@ -137,20 +233,11 @@ def quality():
         eb, ea = [r for r in before if r['bag'] in empty], [r for r in after if r['bag'] in empty]
         q['empty'] = {'bags': per_bag, 'before': alarm_share(eb)['pct'], 'after': alarm_share(ea)['pct'],
                       'frames': len(ea), 'minutes': len(ea) / 600}
-    nb, na = read_csv(f'alarms_nd_{BEFORE}.csv'), read_csv(f'alarms_nd_{AFTER}.csv')
-    if nb and na:
-        # эпизоды считаются внутри отрезка: детектор перезапускается в начале каждого
-        def seg(rows):
-            out = {'frames': 0, 'alarm_frames': 0, 'episodes': 0}
-            for k in range(8):
-                s = alarm_share(rows[k * 400:(k + 1) * 400])
-                for key in out:
-                    out[key] += s[key]
-            out['pct'] = 100 * out['alarm_frames'] / out['frames']
-            out['per_hour'] = out['episodes'] / (out['frames'] / 36000)
-            return out
-        q['nd_segments'] = {'before': seg(nb), 'after': seg(na)}
-    full = read_csv('alarms_final_nd_full.csv')
+    if after:
+        # доли решений по записям: СТОП / ВНИМАНИЕ / путь не определён / свободно
+        q['status'] = [status_mix(b, [r for r in after if r['bag'] == b]) for b in dict.fromkeys(r['bag'] for r in after)]
+    nd_name = nd_full_name()
+    full = read_csv(nd_name)
     if full:
         s = alarm_share(full)
         a = np.array([int(r['alarm']) for r in full])
@@ -158,8 +245,23 @@ def quality():
         per_min = [int(a[i:i + 600].sum()) for i in range(0, len(a), 600)]
         per_100 = [int(a[i:i + 100].sum()) for i in range(0, len(a), 100)]
         q['nd_full'] = {**s, 'minutes': len(a) / 600, 'per_min': per_min, 'per_100': per_100,
-                        'distance_median': float(np.median(d)) if d else None}
-    ab, aa = read_csv(f'approach_{BEFORE}.csv'), read_csv(f'approach_{AFTER}.csv')
+                        'distance_median': float(np.median(d)) if d else None, 'file': nd_name,
+                        'dist_bins': [sum(lo <= v < hi for v in d) for lo, hi in ((0, 40), (40, 80), (80, 130), (130, 1e9))]}
+        q.setdefault('status', []).append(status_mix('new_data', full))
+    fo = read_csv('alarms_fo_final.csv')
+    if fo:
+        q.setdefault('status', []).append(status_mix('cloud_with_fake_obj', fo))
+    sl = read_csv('selflabel_nd_final.csv')
+    if sl:
+        labels = [r['label'] for r in sl]
+        q['selflabel'] = {'episodes': len(labels), 'false_proven': labels.count('false_proven'),
+                          'unresolved': labels.count('unresolved')}
+        txt = source('selflabel_nd_final.txt')
+        if txt.exists():
+            head = txt.read_text(encoding='utf-8')
+            km = re.search(r'пробег по одометрии ([\d.]+) км', head)
+            q['selflabel'].update({'unreliable': 'НЕНАДЁЖНО' in head, 'odometry_km': float(km.group(1)) if km else None})
+    ab, aa = read_csv(f'approach_{BEFORE}.csv'), read_csv(f'approach_{after_tag("approach_")}.csv')
     if ab and aa:
         shapes = ['человек стоит', 'куб 0.4', 'человек лежит', 'куб 0.7', 'куб 0.2']
         starts = sorted({int(r['start_m']) for r in aa})
@@ -167,14 +269,41 @@ def quality():
         def cell(rows, shape, start):
             rs = [r for r in rows if r['shape'] == shape and int(r['start_m']) == start]
             hit = [float(r['first_m']) for r in rs if r['detected'] == '1' and r['first_m']]
-            return {'n': len(rs), 'found': len(hit), 'median': float(np.median(hit)) if hit else None}
+            return {'n': len(rs), 'found': len(hit), 'median': float(np.median(hit)) if hit else None,
+                    'values': sorted(hit)}
         q['approach'] = {'shapes': shapes, 'starts': starts,
                          'cells': [{'shape': s, 'start': st, 'before': cell(ab, s, st), 'after': cell(aa, s, st)}
                                    for s in shapes for st in starts],
                          'windows': len({(r['bag'], r['window']) for r in aa})}
         err = sorted(abs(float(r['dist_err_m'])) for r in aa if r['dist_err_m'])
         q['dist_err'] = {'values': err, 'median': float(np.median(err)), 'p95': float(np.percentile(err, 95))}
+    tr = read_json(f'approach_trace_{after_tag("approach_trace_", ".json")}.json')
+    if tr:
+        # по кадру: истинная дистанция, решение на объекте (S -- СТОП, B -- виден, но за концом оси,
+        # C -- ВНИМАНИЕ по другой причине, N -- не найден), дальность оси в кадре
+        code = {'stop': 'S', 'beyond': 'B', 'caution': 'C', 'none': 'N'}
+        q['trace'] = [{'bag': t['bag'], 'window': t['window'], 'shape': t['shape'], 'start_m': t['start_m'],
+                       'truth_m': [r[0] for r in t['frames']], 'cat': ''.join(code[r[1]] for r in t['frames']),
+                       'reason': [r[2] for r in t['frames']], 'path_m': [r[3] for r in t['frames']],
+                       'speed_mps': float(np.median([r[5] for r in t['frames'] if r[5] is not None] or [0]))}
+                      for t in tr['trials']]
     return q
+
+
+def nd_full_name():
+    """Вся new_data итоговой версии: compare.sh пишет alarms_nd_final.csv, run_all.py --
+    alarms_final_nd_full.csv. Берётся самый свежий файл со всей записью (не отрезки), runs/ раньше reference/."""
+    found = []
+    for name in ('alarms_nd_final.csv', 'alarms_final_nd_full.csv'):
+        for rank, base in ((1, RUNS), (0, REFERENCE)):
+            p = base / name
+            if p.exists():
+                with open(p, encoding='utf-8') as f:
+                    n = sum(1 for _ in f) - 1
+                if n >= 10000:
+                    found.append((rank, p.stat().st_mtime, name))
+                    break
+    return max(found)[2] if found else 'alarms_final_nd_full.csv'
 
 
 def speed():
@@ -183,7 +312,8 @@ def speed():
     if d:
         s['parse'] = [{'bag': b, 'mb': FRAME_MB.get(b, 8), 'python': v['parse_ms_python'], 'cpp': v['parse_ms_cpp'],
                        'kept_after_crop': v['kept_after_crop']} for b, v in d.items()]
-    stats, res = read_json('smoke/doubleT_platform_stats.json'), source('smoke/doubleT_platform_result.jsonl')
+    run = 'docker/doubleT_platform' if read_json('docker/doubleT_platform_stats.json') else 'smoke/doubleT_platform'
+    stats, res = read_json(f'{run}_stats.json'), source(f'{run}_result.jsonl')
     if stats:
         rows = [json.loads(line) for line in open(res, encoding='utf-8') if line.strip()] if res.exists() else []
         pre = stats.get('preproc', {})
@@ -193,7 +323,16 @@ def speed():
                          'latency_ms': [round(r['latency_ms'], 2) for r in rows if r.get('latency_ms') is not None],
                          'detect_ms': [round(r['detect_ms'], 2) for r in rows if r.get('detect_ms') is not None],
                          'queue_ms': [round(r['queue_ms'], 2) for r in rows if r.get('queue_ms') is not None]})
-        pj = read_json('smoke/doubleT_platform_stats_preproc.json')
+        e2e = read_json(f'{run}_e2e.json')
+        if e2e and e2e.get('e2e_ms'):
+            s['e2e']['e2e_ms'] = [round(v, 2) for v in e2e['e2e_ms']]
+        ob = read_json('docker/doubleT_obstacle_stats.json')
+        if ob:
+            s['e2e_big'] = {k: ob.get(k) for k in ('received', 'processed', 'latency_ms_p50', 'latency_ms_p95', 'e2e_ms_p50', 'e2e_ms_p95')}
+        fo = read_json('docker/cloud_with_fake_obj_stats.json')
+        if fo:
+            s['e2e_fo'] = {k: fo.get(k) for k in ('received', 'processed', 'latency_ms_p50', 'latency_ms_p95', 'e2e_ms_p50', 'e2e_ms_p95')}
+        pj = read_json(f'{run}_stats_preproc.json')
         if pj:
             s['e2e']['preproc_ms_p50'], s['e2e']['preproc_ms_p95'] = pj.get('preproc_ms_p50'), pj.get('preproc_ms_p95')
             s['e2e']['transport_ms_p50'], s['e2e']['transport_ms_p95'] = pj.get('transport_ms_p50'), pj.get('transport_ms_p95')
@@ -201,10 +340,10 @@ def speed():
 
 
 def count_tests():
-    """gtest считается по исходникам; pytest -- из DOCUMENTED: тесты узлов собираются только в образе."""
+    """Тесты по исходникам: gtest -- макросы TEST в ros2_ws, pytest -- функции test_ в tests/."""
     gtest = sum(len(re.findall(r'^TEST(?:_F|_P)?\(', f.read_text(encoding='utf-8'), re.M))
                 for f in (ROOT / 'ros2_ws' / 'src').glob('*/test/*.cpp'))
-    return {'gtest': gtest, 'pytest': DOCUMENTED['pytest']['n'], 'pytest_src': DOCUMENTED['pytest']['src']}
+    return {'gtest': gtest, 'pytest': work()['pytest']}
 
 
 def robustness():
@@ -243,6 +382,9 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
     cen = snap.center_at(cf)
     zp = zone_params()
     in_zone = (fwd > 2) & (np.abs(lat - cen) <= zp['half_width']) & (rel >= zp['clearance']) & (rel <= zp['height'])
+    # объект за концом оси (beyond_path) детектор видит, но даёт только ВНИМАНИЕ: его точки рисуются,
+    # иначе в плеере кажется, что объект пропал
+    in_zone_all = in_zone.copy()
     if snap.path_range:
         in_zone &= fwd <= snap.path_range
     tag = np.zeros(len(fwd), np.uint8)               # 0 фон, 1 зона, 2 объект (подтверждён), 3 объект (нет)
@@ -252,7 +394,7 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
         if o.get('level') is None and o['too_small']:
             continue
         near, far = o['distance_m'], o.get('far_m', o['distance_m'])
-        sel = in_zone & (fwd >= near - 0.05) & (fwd <= far + 0.05) & (np.abs(lat - cen - o['lateral_m']) < 0.8)
+        sel = (in_zone_all if o.get('reason') == 'beyond_path' else in_zone) & (fwd >= near - 0.05) & (fwd <= far + 0.05) & (np.abs(lat - cen - o['lateral_m']) < 0.8)
         alarm = o.get('level') == 'stop'
         tag[sel] = 2 if alarm else 3
         box = None
@@ -334,7 +476,8 @@ def main():
     args = ap.parse_args()
 
     data = {'generated': date.today().isoformat(), 'commit': git_rev(), 'bench': DOCUMENTED['bench'],
-            'host': host(), 'quality': quality(), 'speed': speed(), 'robust': robustness()}
+            'host': host(), 'quality': quality(), 'speed': speed(), 'robust': robustness(),
+            'fake_obj': fake_obj(), 'experiments': experiments(), 'work': work()}
     data['sources'] = dict(sorted(SOURCES.items()))
     if not args.no_scene:
         try:

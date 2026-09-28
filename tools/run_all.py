@@ -7,6 +7,7 @@
     python tools/run_all.py --skip-full             # без прогона всей new_data (самый долгий шаг)
 
 Результат:
+    results/landing.html   стартовая страница о решении (gui/landing.html, копируется как есть)
     results/metrics.html   дашборд метрик (tools/dashboard.py)
     results/demo.html      плеер: детектор по кадрам записей в 3D (tools/demo.py)
     runs/                  csv/json каждого шага, runs/logs/<шаг>.log -- их вывод
@@ -180,6 +181,16 @@ def main():
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
+
+    # Стартовая страница: лендинг рядом с дашбордом и плеером, чтобы ссылки между ними работали
+    # и из results/. Лендинг ведёт на dashboard.html -- кладём рядом переход на metrics.html.
+    landing = ROOT / 'gui' / 'landing.html'
+    if landing.exists() and metrics.exists():
+        shutil.copyfile(landing, args.out / 'landing.html')
+        (args.out / 'dashboard.html').write_text(
+            '<!doctype html><meta charset="utf-8"><title>Дашборд</title>'
+            '<meta http-equiv="refresh" content="0; url=metrics.html">'
+            '<a href="metrics.html">Дашборд метрик</a>', encoding='utf-8')
 
     print(f'\nвсего {(time.time() - T0) / 60:.1f} мин')
     for p in (metrics, demo):
