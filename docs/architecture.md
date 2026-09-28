@@ -25,9 +25,9 @@ ros2 bag play / лидар
 | Ядро `tunnel_od` | `core/` | алгоритм: пакет Python + numpy, без ROS. Тот же код работает в узле и в офлайн-оценке |
 | Приём облака | `ros2_ws/src/tunnel_od_preproc` | C++-компонент rclcpp: разбирает облако любого поддерживаемого формата ([input_format.md](input_format.md)), удаляет дубли dual return, обрезает по дальности, проверяет поток и публикует каноническое облако |
 | Узел детектора | `ros2_ws/src/tunnel_od_detector` | rclpy: вызывает ядро на каждом кадре, публикует результат и маркеры, пишет итог прогона |
-| Запуск | `ros2_ws/src/tunnel_od_detector/launch` | `detector.launch.py` — узлы; `play.launch.py` — узлы + проигрывание записи; `demo.launch.py` — то же + RViz в браузере |
+| Запуск | `ros2_ws/src/tunnel_od_detector/launch` | `detector.launch.py` — узлы; `play.launch.py` — узлы + проигрывание записи; `demo.launch.py` — то же + RViz в браузере; `record.launch.py` — видео RViz |
 | Контейнер | `Dockerfile`, `docker-compose.yml` | стадия `detector` (ROS 2 Humble, ядро, узлы), стадия `viz` (+ RViz2, Xvfb, noVNC) |
-| Параметры | `config/` | `detector.yaml` (узлы и алгоритм), `fastdds.xml` (транспорт), `tunnel_od.rviz` (вид RViz) |
+| Параметры | `config/` | `detector.yaml` (узлы и алгоритм), `fastdds.xml` (транспорт), `tunnel_od.rviz` и `record.rviz` (вид RViz для показа и для видео) |
 | Оценка качества | `evaluation/` | офлайн, без ROS: ложные тревоги, дальность, скорость, отчёт — `python -m evaluation` |
 
 ## Запуск
@@ -37,6 +37,7 @@ docker compose build
 BAG=/путь/к/записи docker compose up play      # узел + ros2 bag play, итог в output/
 BAG=/путь/к/записи docker compose up demo      # то же по кругу + RViz в браузере: http://localhost:6080
 docker compose up detector                     # только узлы: для живого лидара или своего плеера
+BAG=/путь/к/записи docker compose up record    # видео RViz со строкой статуса в output/video/
 docker compose run --rm test                   # gtest + pytest внутри образа
 ```
 
@@ -60,6 +61,8 @@ docker compose run --rm test                   # gtest + pytest внутри о�
 - часы плеера запускаются раньше, чем готова очередь, и первые 1–2 с записи уходят пачкой — узел берёт последний кадр пачки, остальные отбрасывает. Пока плеер на паузе, DDS успевает связать его с узлом (QoS `VOLATILE`: кадры до связи теряются).
 
 Свой плеер нужно запускать так же: `--read-ahead-queue-size 20 --start-paused`, затем `ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume`.
+
+`record` (`record.launch.py`) снимает видео: виртуальный экран, RViz2 с видом из-за кабины (`config/record.rviz`) и `ffmpeg`, поверх — строка статуса из `/tunnel_od/result` (узел `status_overlay`: решение, дистанция, задержка, дальность оси, скорость). Переменные: `START` — с какой секунды записи, `DURATION` — сколько секунд, `TITLE` — подпись. Результат — `output/video/<запись>[_<START>].mp4`.
 
 `demo` поднимает в контейнере виртуальный экран (Xvfb), RViz2 с программным OpenGL и noVNC, запись идёт по кругу. Порт 6080 открыт только для этой машины; для показа по сети — `"6080:6080"` в `docker-compose.yml`.
 

@@ -38,6 +38,7 @@ BAG=/путь/к/записи docker compose up demo     # то же по кру
 docker compose up detector            # только узлы — для живого лидара или своего плеера
 docker compose run --rm test          # тесты: gtest (C++) и pytest (узел)
 RATE=0.5 BAG=… docker compose up play # проигрывание медленнее реального времени
+BAG=… DURATION=26 docker compose up record   # видео RViz со строкой статуса -> output/video/<запись>.mp4
 ```
 
 Параметры алгоритма и узлов — в [`config/detector.yaml`](config/detector.yaml), их описание — в [docs/architecture.md](docs/architecture.md#параметры). Каталог монтируется в контейнер, после правки пересобирать образ не нужно.

@@ -29,6 +29,18 @@ services:
       - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
     command: ros2 launch tunnel_od_detector demo.launch.py bag:=/bag rate:=${RATE:-1.0}
 
+  record:
+    <<: *common
+    image: tunnel-od-viz
+    build: {context: ., target: viz}
+    cpus: 6
+    volumes:
+      - ./config:/opt/tunnel_od/config:ro
+      - ./output:/out
+      - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
+    command: ["ros2", "launch", "tunnel_od_detector", "record.launch.py", "bag:=/bag", "rate:=${RATE:-1.0}",
+              "start_offset:=${START:-0}", "duration:=${DURATION:-0}", "title:=${TITLE:-}"]
+
   detector:
     <<: *common
     network_mode: host       

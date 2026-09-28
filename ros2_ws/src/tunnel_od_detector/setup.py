@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'detector_node = tunnel_od_detector.node:main',
+            'status_overlay = tunnel_od_detector.status_overlay:main',
         ],
     },
 )

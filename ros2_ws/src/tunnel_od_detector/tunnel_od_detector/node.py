@@ -230,6 +230,8 @@ class DetectorNode(Node):
                 try:
                     self._process(*item)
                 except Exception as e:
+                    if not rclpy.ok():
+                        return
                     self.stats.errors += 1
                     self.get_logger().error(f'ошибка обработки кадра: {type(e).__name__}: {e}')
 

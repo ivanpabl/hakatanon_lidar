@@ -41,6 +41,7 @@ def _actions(context):
     lc = lambda name: LaunchConfiguration(name).perform(context)
     bag, out = lc('bag'), lc('out')
     rate, delay, loop = float(lc('rate')), float(lc('start_delay')), _on(lc('loop'))
+    start, length = float(lc('start_offset')), float(lc('duration'))
     name, topic, frame, duration = bag_info(bag)
     os.makedirs(out, exist_ok=True)
     actions = [LogInfo(msg=f'[tunnel_od] запись {name}: {topic}, frame_id {frame}, {duration:.0f} с, rate {rate}')]
@@ -55,10 +56,12 @@ def _actions(context):
                             parameters=[{'input_topic': topic, 'out_file': f'{out}/{name}_e2e.json'}]))
     if _on(lc('rviz')):
         actions.append(Node(package='rviz2', executable='rviz2', output='log',
-                            arguments=['-d', RVIZ_CONFIG, '-f', frame]))
+                            arguments=['-d', lc('rviz_config') or RVIZ_CONFIG, '-f', frame]))
 
     play_cmd = ['ros2', 'bag', 'play', bag, '--rate', str(rate), '--read-ahead-queue-size', '20',
                 '--disable-keyboard-controls', '--start-paused'] + (['--loop'] if loop else [])
+    if start > 0:
+        play_cmd += ['--start-offset', str(start)]
     player = ExecuteProcess(cmd=play_cmd, output='screen', name='player')
     resume = ExecuteProcess(cmd=['ros2', 'service', 'call', '/rosbag2_player/resume',
                                  'rosbag2_interfaces/srv/Resume'], output='log', name='resume')
@@ -66,12 +69,14 @@ def _actions(context):
         TimerAction(period=delay / 2, actions=[player]),
         TimerAction(period=delay, actions=[resume, LogInfo(msg='[tunnel_od] воспроизведение запущено')]),
     ]
-    if not loop:
+    if not loop and _on(lc('stop_at_end')):
         stop = EmitEvent(event=Shutdown(reason='запись закончилась'))
         actions += [
             RegisterEventHandler(OnProcessExit(target_action=player, on_exit=[
                 LogInfo(msg=f'[tunnel_od] запись закончилась; итог: {out}/{name}_stats.json'),
                 TimerAction(period=3.0, actions=[stop])])),
+            *([TimerAction(period=delay + length / rate, actions=[
+                LogInfo(msg=f'[tunnel_od] {length:.0f} с записи проиграны'), stop])] if length > 0 else []),
             TimerAction(period=delay + duration / rate + 60, actions=[
                 LogInfo(msg='[tunnel_od] плеер не закончил вовремя, остановка'), stop]),
         ]
@@ -88,5 +93,9 @@ def generate_launch_description():
         arg('probe', 'true', 'замер e2e-задержки (latency_probe) -> <out>/<запись>_e2e.json'),
         arg('rviz', 'false', 'открыть RViz2 (нужен образ viz и экран)'),
         arg('loop', 'false', 'проигрывать запись по кругу (для показа), без остановки'),
+        arg('start_offset', '0', 'с какой секунды записи начать'),
+        arg('duration', '0', 'сколько секунд записи проиграть (0 -- до конца)'),
+        arg('rviz_config', '', 'конфиг RViz (по умолчанию config/tunnel_od.rviz)'),
+        arg('stop_at_end', 'true', 'остановить запуск, когда запись проиграна (record останавливает сам)'),
         OpaqueFunction(function=_actions),
     ])

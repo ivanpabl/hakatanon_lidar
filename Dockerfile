@@ -41,6 +41,7 @@ CMD ["ros2", "launch", "tunnel_od_detector", "detector.launch.py"]
 
 FROM detector AS viz
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ros-humble-rviz2 xvfb x11vnc novnc websockify libgl1-mesa-dri \
-    && rm -rf /var/lib/apt/lists/*
+        ros-humble-rviz2 xvfb x11vnc novnc websockify libgl1-mesa-dri ffmpeg fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 EXPOSE 6080
