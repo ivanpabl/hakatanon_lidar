@@ -1,12 +1,9 @@
-# записи ros2 bag (десятки ГБ) -- не в репозитории
 /data/
 *.db3
 
-# результаты запусков: docker compose (play, demo) и python -m evaluation
 /output/*
 !/output/.gitkeep
 
-# окружения и сборка
 venv/
 .venv/
 __pycache__/

@@ -19,13 +19,11 @@ LIB = 'libtunnel_od_canonical' + {'darwin': '.dylib', 'win32': '.dll'}.get(sys.p
 def _variants(cxx):
     base = [cxx, '-std=c++17', '-O3', '-shared', f'-I{PKG / "include"}']
     if sys.platform == 'win32':
-        # MinGW-w64 (g++ из MSYS2 / WinLibs): рантайм C++ статически, чтобы ctypes не искал libstdc++-6.dll
         yield base + ['-static']
         return
     base.append('-fPIC')
     yield base
     if sys.platform == 'darwin':
-        # Command Line Tools без заголовков libc++ по умолчанию -- берём их из SDK явно
         for sdk in sorted(Path('/Library/Developer/CommandLineTools/SDKs').glob('MacOSX*.sdk'), reverse=True):
             inc = sdk / 'usr' / 'include' / 'c++' / 'v1'
             if inc.is_dir():

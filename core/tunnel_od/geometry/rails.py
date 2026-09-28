@@ -48,7 +48,6 @@ def find_floor_bumps(x, y, z, return_z=False):
     ok = (fbin >= 0) & (fbin < n_f)
     xf, zf, fbin = xf[ok], zf[ok], fbin[ok]
 
-    # одна сортировка по (срез, высота): из неё и перцентиль среза, и максимум ячейки
     zmin = zf.min()
     order = np.argsort(fbin * 1000.0 + (zf - zmin), kind='stable')
     fb_s, z_s, x_s = fbin[order], zf[order], xf[order]
@@ -63,8 +62,6 @@ def find_floor_bumps(x, y, z, return_z=False):
 
     lbin = np.digitize(xf, _LAT_EDGES)
     profile = np.full(n_f * _N_LAT, -np.inf)
-    # точки идут по возрастанию высоты внутри среза: при повторе индекса остаётся
-    # последняя запись, то есть максимум ячейки (быстрее np.maximum.at в разы)
     profile[fbin * _N_LAT + lbin] = zf
     profile = profile.reshape(n_f, _N_LAT)
     profile[np.isneginf(profile)] = np.nan

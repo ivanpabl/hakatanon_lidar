@@ -28,10 +28,10 @@ sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 warnings.simplefilter('ignore')
 
-from tunnel_od import ObstacleDetector, parse_pointcloud2          # noqa: E402
+from tunnel_od import ObstacleDetector, parse_pointcloud2
 
-from bags import BAGS, RUNS, open_cloud_bag                        # noqa: E402
-from to_contract_v1 import legacy_to_contract                      # noqa: E402
+from bags import BAGS, RUNS, open_cloud_bag
+from to_contract_v1 import legacy_to_contract
 
 CROP = (2.0, 250.0)
 

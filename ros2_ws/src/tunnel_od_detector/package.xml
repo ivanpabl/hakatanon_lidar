@@ -17,7 +17,6 @@
   <exec_depend>rosbag2_py</exec_depend>
   <exec_depend>rosbag2_interfaces</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
-  <!-- ядро tunnel_od ставится pip-ом из ./core (см. Dockerfile), не через rosdep -->
 
   <test_depend>python3-pytest</test_depend>
 

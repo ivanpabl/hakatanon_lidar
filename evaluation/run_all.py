@@ -26,11 +26,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / 'tools'
-TAG = 'P_ev_f20'                                   # текущая версия; так её называет dashboard.py
+TAG = 'P_ev_f20'
 FOR_HACKATHON = ['doubleT_obstacle', 'doubleT_platform', 'roundT_doubleT', 'roundT_pressureGate_roundT',
                  'roundT_squareT_pressureGate_squareT', 'squareT_platform_squareT_switch']
 QUICK = ['doubleT_obstacle', 'roundT_doubleT']
-QUICK_APPROACH = 'roundT_pressureGate_roundT'      # в записи есть отрезок разгона для eval_approach
+QUICK_APPROACH = 'roundT_pressureGate_roundT'
 
 
 def data_dir(args):
@@ -143,13 +143,12 @@ def main():
 
     print('\n[2/4] метрики качества')
     six = QUICK if args.quick else FOR_HACKATHON
-    only_six = ['--bags', *six] if args.quick or args.skip_new_data else []   # иначе все 7 записей
+    only_six = ['--bags', *six] if args.quick or args.skip_new_data else []
     j = args.jobs
     if args.quick:
         steps = [Step('alarms', ['evaluation/alarms.py', '--tag', TAG, '--bags', *six, '--workers', '2'], logs),
                  Step('approach', ['evaluation/eval_approach.py', '--tag', TAG, '--bags', QUICK_APPROACH, '--workers', '1'], logs)]
     else:
-        # тяжёлые по времени -- вся new_data (1 процесс) и дальность при подъезде; остальное делит ядра
         w_alarms, w_approach = max(1, min(6, (j - 2) // 2)), max(1, j - 2 - max(1, min(6, (j - 2) // 2)))
         steps = [Step('alarms', ['evaluation/alarms.py', '--tag', TAG, '--bags', *six, '--workers', str(w_alarms)], logs),
                  Step('approach', ['evaluation/eval_approach.py', '--tag', TAG, '--workers', str(w_approach)], logs)]
@@ -165,7 +164,6 @@ def main():
         failed += [s.name for s in steps if not s.ok]
 
     if compiler:
-        # замер разбора -- отдельно, когда машина свободна
         print('\n[3/4] разбор C++ против Python: побитное совпадение и время')
         s = Step('check_preproc', ['evaluation/check_preproc.py', *only_six], logs)
         if not run_parallel([s], env):

@@ -40,7 +40,7 @@ docker compose run --rm test          # тесты: gtest (C++) и pytest (уз�
 RATE=0.5 BAG=… docker compose up play # проигрывание медленнее реального времени
 ```
 
-Параметры алгоритма и узлов — в [`config/detector.yaml`](config/detector.yaml), с комментариями. Каталог монтируется в контейнер, после правки пересобирать образ не нужно.
+Параметры алгоритма и узлов — в [`config/detector.yaml`](config/detector.yaml), их описание — в [docs/architecture.md](docs/architecture.md#параметры). Каталог монтируется в контейнер, после правки пересобирать образ не нужно.
 
 ## Результат в ROS 2
 

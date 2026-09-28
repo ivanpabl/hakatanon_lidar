@@ -58,7 +58,7 @@ def test_json_numpy_nan_unknown():
 
 def test_stats():
     s = Stats()
-    for i, t in enumerate([0.0, 0.1, 0.2, 0.5, 0.6]):     # 0.2 -> 0.5: пропущено 2 кадра
+    for i, t in enumerate([0.0, 0.1, 0.2, 0.5, 0.6]):
         s.on_receive(t)
         s.on_processed(10.0 + i, 5.0, i == 4, 56.0 if i == 4 else None)
     out = s.summary()
@@ -79,7 +79,7 @@ class _Cloud:
 
 
 def test_canonical_xyz_views_without_copy():
-    xyz = np.arange(3 * 256, dtype=np.float32).reshape(-1, 3)     # 256 точек: parse_pointcloud2 удалил бы "дубли"
+    xyz = np.arange(3 * 256, dtype=np.float32).reshape(-1, 3)
     buf = xyz.tobytes()
     x, y, z = canonical_xyz(_Cloud(buf))
     assert len(x) == 256 and np.array_equal(x, xyz[:, 0]) and np.array_equal(z, xyz[:, 2])
@@ -122,11 +122,9 @@ def test_limit_alarms_ignores_unconfirmed_and_none_limit():
 
 
 def test_limit_alarms_only_near_end_of_axis():
-    # один короткий пересчёт (ось 52 м) не гасит объект на 56 м далеко от конца оси (121 м)
     near = {'distance_m': 56.0, 'confirmed': True, 'beyond_path': False}
     res = limit_alarms(_res(near), 52.0, 0.8 * 121.0)
     assert res['obstacle'] and res['distance_m'] == 56.0
-    # объект у конца оси (197 м при оси 153-204 м) -- без тревоги
     far = {'distance_m': 197.0, 'confirmed': True, 'beyond_path': False}
     res = limit_alarms(_res(far), 153.0, 0.8 * 204.0)
     assert not res['obstacle']

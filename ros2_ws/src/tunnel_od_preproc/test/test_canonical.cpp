@@ -1,6 +1,3 @@
-// Разбор в каноническое облако: форматы, оси, дубли dual return, обрезка.
-// Совпадение с parse_pointcloud2 (Python) на реальных кадрах -- tests/test_preproc.py
-// и python -m evaluation preproc.
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -35,7 +32,6 @@ void put(std::vector<uint8_t> & d, size_t off, T v)
   std::memcpy(d.data() + off, &v, sizeof(T));
 }
 
-// как в записях: x, y, z, intensity (float32), ring (uint16), timestamp (float64) -> 26 байт
 struct Legacy
 {
   std::vector<uint8_t> data;
@@ -74,11 +70,10 @@ std::vector<P> parse(const uint8_t * d, const CloudDesc & c, const Layout & l, P
   return r;
 }
 
-}  // namespace
+}
 
 TEST(Canonical, LegacyDropsZerosAndDualReturnDuplicates)
 {
-  // как tests/test_core.py: 4 пары столбцов, второй столбец пары = первый, 10 пустых лучей
   const size_t n_pairs = 4, n = 2 * n_pairs * kColumnHeight;
   std::vector<P> pts(n);
   for (size_t i = 0; i < n; ++i) {pts[i] = {1.0f + 0.01f * i, -5.0f, 0.0f};}
@@ -93,7 +88,6 @@ TEST(Canonical, LegacyDropsZerosAndDualReturnDuplicates)
   ParseStats st;
   const auto out = parse(L.data.data(), L.c, L.l, {}, &st);
   EXPECT_EQ(out.size(), n_pairs * kColumnHeight - 10);
-  // порядок -- как в буфере: первые столбцы пар подряд
   EXPECT_FLOAT_EQ(out[0].x, pts[10].x);
   EXPECT_FLOAT_EQ(out[kColumnHeight - 10].x, pts[2 * kColumnHeight].x);
   EXPECT_EQ(st.n_zero, 20u);
@@ -106,8 +100,8 @@ TEST(Canonical, LegacyDropsZerosAndDualReturnDuplicates)
 TEST(Canonical, DuplicateThresholdIsStrictInFloat32)
 {
   std::vector<P> pts(2 * kColumnHeight, P{1.0f, -5.0f, 0.5f});
-  for (size_t r = 0; r < kColumnHeight; ++r) {pts[kColumnHeight + r].x = 1.0f + 0.02f;}   // не дубль
-  pts[kColumnHeight].x = 1.0f + 0.005f;                                                // дубль
+  for (size_t r = 0; r < kColumnHeight; ++r) {pts[kColumnHeight + r].x = 1.0f + 0.02f;}
+  pts[kColumnHeight].x = 1.0f + 0.005f;
   Legacy L(pts);
   const auto out = parse(L.data.data(), L.c, L.l);
   EXPECT_EQ(out.size(), 2 * kColumnHeight - 1);
@@ -117,7 +111,7 @@ TEST(Canonical, NoDedupeWhenWidthNotMultipleOf256)
 {
   std::vector<P> pts(2 * kColumnHeight + 5, P{2.0f, -3.0f, 1.0f});
   Legacy L(pts);
-  EXPECT_EQ(tunnel_od::detect_format(L.c, L.l), Format::Generic);   // width % 256 != 0
+  EXPECT_EQ(tunnel_od::detect_format(L.c, L.l), Format::Generic);
   ParseOptions o;
   o.format = Format::LegacyHesai;
   ParseStats st;
@@ -149,8 +143,6 @@ TEST(Canonical, GenericKeepsDuplicates)
   EXPECT_EQ(parse(L.data.data(), L.c, l).size(), pts.size());
 }
 
-// Контракт v1: 128 x W, строки -- ring, REP-103, return_id, t_offset_ns, NaN.
-// Раскладка S2, но поля перечислены в другом порядке.
 struct Contract
 {
   std::vector<uint8_t> data;
@@ -187,16 +179,15 @@ TEST(Canonical, ContractTransposesToColumnOrderAndRotatesAxes)
   const size_t W = 4;
   std::vector<P> rep(W * kColumnHeight);
   for (size_t i = 0; i < rep.size(); ++i) {
-    rep[i] = {10.0f + i, 0.5f * i, 0.25f};     // x_rep вперёд, y_rep влево
+    rep[i] = {10.0f + i, 0.5f * i, 0.25f};
   }
-  rep[kColumnHeight + 7] = {kNaN, kNaN, kNaN};  // второе отражение совпало -- NaN
+  rep[kColumnHeight + 7] = {kNaN, kNaN, kNaN};
   Contract K(W, rep, {0, 1, 0, 1});
   ASSERT_EQ(tunnel_od::detect_format(K.c, K.l), Format::ContractV1);
   ParseStats st;
   const auto out = parse(K.data.data(), K.c, K.l, {}, &st);
   ASSERT_EQ(out.size(), rep.size() - 1);
   EXPECT_EQ(st.axes, Axes::Rep103);
-  // столбец за столбцом, внутри -- по ring; x ядра = y_rep, y ядра = -x_rep
   EXPECT_FLOAT_EQ(out[0].x, rep[0].y);
   EXPECT_FLOAT_EQ(out[0].y, -rep[0].x);
   EXPECT_FLOAT_EQ(out[1].x, rep[1].y);
@@ -206,14 +197,14 @@ TEST(Canonical, ContractTransposesToColumnOrderAndRotatesAxes)
   EXPECT_EQ(st.n_second_valid, 2 * kColumnHeight - 1);
   EXPECT_EQ(st.n_second_coincident, 0u);
   ASSERT_TRUE(st.have_point_time);
-  EXPECT_NEAR(st.t_max, 3e-6, 1.5e-6);          // выборка точек, t_offset до 3 мкс
-  EXPECT_NEAR(st.az_center, 0.0, 45.0);          // вперёд
+  EXPECT_NEAR(st.t_max, 3e-6, 1.5e-6);
+  EXPECT_NEAR(st.az_center, 0.0, 45.0);
 }
 
 TEST(Canonical, ContractFlagsSecondReturnThatIsNotNaN)
 {
   const size_t W = 2;
-  std::vector<P> rep(W * kColumnHeight, P{10.0f, 1.0f, 0.0f});   // второе = первое, не NaN
+  std::vector<P> rep(W * kColumnHeight, P{10.0f, 1.0f, 0.0f});
   Contract K(W, rep, {0, 1});
   ParseStats st;
   parse(K.data.data(), K.c, K.l, {}, &st);
@@ -222,7 +213,6 @@ TEST(Canonical, ContractFlagsSecondReturnThatIsNotNaN)
 
 TEST(Canonical, LegacyAxesRoundTripThroughRep103)
 {
-  // legacy (x вбок, вперёд -y) -> REP-103 (x = -y, y = x) -> адаптер -> те же биты
   std::vector<P> pts(2 * kColumnHeight);
   for (size_t i = 0; i < pts.size(); ++i) {pts[i] = {0.3f * i - 7.0f, -1.7f * i - 2.0f, 0.1f * i};}
   Legacy L(pts);
@@ -239,7 +229,7 @@ TEST(Canonical, CropKeepsOnlyForwardRangeWithFloorGuard)
 {
   std::vector<P> pts(2 * kColumnHeight);
   for (size_t i = 0; i < pts.size(); ++i) {
-    const float fwd = -10.0f + 1.5f * static_cast<float>(i % 200);   // -10 .. 288 м
+    const float fwd = -10.0f + 1.5f * static_cast<float>(i % 200);
     pts[i] = {0.1f * (i % 7), -fwd, -1.0f + 0.001f * i};
   }
   Legacy L(pts);
@@ -248,13 +238,12 @@ TEST(Canonical, CropKeepsOnlyForwardRangeWithFloorGuard)
   o.crop.enabled = true;
   ParseStats st;
   const auto out = parse(L.data.data(), L.c, L.l, o, &st);
-  // в окне пола (2..15 м, |x| < 3) меньше 50 точек -> не режем
   EXPECT_TRUE(st.crop_guard);
   EXPECT_EQ(out.size(), pts.size());
 
   std::vector<P> many;
   for (int k = 0; k < 4; ++k) {many.insert(many.end(), pts.begin(), pts.end());}
-  for (size_t i = 0; i < 4 * kColumnHeight; ++i) {many[i] = {0.5f, -5.0f - 0.01f * i, -1.5f};}   // пол
+  for (size_t i = 0; i < 4 * kColumnHeight; ++i) {many[i] = {0.5f, -5.0f - 0.01f * i, -1.5f};}
   Legacy M(many);
   const auto cut = parse(M.data.data(), M.c, M.l, o, &st);
   EXPECT_FALSE(st.crop_guard);
@@ -296,7 +285,7 @@ TEST(Canonical, RejectsUnusableClouds)
   c.width = 10;
   c.point_step = 12;
   c.row_step = 120;
-  c.data_size = d.size();      // короче 120
+  c.data_size = d.size();
   Layout l = tunnel_od::make_layout({{"x", 0, 7, 1}, {"y", 4, 7, 1}, {"z", 8, 7, 1}});
   EXPECT_NE(tunnel_od::validate(c, l), "");
   c.width = 8;

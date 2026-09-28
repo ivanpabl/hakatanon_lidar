@@ -54,7 +54,7 @@ Level worst(Level a, Level b)
   return static_cast<uint8_t>(a) > static_cast<uint8_t>(b) ? a : b;
 }
 
-}  // namespace
+}
 
 const char * to_string(Level l)
 {
@@ -118,7 +118,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
   if (frames_ == 1) {first_recv_ = f.recv_s;}
   last_recv_ = f.recv_s;
 
-  // поток: frame_id, раскладка, размер
   if (frames_ > 1 && f.frame_id != frame_id_) {
     ++frame_id_changes_;
     warn("frame_id_change", "frame_id сменился посреди потока: '" + frame_id_ + "' -> '" + f.frame_id + "'");
@@ -138,7 +137,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
   height_ = f.cloud.height;
   if (f.frame_id.empty()) {warn("frame_id_empty", "M3: пустой header.frame_id");}
 
-  // M4: время кадра (и для отбракованных кадров)
   if (frames_ == 1) {
     first_stamp_ = f.stamp_ns;
     const int y = year_of(f.stamp_ns);
@@ -178,7 +176,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
       "оси -- " + std::string(to_string(s.axes)) + ", задайте input_format / input_axes");
   }
 
-  // M1
   n_in_ += s.n_in;
   n_zero_ += s.n_zero;
   n_nonfinite_ += s.n_nonfinite;
@@ -200,7 +197,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
     }
   }
 
-  // M2
   if (s.dedupe_applied) {
     ++dedupe_frames_;
     pairs_valid_ += s.pairs_both_valid;
@@ -219,7 +215,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
     }
   }
 
-  // M4: время точек
   if (s.have_point_time) {
     sweep_.push_back(s.t_max - s.t_min);
     t_first_.push_back(s.t_min);
@@ -231,7 +226,6 @@ void InputMonitor::on_frame(const FrameInfo & f)
     warn("no_point_time", "M4: нет времени точки (t_offset_ns / timestamp)");
   }
 
-  // M5 и оси
   if (s.n_az) {
     az_min_.push_back(s.az_min);
     az_max_.push_back(s.az_max);
@@ -530,4 +524,4 @@ std::string to_json(const ParseStats & s)
   return o.str();
 }
 
-}  // namespace tunnel_od
+}

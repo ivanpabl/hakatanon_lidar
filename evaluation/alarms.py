@@ -113,7 +113,7 @@ def main():
     tot = [0, 0, 0, 0.0]
     for bag, part in zip(args.bags, parts):
         a = np.array([r['alarm'] for r in part])
-        dur = len(part) / 10.0 / 3600   # 10 Гц; по t_s нельзя: отрезки
+        dur = len(part) / 10.0 / 3600
         ep = episodes(a)
         d = [r['distance_m'] for r in part if r['alarm']]
         small = [r for r in part if r['alarm'] and r['n_points'] != '' and r['n_points'] <= 2]

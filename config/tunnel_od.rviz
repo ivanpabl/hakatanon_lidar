@@ -17,7 +17,6 @@ Visualization Manager:
       Alpha: 0.3
       Reference Frame: <Fixed Frame>
       Value: true
-    # Облако: в записях топик называется по-разному, включены оба (работает тот, что есть)
     - Class: rviz_default_plugins/PointCloud2
       Name: Cloud /lidar_points
       Enabled: true
@@ -58,7 +57,6 @@ Visualization Manager:
       Decay Time: 0
       Queue Size: 1
       Value: true
-    # Ось пути (зелёная), коридор (синий), объекты (красные -- тревога), текст с дистанцией
     - Class: rviz_default_plugins/MarkerArray
       Name: tunnel_od markers
       Enabled: true
@@ -75,8 +73,6 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 30; 30; 36
-    # frame_id облака: hesai_lidar (5 записей), lidar_livox (doubleT_obstacle).
-    # Для doubleT_obstacle: rviz2 -d tunnel_od.rviz -f lidar_livox
     Fixed Frame: hesai_lidar
     Frame Rate: 15
   Name: root
@@ -87,7 +83,6 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      # Вид сзади-сверху вдоль пути: вперёд -- это -y
       Class: rviz_default_plugins/Orbit
       Name: Current View
       Distance: 45

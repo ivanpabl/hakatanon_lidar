@@ -28,7 +28,6 @@ from dashboard import frame_view, git_rev, host
 
 TEMPLATE = Path(__file__).resolve().parent / 'templates' / 'demo.html'
 OUT = ROOT / 'output' / 'report' / 'demo.html'
-# реальный объект на рельсе на 56 м; пустой перегон -- детектор молчит
 CLIPS = ['doubleT_obstacle', 'roundT_doubleT:0:150']
 
 

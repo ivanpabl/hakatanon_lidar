@@ -9,7 +9,6 @@ from collections import deque
 import numpy as np
 
 
-# ---------------------------------------------------------------- параметры детектора
 
 def _convert_value(key, value):
     """Значение ROS-параметра -> значение kwargs. ROS-параметры не умеют None и
@@ -62,7 +61,6 @@ def build_detector_kwargs(ros_params: dict, json_override: str = '', target=None
     return kwargs
 
 
-# ---------------------------------------------------------------- вход
 
 CANONICAL_FIELDS = (('x', 0, 7), ('y', 4, 7), ('z', 8, 7))
 
@@ -101,7 +99,6 @@ def required_fwd_range(det_kwargs):
     return lo, hi
 
 
-# ---------------------------------------------------------------- JSON
 
 def limit_alarms(res, limit_m, end_m=None):
     """Тревога только у подтверждённых объектов не дальше limit_m (м).
@@ -152,7 +149,7 @@ def to_jsonable(obj, _depth=0):
         return [to_jsonable(v, _depth + 1) for v in obj]
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return to_jsonable(dataclasses.asdict(obj), _depth + 1)
-    if hasattr(obj, 'item'):          # прочие numpy-подобные скаляры
+    if hasattr(obj, 'item'):
         try:
             return to_jsonable(obj.item(), _depth + 1)
         except Exception:
@@ -164,7 +161,6 @@ def dumps(obj) -> str:
     return json.dumps(to_jsonable(obj), ensure_ascii=False, allow_nan=False, separators=(',', ':'))
 
 
-# ---------------------------------------------------------------- статистика
 
 def percentile(values, q):
     return float(np.percentile(values, q)) if len(values) else None
@@ -174,14 +170,14 @@ class Stats:
     """Счётчики узла. Задержки -- за всё время работы и за последний период сводки."""
 
     def __init__(self):
-        self.received = 0          # принято сообщений (колбэк подписки)
-        self.processed = 0         # обработано детектором
-        self.dropped = 0           # отброшено как устаревшие (пришёл более новый кадр)
-        self.errors = 0            # исключения при обработке кадра
-        self.alarm_frames = 0      # кадров с obstacle=True
-        self.stamp_gaps = 0        # кадров, пропущенных по header.stamp (потери до узла или в записи)
-        self.latency_ms = []       # приём -> публикация результата
-        self.proc_ms = []          # разбор + детектор
+        self.received = 0
+        self.processed = 0
+        self.dropped = 0
+        self.errors = 0
+        self.alarm_frames = 0
+        self.stamp_gaps = 0
+        self.latency_ms = []
+        self.proc_ms = []
         self.min_alarm_distance = None
         self._period = {'processed': 0, 'latency': [], 'received': 0}
         self._last_stamp = None

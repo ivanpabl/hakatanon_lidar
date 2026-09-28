@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- FastDDS: большие кадры (8-23 МБ) через shared memory с большим сегментом
-     + UDP для обнаружения/обмена с другими хостами. Нужен /dev/shm >= segment_size:
-     docker run --shm-size=1g (или --ipc=host). -->
 <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
   <transport_descriptors>
     <transport_descriptor>

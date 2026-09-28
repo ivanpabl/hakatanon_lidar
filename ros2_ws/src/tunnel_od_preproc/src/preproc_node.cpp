@@ -1,16 +1,3 @@
-// Приём облака лидара: любой поддерживаемый формат -> каноническое облако ядра tunnel_od.
-//
-// Вход:  sensor_msgs/PointCloud2 (input_topic; пусто -- первый найденный топик этого типа).
-// Выход: output_topic (/tunnel_od/cloud) -- PointCloud2 x, y, z float32, point_step 12,
-//        тот же header (для осей REP-103 -- frame_id + core_frame_suffix и /tf_static к нему);
-//        meta_topic (/tunnel_od/input_meta) -- std_msgs/String JSON по каждому кадру: время
-//        публикации исходного кадра (source_timestamp), время разбора, счётчики, скорость
-//        поезда (S1) и сводка проверки входа;
-//        diagnostics_topic (/tunnel_od/input_diagnostics) -- DiagnosticArray раз в stats_period_s.
-//
-// Разбор -- в колбэке подписки (один проход по буферу, ~5-9 мс на кадр 23 МБ). Если узел
-// не успевает, кадры теряются в очереди DDS (KEEP_LAST qos_depth) -- это видно по номерам
-// публикации (publication_sequence_number) и считается как dropped.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -104,11 +91,9 @@ void to_rpy_deg(const Quat & q, double rpy[3])
   rpy[2] = std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)) * r2d;
 }
 
-// Оси ядра относительно REP-103: x ядра = y REP (влево), y ядра = -x REP (назад),
-// то есть поворот на +90 град вокруг z.
 const Quat kCoreInRep{0.0, 0.0, std::sqrt(0.5), std::sqrt(0.5)};
 
-}  // namespace
+}
 
 class PreprocNode : public rclcpp::Node
 {
@@ -195,11 +180,8 @@ public:
   }
 
 private:
-  // ------------------------------------------------------------------ подписки
   void discover()
   {
-    // Только топик, у которого уже есть издатель: подписчик (например RViz с конфигом на
-    // /lidar_points) тоже добавляет топик в граф, и без этой проверки узел цепляется к пустому.
     for (const auto & kv : get_topic_names_and_types()) {
       if (kv.first.rfind("/tunnel_od/", 0) == 0) {continue;}
       if (count_publishers(kv.first) == 0) {continue;}
@@ -235,7 +217,7 @@ private:
           if (t == "nav_msgs/msg/Odometry") {type = "odometry";}
         }
       }
-      if (type == "auto") {return;}         // топика ещё нет -- ждём
+      if (type == "auto") {return;}
     }
     speed_timer_->cancel();
     if (type == "twist") {
@@ -275,7 +257,7 @@ private:
       if (child.size() > core_suffix_.size() &&
         child.compare(child.size() - core_suffix_.size(), core_suffix_.size(), core_suffix_) == 0)
       {
-        continue;                           // наш собственный кадр осей ядра
+        continue;
       }
       Quat q{t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w};
       tf_[child] = {strip_slash(t.header.frame_id), q,
@@ -283,7 +265,6 @@ private:
     }
   }
 
-  // ------------------------------------------------------------------ кадр
   void on_cloud(const sensor_msgs::msg::PointCloud2 & msg, const rclcpp::MessageInfo & info)
   {
     const auto t0 = Clock::now();
@@ -309,7 +290,6 @@ private:
     const std::string frame = strip_slash(msg.header.frame_id);
     const int64_t stamp_ns = static_cast<int64_t>(msg.header.stamp.sec) * 1000000000LL + msg.header.stamp.nanosec;
 
-    // поворот по TF (apply_mount_tf) и TF для диагностики M3
     ParseOptions opt = opt_;
     auto it = tf_.find(frame);
     if (it != tf_.end() && !tf_reported_[frame]) {
@@ -364,7 +344,6 @@ private:
         to_string(st.format), to_string(st.axes), static_cast<size_t>(st.n_in), n);
     }
 
-    // выход: кадр осей ядра, если оси входа не совпадают с ними
     auto out = std::make_unique<sensor_msgs::msg::PointCloud2>();
     out->header = msg.header;
     if (rotated || st.axes == Axes::Rep103) {
@@ -389,7 +368,6 @@ private:
     out->data.assign(bytes, bytes + 12 * n);
     const double parse_ms = ms_since(t0);
 
-    // meta -- раньше облака: к обработке облака детектором она уже на месте
     const bool speed_fresh = have_speed_ &&
       std::chrono::duration<double>(Clock::now() - speed_recv_).count() <= speed_max_age_s_;
     std::ostringstream o;
@@ -444,7 +422,6 @@ private:
 
   void publish_core_frame(const std::string & frame, const Quat & mount)
   {
-    // точка в осях ядра -> в кадре лидара: p_frame = R_mount^-1 * R(+90 z) * p_core
     const Quat conj{-mount.x, -mount.y, -mount.z, mount.w};
     const Quat q = mul(conj, kCoreInRep);
     auto & last = core_tf_sent_[frame];
@@ -469,7 +446,6 @@ private:
       "(/tf_static %s -> %s)", t.child_frame_id.c_str(), frame.c_str(), t.child_frame_id.c_str());
   }
 
-  // ------------------------------------------------------------------ сводки
   std::string counters_json() const
   {
     std::ostringstream o;
@@ -573,6 +549,6 @@ private:
   rclcpp::TimerBase::SharedPtr discover_timer_, speed_timer_, stats_timer_;
 };
 
-}  // namespace tunnel_od
+}
 
 RCLCPP_COMPONENTS_REGISTER_NODE(tunnel_od::PreprocNode)

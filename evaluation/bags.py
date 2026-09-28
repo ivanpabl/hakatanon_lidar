@@ -32,7 +32,7 @@ def open_cloud_bag(name):
         yield reader, conn
 
 
-CROP = (2.0, 250.0)       # обрезка по дальности, как в tunnel_od_preproc (config/detector.yaml)
+CROP = (2.0, 250.0)
 
 
 def cloud_parser(kind='python'):

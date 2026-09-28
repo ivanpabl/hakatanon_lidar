@@ -61,7 +61,7 @@ def _load():
         if not p.is_file():
             continue
         try:
-            lib = C.CDLL(str(p))           # CDLL: GIL отпускается на время вызова
+            lib = C.CDLL(str(p))
         except OSError as e:
             errors.append(f'{p}: {e}')
             continue

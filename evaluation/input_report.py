@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bags import BAGS, RUNS, bag_path                              # noqa: E402
+from bags import BAGS, RUNS, bag_path
 
 CLOUD = 'sensor_msgs/msg/PointCloud2'
 SPEED_TYPES = ('geometry_msgs/msg/TwistStamped', 'nav_msgs/msg/Odometry')
@@ -53,7 +53,7 @@ def monitor_bag(name, max_frames=None, progress=False):
                 try:
                     native.parse_msg(m, monitor=mon, recv_s=t * 1e-9)
                 except ValueError:
-                    pass                      # кадр не разобран -- уже учтён в проверке
+                    pass
                 clouds += 1
                 if progress and clouds % 500 == 0:
                     print(f'  {name}: {clouds} кадров', flush=True)

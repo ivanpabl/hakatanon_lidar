@@ -28,21 +28,18 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 COLUMN_HEIGHT = 128
-DUP_M = 0.01           # tunnel_od.pointcloud.DUAL_RETURN_DUP_M
+DUP_M = 0.01
 TOPIC = '/lidar/points'
 FRAME = 'lidar'
 DESCRIPTION_TOPIC = '/lidar/description'
 SPEED_TOPIC = '/train/twist'
 BASE = 'base_link'
 
-# PointField.datatype
 U8, U16, U32, F32, F64 = 2, 4, 6, 7, 8
-# S2: x, y, z float32, intensity u8, return_id u8, ring u16, t_offset_ns u32 -> 20 байт, выровнено до 24
 LAYOUT = np.dtype({'names': ['x', 'y', 'z', 'intensity', 'return_id', 'ring', 't_offset_ns'],
                    'formats': ['<f4', '<f4', '<f4', 'u1', 'u1', '<u2', '<u4'],
                    'offsets': [0, 4, 8, 12, 13, 14, 16], 'itemsize': 24})
 DATATYPE = {'x': F32, 'y': F32, 'z': F32, 'intensity': U8, 'return_id': U8, 'ring': U16, 't_offset_ns': U32}
-# порядок в fields -- не по смещениям
 FIELD_ORDER = ['t_offset_ns', 'ring', 'return_id', 'intensity', 'z', 'y', 'x']
 _NP = {F32: '<f4', F64: '<f8', U16: '<u2', U8: 'u1', U32: '<u4', 3: '<i2', 5: '<i4', 1: 'i1'}
 
@@ -62,7 +59,6 @@ def legacy_to_contract(data, point_step, fields, stamp_ns):
     if n % (2 * COLUMN_HEIGHT):
         raise ValueError(f'{n} точек: не целое число пар столбцов по {COLUMN_HEIGHT}')
     x, y, z = (np.ascontiguousarray(a[k]) for k in 'xyz')
-    # ровно как parse_pointcloud2
     valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & ((x != 0) | (y != 0) | (z != 0))
     cols = lambda v: v.reshape(-1, 2, COLUMN_HEIGHT)
     xa, ya, za = cols(x), cols(y), cols(z)
@@ -73,8 +69,8 @@ def legacy_to_contract(data, point_step, fields, stamp_ns):
     width = n // COLUMN_HEIGHT
     out = np.zeros(n, LAYOUT)
     nan = np.float32(np.nan)
-    out['x'] = np.where(valid, -y, nan)           # вперёд
-    out['y'] = np.where(valid, x, nan)            # влево
+    out['x'] = np.where(valid, -y, nan)
+    out['y'] = np.where(valid, x, nan)
     out['z'] = np.where(valid, z, nan)
     if 'intensity' in a.dtype.names:
         out['intensity'] = np.clip(np.rint(a['intensity']), 0, 255).astype(np.uint8)
@@ -84,7 +80,6 @@ def legacy_to_contract(data, point_step, fields, stamp_ns):
     if 'timestamp' in a.dtype.names:
         t = (a['timestamp'] - stamp_ns // 1_000_000_000) * 1e9 - stamp_ns % 1_000_000_000
         out['t_offset_ns'] = np.clip(np.rint(t), 0, 2 ** 32 - 1).astype(np.uint32)
-    # точка i -- столбец i // 128, строка i % 128 -> матрица 128 x W по строкам
     ordered = out.reshape(width, COLUMN_HEIGHT).T.copy()
     flds = [(name, LAYOUT.fields[name][1], DATATYPE[name]) for name in FIELD_ORDER]
     return ordered.tobytes(), COLUMN_HEIGHT, width, LAYOUT.itemsize, flds
@@ -156,7 +151,6 @@ def main():
             m = reader.deserialize(raw, c.msgtype)
             stamp = int(m.header.stamp.sec) * 1_000_000_000 + int(m.header.stamp.nanosec)
             if shift is None:
-                # часы "синхронизированы": штамп первого кадра = время записи в bag, шаги -- как в исходнике
                 shift = t_bag - stamp
                 w.write(c_desc, t_bag, ts.serialize_cdr(String(data=description(FRAME)), String.__msgtype__))
                 height = 1.5
@@ -199,7 +193,7 @@ def main():
 
 def to_humble_metadata(out):
     """rosbags пишет metadata.yaml версии 8; ros2 bag в Humble ждёт версию 5 -- переписываем."""
-    from ruamel.yaml import YAML       # зависимость rosbags
+    from ruamel.yaml import YAML
     yaml = YAML(typ='safe')
     path = Path(out) / 'metadata.yaml'
     info = yaml.load(path.read_text())['rosbag2_bagfile_information']

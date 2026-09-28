@@ -35,18 +35,17 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bags import BAGS, RUNS, ROOT, open_cloud_bag   # noqa: E402
+from bags import BAGS, RUNS, ROOT, open_cloud_bag
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE / 'templates' / 'dashboard.html'
 BASELINE = json.loads((HERE / 'baseline.json').read_text(encoding='utf-8'))
 OUT = ROOT / 'output' / 'report' / 'metrics.html'
-BEFORE, AFTER = 'A_base', 'P_ev_f20'           # исходная версия (ae38df6) и текущая по умолчанию
+BEFORE, AFTER = 'A_base', 'P_ev_f20'
 EMPTY = [b for b in BAGS if b not in ('doubleT_obstacle', 'new_data')]
-FRAME_MB = {'doubleT_obstacle': 23}            # остальные записи -- 8 МБ
-GAP = 2                                        # как alarms.py: разрыв до 2 кадров -- тот же эпизод
+FRAME_MB = {'doubleT_obstacle': 23}
+GAP = 2
 
-# Замеры, которых нет в runs/: значение и откуда оно.
 DOCUMENTED = {
     'deser_ms': {'p50': 5.5, 'p95': 10.6,
                  'src': 'ветка research, research/ingest_timing.py: десериализация 23 МБ в Python, которой больше нет в узле'},
@@ -55,7 +54,7 @@ DOCUMENTED = {
 }
 
 
-SOURCES = {}                                   # файл -> 'runs' | 'baseline': откуда взят
+SOURCES = {}
 
 
 def _found(name, kind):
@@ -134,7 +133,7 @@ def quality():
                          'after': [int(r['alarm']) for r in ob(after)],
                          'distance_m': float(np.median(dist)) if dist else None}
         per_bag = []
-        empty = [b for b in EMPTY if any(r['bag'] == b for r in after)]     # прогон мог быть не по всем
+        empty = [b for b in EMPTY if any(r['bag'] == b for r in after)]
         for b in empty:
             sb, sa = alarm_share([r for r in before if r['bag'] == b]), alarm_share([r for r in after if r['bag'] == b])
             per_bag.append({'bag': b, 'frames': sa['frames'], 'before': sb['pct'], 'after': sa['pct']})
@@ -143,7 +142,6 @@ def quality():
                       'frames': len(ea), 'minutes': len(ea) / 600}
     nb, na = read_csv(f'alarms_nd_{BEFORE}.csv'), read_csv(f'alarms_nd_{AFTER}.csv')
     if nb and na:
-        # эпизоды считаются внутри отрезка: детектор перезапускается в начале каждого
         def seg(rows):
             out = {'frames': 0, 'alarm_frames': 0, 'episodes': 0}
             for k in range(8):
@@ -240,15 +238,14 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
     keep = (fwd > -15) & (fwd < max_fwd) & (np.abs(lat) < 12) & (z > -6) & (z < 8)
     fwd, lat, z = fwd[keep], lat[keep], z[keep]
 
-    # оси детектора: вперёд = -y, вбок = x; в сцене: X вбок, Y вверх, Z назад (правая тройка WebGL)
     cf = np.clip(fwd, 2, None)
     top = snap.rail_top_at(cf)
-    rel = z - top                                    # высота над головкой рельса
+    rel = z - top
     cen = snap.center_at(cf)
     in_zone = (fwd > 2) & (np.abs(lat - cen) <= 1.0) & (rel >= 0.15) & (rel <= 2.0)
     if snap.path_range:
         in_zone &= fwd <= snap.path_range
-    tag = np.zeros(len(fwd), np.uint8)               # 0 фон, 1 зона, 2 объект (подтверждён), 3 объект (нет)
+    tag = np.zeros(len(fwd), np.uint8)
     tag[in_zone] = 1
     objects = []
     for o in res['objects']:
@@ -267,8 +264,6 @@ def frame_view(x, y, z, res, snap, max_fwd=230.0, bg_points=None, rng=None):
     objects.sort(key=lambda o: (not o['alarm'], o['distance_m']))
 
     if bg_points is not None and (tag == 0).sum() > bg_points:
-        # фон: сначала по точке на воксель (вблизи точек в сотни раз больше, чем вдали -- дальние
-        # стены так не пропадают), остаток -- случайно
         bg = np.flatnonzero(tag == 0)
         for vox in (0.15, 0.25, 0.4):
             key = np.floor(np.stack([lat[bg], z[bg], fwd[bg]], 1) / vox).astype(np.int32)
@@ -333,7 +328,7 @@ def main():
     if not args.no_scene:
         try:
             data['scene'] = scene(args.scene_frame)
-        except Exception as e:                                          # noqa: BLE001
+        except Exception as e:
             print(f'3D-сцена пропущена: {e}', file=sys.stderr)
     html = TEMPLATE.read_text(encoding='utf-8').replace('/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
     args.out.parent.mkdir(parents=True, exist_ok=True)

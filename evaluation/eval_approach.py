@@ -51,7 +51,7 @@ SHAPES = {
 }
 
 
-parse_pointcloud2 = cloud_parser('python')      # --parser cpp -- как C++-узел приёма
+parse_pointcloud2 = cloud_parser('python')
 
 
 def pick_windows(bag, n_windows, det_kwargs):
@@ -106,7 +106,6 @@ def run_bag(job):
     rows = []
     for w, start in enumerate(pick_windows(bag, N_WINDOWS, det_kwargs)):
         frames = read_frames(bag, start, WARMUP + FRAMES)
-        # эталон: тот же кадр без вставки -> ось пути, пройденный путь, посторонние тревоги
         ego = ObstacleDetector(ego_motion=True)
         ref = ObstacleDetector(**det_kwargs)
         for data, step, fields, t in frames[:WARMUP]:

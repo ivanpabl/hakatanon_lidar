@@ -15,8 +15,8 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bags import ROOT                     # noqa: E402
-from dashboard import git_rev             # noqa: E402
+from bags import ROOT
+from dashboard import git_rev
 
 TEMPLATE = Path(__file__).resolve().parent / 'templates' / 'site.html'
 RESULTS = ROOT / 'output' / 'report'

@@ -1,19 +1,8 @@
-# Все способы запуска. Запись -- переменная BAG (каталог ros2 bag с metadata.yaml), результат -- в ./output.
-#
-#   docker compose build
-#   BAG=/путь/к/записи docker compose up play      узел + проигрывание записи, итог в output/
-#   BAG=/путь/к/записи docker compose up demo      то же по кругу + RViz в браузере: http://localhost:6080
-#   docker compose up detector                     только узел: для живого лидара или своего плеера
-#   docker compose run --rm test                   тесты внутри образа
-#
-# Параметры детектора -- config/detector.yaml (монтируется, пересобирать образ не нужно).
-# Переменные: BAG, RATE (скорость проигрывания, 1.0), UID/GID (владелец файлов в output, 1000).
-
 x-common: &common
   image: tunnel-od
   build: {context: ., target: detector}
   user: "${UID:-1000}:${GID:-1000}"
-  shm_size: 2g                    # FastDDS shared memory: кадры 8-23 МБ
+  shm_size: 2g                
   volumes:
     - ./config:/opt/tunnel_od/config:ro
     - ./output:/out
@@ -31,9 +20,9 @@ services:
     <<: *common
     image: tunnel-od-viz
     build: {context: ., target: viz}
-    cpus: 6                       # RViz рисует без видеокарты -- ограничиваем, чтобы не занять всю машину
+    cpus: 6                     
     ports:
-      - "127.0.0.1:6080:6080"     # только с этой машины; для показа по сети -- "6080:6080"
+      - "127.0.0.1:6080:6080"  
     volumes:
       - ./config:/opt/tunnel_od/config:ro
       - ./output:/out
@@ -42,8 +31,8 @@ services:
 
   detector:
     <<: *common
-    network_mode: host            # видеть драйвер лидара / плеер на этом хосте
-    ipc: host                     # кадры через общую память хоста
+    network_mode: host       
+    ipc: host                    
     command: ros2 launch tunnel_od_detector detector.launch.py
 
   test:

@@ -25,7 +25,6 @@ body {
 :focus-visible { outline: 2px solid var(--now); outline-offset: 2px; border-radius: 4px; }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
 
-/* ---------- шапка ---------- */
 header.top {
   display: flex; align-items: center; gap: 20px; padding: 10px 16px; border-bottom: 1px solid var(--border);
   background: var(--surface); min-width: 0;
@@ -43,7 +42,6 @@ header.top {
 #clips button small b { color: var(--alarm); font-weight: 500; }
 .meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
-/* ---------- сцена ---------- */
 #stage { position: relative; min-height: 0; background: radial-gradient(120% 90% at 50% 38%, #111a26 0%, #070a0f 70%); }
 #gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 #gl:active { cursor: grabbing; }
@@ -80,7 +78,6 @@ header.top {
 .hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(232, 238, 245, .5); text-align: right; }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(232, 238, 245, .7); }
 
-/* ---------- воспроизведение и таймлайн ---------- */
 footer.transport { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 16px 12px; }
 .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .controls button {
@@ -191,7 +188,6 @@ function b64(s) { const bin = atob(s), n = bin.length, out = new Uint8Array(n); 
 $('#meta').textContent = D.generated ? `собрано ${D.generated.split('-').reverse().join('.')}${D.commit ? ' · ' + D.commit : ''}` : '';
 if (!D.clips.length) { $('#stage').insertAdjacentHTML('beforeend', '<div class="nogl">Нет данных. Запустите <code>python -m evaluation demo</code>.</div>'); return; }
 
-// --- отрывки: точки декодируются один раз
 const clips = D.clips.map(c => ({ ...c, q: new Int16Array(b64(c.points).buffer), tg: b64(c.tags) }));
 clips.forEach(c => { delete c.points; delete c.tags; });
 const Z0 = D.zone;
@@ -203,7 +199,6 @@ $('#clips').innerHTML = clips.map((c, k) => {
 }).join('');
 const clipBtns = [...document.querySelectorAll('#clips button')];
 
-// --- WebGL
 const canvas = $('#gl'), stage = $('#stage');
 const gl = canvas.getContext('webgl', { antialias: true }) || canvas.getContext('experimental-webgl');
 if (!gl) stage.insertAdjacentHTML('beforeend', '<div class="nogl">Браузер не дал WebGL — 3D-вид недоступен. Таймлайн и решения по кадрам работают.</div>');
@@ -223,12 +218,12 @@ if (gl) {
   const pP = prog(fsP), pL = prog(fsL), pG = prog(fsG);
   const G = (pr, mode, minpx, maxpx, extra = {}) => ({ pr, mode, minpx, maxpx, pos: gl.createBuffer(), col: gl.createBuffer(), sz: gl.createBuffer(), n: 0, ...extra });
   groups = [
-    G(pP, gl.POINTS, 1.0, 3.2),                                              // фон и коридор
-    G(pL, gl.LINES, 1, 1, { blend: true }),                                  // ось, коридор
-    G(pP, gl.POINTS, 6.0, 12.0),                                             // точки объектов
-    G(pL, gl.TRIANGLES, 1, 1, { blend: 'add', pulse: true }),                // корпус объекта
-    G(pG, gl.POINTS, 64, 220, { blend: 'add', pulse: true, nodepth: true }), // ореол
-    G(pL, gl.LINES, 1, 1, { blend: 'add', pulse: true })                     // рёбра, флажок
+    G(pP, gl.POINTS, 1.0, 3.2),
+    G(pL, gl.LINES, 1, 1, { blend: true }),
+    G(pP, gl.POINTS, 6.0, 12.0),
+    G(pL, gl.TRIANGLES, 1, 1, { blend: 'add', pulse: true }),
+    G(pG, gl.POINTS, 64, 220, { blend: 'add', pulse: true, nodepth: true }),
+    G(pL, gl.LINES, 1, 1, { blend: 'add', pulse: true })
   ];
 }
 function upload(gp, pos, col, size) {
@@ -243,7 +238,6 @@ const ramp = [[0x1c, 0x5c, 0xab], [0x2a, 0x78, 0xd6], [0x55, 0x98, 0xe7], [0x86,
 const rampAt = u => { u = Math.max(0, Math.min(1, u)) * (ramp.length - 1); const i = Math.min(ramp.length - 2, Math.floor(u)), f = u - i; return ramp[i].map((c, k) => (c + (ramp[i + 1][k] - c) * f) / 255); };
 const NEON = { alarm: [1, .18, .38], cand: [1, .69, .13] };
 
-// --- текущий кадр: ось и функции по ней
 let axis = [[0, 0, 2]], axF0 = 2, axStep = 1;
 const axIdx = f => Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep)));
 const railAt = f => axis[axIdx(f)][1];
@@ -267,7 +261,6 @@ function buildFrame() {
   hud(fr);
   if (!gl) return;
 
-  // облако
   const i0 = clip.offs[fi], i1 = clip.offs[fi + 1], q = clip.q, tg = clip.tg;
   let nb = 0, nh = 0;
   for (let i = i0; i < i1; i++) tg[i] >= 2 ? nh++ : nb++;
@@ -291,7 +284,6 @@ function buildFrame() {
   upload(groups[0], bp, bc, bs);
   upload(groups[2], hp, hc, hs);
 
-  // ось (по рельсам / по стенам) и коридор
   const lnPos = [], lnCol = [];
   const seg = (a, b2, c) => { lnPos.push(...a, ...b2); lnCol.push(...c, ...c); };
   const railEnd = fr.rails_to_m || 0;
@@ -310,7 +302,6 @@ function buildFrame() {
   }
   upload(groups[1], lnPos, lnCol);
 
-  // объекты: неоновый корпус от головки рельса до верхней точки, с ореолом
   const tri = [], triCol = [], ln = [], lnC = [], haloPos = [], haloCol = [], haloSize = [], labelled = [];
   fr.objects.forEach(o => {
     if (!o.alarm && !o.confirmed && o.n_points < 3) return;
@@ -340,7 +331,6 @@ function buildFrame() {
   dirty = true;
 }
 
-// --- панель решения
 function hud(fr) {
   const common = `
     <dt>кадр</dt><dd>${fr.i} · ${num(fr.t, 1)} с от начала</dd>
@@ -363,7 +353,6 @@ function hud(fr) {
   }
 }
 
-// --- камера
 const cam = { tx: 0, ty: 0, tz: -40, yaw: 0, pitch: .12, dist: 46, fov: 50 };
 const look = (e, tg) => { const dx = e[0] - tg[0], dy = e[1] - tg[1], dz = e[2] - tg[2], d = Math.hypot(dx, dy, dz);
   return { tx: tg[0], ty: tg[1], tz: tg[2], dist: d, yaw: Math.atan2(dx, dz), pitch: Math.asin(dy / d) }; };
@@ -443,7 +432,6 @@ const viewBtns = [...document.querySelectorAll('.hud.views button')];
 const press = v => viewBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v ? 'true' : 'false'));
 viewBtns.forEach(b => b.addEventListener('click', () => { press(b.dataset.view); goTo(VIEWS[b.dataset.view]()); }));
 
-// мышь и касание
 const pts = new Map(); let last = null, pinch = null, mode = 'rot';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); anim = null; press(null);
@@ -461,7 +449,6 @@ const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { e.preventDefault(); anim = null; cam.dist = Math.max(2, Math.min(500, cam.dist * Math.exp(e.deltaY * .0012))); dirty = true; }, { passive: false });
 
-// --- таймлайн: тревога и дистанция по кадрам, ось известна до
 const tl = $('#timeline'), tip = $('#tip');
 let tlX = null, playhead = null;
 const RMAX = 200;
@@ -511,7 +498,6 @@ tl.addEventListener('pointermove', e => {
 tl.addEventListener('pointerup', () => { scrubbing = false; });
 tl.addEventListener('pointerleave', () => tip.classList.remove('on'));
 
-// --- воспроизведение
 let playing = false, rate = 1, acc = 0, lastT = 0;
 const playBtn = $('#play');
 function setPlaying(p) { playing = p; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Пауза' : 'Пуск'); lastT = performance.now(); acc = 0; }
@@ -541,7 +527,6 @@ document.addEventListener('keydown', e => {
 
 function loop(now) {
   if (playing) {
-    // кадры идут в темпе записи (разница меток времени), rate -- множитель
     acc += (now - lastT) / 1000 * rate; lastT = now;
     const f = clip.frames, dt = fi + 1 < f.length ? Math.max(.02, f[fi + 1].t - f[fi].t) : .1;
     if (acc >= dt) { acc = Math.min(acc - dt, .5); if (fi + 1 < f.length) show(fi + 1); else stop(); }

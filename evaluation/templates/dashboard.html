@@ -49,7 +49,6 @@ body {
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--now); outline-offset: 2px; border-radius: 4px; }
 
-/* ---------- каркас: боковая навигация + разделы ---------- */
 .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
 nav.rail {
   position: sticky; top: 0; height: 100vh; padding: 28px 20px 20px 24px;
@@ -89,7 +88,6 @@ code, .code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .span2 { grid-column: span 2; }
 
-/* ---------- сцена ---------- */
 #scene-wrap {
   position: relative; height: min(78vh, 760px); min-height: 460px; border-radius: 14px; overflow: hidden;
   background: radial-gradient(120% 90% at 50% 38%, #111a26 0%, #070a0f 70%); color: #e8eef5;
@@ -128,7 +126,6 @@ code, .code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(232, 238, 245, .5); }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(232, 238, 245, .7); }
 
-/* ---------- итог: три блока ---------- */
 .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
 .summary > div { padding: 22px 28px 8px 0; }
 .summary > div + div { padding-left: 28px; border-left: 1px solid var(--border); }
@@ -140,7 +137,6 @@ code, .code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .fig .was s { text-decoration-thickness: 1px; }
 .fig .k { color: var(--ink-2); font-size: 15px; line-height: 1.4; margin-top: 6px; max-width: 30ch; }
 
-/* ---------- графики ---------- */
 svg.chart { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--font); }
 svg.chart text { fill: var(--muted); font-size: 12px; }
 svg.chart text.ink { fill: var(--ink); }
@@ -168,7 +164,6 @@ svg.chart .base { stroke: var(--axis); stroke-width: 1; }
 #tip.on { opacity: 1; }
 #tip b { font-weight: 600; }
 
-/* ---------- таблицы ---------- */
 .tbl-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th { text-align: left; font-weight: 500; color: var(--ink-2); font-size: 13px; padding: 8px 10px; border-bottom: 1px solid var(--axis); vertical-align: bottom; }
@@ -196,7 +191,6 @@ tr.contract td { border-top: 2px solid var(--axis); }
 .cmd { display: block; margin: 4px 0; padding: 7px 10px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
 .src { font-size: 13px; color: var(--muted); }
 
-/* ---------- узкие экраны ---------- */
 @media (max-width: 1100px) {
   .g3 { grid-template-columns: 1fr 1fr; }
   .summary { grid-template-columns: 1fr; }
@@ -344,7 +338,6 @@ const Q = D.quality || {}, S = D.speed || {}, R = D.robust || {};
 const NS = 'http://www.w3.org/2000/svg';
 const $ = (s, r = document) => r.querySelector(s);
 
-/* ---------- форматирование: десятичная запятая, тонкая шпация в тысячах ---------- */
 function num(v, d = 0) {
   if (v == null || !isFinite(v)) return '—';
   const s = Math.abs(v).toFixed(d).split('.');
@@ -365,7 +358,6 @@ function plural(n, one, few, many) {
   return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
 }
 
-/* ---------- SVG-помощники ---------- */
 function s(tag, attrs = {}, parent) {
   const e = document.createElementNS(NS, tag);
   for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
@@ -404,7 +396,6 @@ const ICON = {
   alarm: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.8 12H1.2z" fill="currentColor"/><path d="M8 6v3.4M8 11.4v.1" stroke="#1a0b0b" stroke-width="1.7" stroke-linecap="round"/></svg>'
 };
 
-/* ---------- подсказка ---------- */
 const tip = $('#tip');
 function showTip(html, x, y) {
   tip.innerHTML = html; tip.classList.add('on');
@@ -422,9 +413,6 @@ document.addEventListener('pointermove', e => {
 });
 document.addEventListener('scroll', hideTip, { passive: true });
 
-/* =====================================================================
-   Итог
-   ===================================================================== */
 function summary() {
   const box = $('#summary-blocks');
   const ob = Q.obstacle, em = Q.empty, ap = Q.approach, er = Q.dist_err;
@@ -458,9 +446,6 @@ function summary() {
   box.innerHTML = blocks.join('');
 }
 
-/* =====================================================================
-   Качество
-   ===================================================================== */
 function qStrip() {
   const box = $('#q-strip'), ob = Q.obstacle;
   if (!ob) return box.remove();
@@ -625,9 +610,6 @@ function qNd() {
   note(box, `Половина тревог (${inZones} из ${nd.alarm_frames} кадров) — на двух участках. Отрезки для сравнения версий их почти не задели, поэтому цифра по отрезкам (${Q.nd_segments ? num(Q.nd_segments.after.per_hour) : '—'} эпизодов в час) оптимистична. Исходную версию на всей записи не прогоняли — сравнения здесь нет.`);
 }
 
-/* =====================================================================
-   Скорость
-   ===================================================================== */
 function sParse() {
   const box = $('#s-parse'), p = S.parse;
   if (!p) return box.remove();
@@ -713,9 +695,6 @@ function sBudget() {
   note(box, 'Светлая засечка на полосе — медиана. Запас до следующего кадра на p95 — почти половина периода.');
 }
 
-/* =====================================================================
-   Надёжность приёма
-   ===================================================================== */
 function rBit() {
   const box = $('#r-bit'), b = R.bitwise;
   if (!b) return box.remove();
@@ -814,9 +793,6 @@ function rMatrix() {
   note(box, 'M5 у <code>doubleT_obstacle</code> — полный оборот (сектор около 240°, кадр 23 МБ): это не нарушение, но облако втрое больше. Галочка — требование выполнено, треугольник — нарушено.');
 }
 
-/* =====================================================================
-   Входные данные: M1–M6
-   ===================================================================== */
 function mTable() {
   const inp = R.input || [], recs = inp.filter(r => !r.bag.startsWith('contract_v1'));
   const n = recs.length, cnt = f => recs.filter(f).length;
@@ -848,9 +824,6 @@ function mTable() {
     '<p class="note">Столбец «Нарушено» посчитан <code>python -m evaluation input</code> по всем кадрам записей. Запись в формате контракта v1 проходит все шесть пунктов.</p>';
 }
 
-/* =====================================================================
-   Методика
-   ===================================================================== */
 function method() {
   const e = S.e2e || {};
   const src = D.sources || {}, fromRef = Object.keys(src).filter(k => src[k] === 'baseline'), fromRuns = Object.keys(src).filter(k => src[k] === 'runs');
@@ -877,9 +850,6 @@ function method() {
   </dl>`;
 }
 
-/* =====================================================================
-   3D-сцена (WebGL без библиотек)
-   ===================================================================== */
 function scene() {
   const sc = D.scene, wrap = $('#scene-wrap'), canvas = $('#gl');
   const hud = $('#hud');
@@ -905,11 +875,11 @@ function scene() {
     wrap.insertAdjacentHTML('beforeend', '<div class="nogl">Браузер не дал WebGL — 3D-сцена недоступна. Остальные разделы работают.</div>');
     return;
   }
-  // --- данные
+
   const raw = Uint8Array.from(atob(sc.points), c => c.charCodeAt(0));
   const q = new Int16Array(raw.buffer), N = q.length / 3;
   const tags = Uint8Array.from(atob(sc.tags), c => c.charCodeAt(0));
-  const axis = sc.axis;       // [lat, railTop, fwd]
+  const axis = sc.axis;
   const axF0 = axis[0][2], axStep = axis.length > 1 ? axis[1][2] - axis[0][2] : 1;
   const railAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return axis[i][1]; };
   const cenAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return axis[i][0]; };
@@ -932,7 +902,7 @@ function scene() {
     c = c.map(v => v * (1 - fade) + 0.04 * fade);
     bgPos.push(lat, z, -f); bgCol.push(c[0], c[1], c[2], 1); bgSize.push(tg === 1 ? .07 : .035);
   }
-  // --- линии: ось (рельсы / стены), коридор, рёбра
+
   const lnPos = [], lnCol = [];
   const seg = (a, b, c) => { lnPos.push(...a, ...b); lnCol.push(...c, ...c); };
   const z0 = sc.zone, railEnd = sc.rails_to_m || 0;
@@ -950,8 +920,7 @@ function scene() {
       seg(P(i, z0.half_width, z0.clearance), P(i, z0.half_width, z0.height), rc);
     }
   }
-  // объекты: неоновый полупрозрачный корпус. Высота -- от головки рельса до верхней точки
-  // объекта, не меньше 0,3 м; ширина и длина -- по точкам, не меньше 0,4 м.
+
   const neonTri = [], neonTriCol = [], neonLn = [], neonLnCol = [];
   const NEON = { alarm: [1, .18, .38], cand: [1, .69, .13] };
   const bodies = [], haloPos = [], haloCol = [], haloSize = [];
@@ -961,7 +930,7 @@ function scene() {
     const bot = railAt(fm), top = Math.max(zB + .08, bot + .3);
     bodies.push({ o, xm, fm, top });
     const col = o.alarm ? NEON.alarm : NEON.cand, k = o.alarm ? 1 : .55;
-    // ядро и ореолы: чем дальше от ядра, тем прозрачнее -- мягкое свечение без постобработки
+
     [[0, .30], [.07, .13], [.17, .07], [.32, .035]].forEach(([g, a]) => {
       const X0 = xm - hx - g, X1 = xm + hx + g, Z0 = bot - Math.min(g, .02), Z1 = top + g, F0 = -(fm - hf - g), F1 = -(fm + hf + g);
       const v = [[X0, Z0, F0], [X1, Z0, F0], [X1, Z1, F0], [X0, Z1, F0], [X0, Z0, F1], [X1, Z0, F1], [X1, Z1, F1], [X0, Z1, F1]];
@@ -976,7 +945,6 @@ function scene() {
     haloPos.push(xm, (bot + top) / 2, -fm); haloCol.push(...col, o.alarm ? .85 : .4); haloSize.push(o.alarm ? 3.0 : 1.6);
   });
 
-  // --- WebGL
   const vs = `attribute vec3 p; attribute vec4 c; attribute float sz; uniform mat4 m; uniform float k; uniform float minpx; uniform float maxpx; varying vec4 vc;
     void main(){ gl_Position = m * vec4(p, 1.0); gl_PointSize = clamp(sz * k / gl_Position.w, minpx, maxpx); vc = c; }`;
   const fsP = `precision mediump float; varying vec4 vc; void main(){ vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard; gl_FragColor = vc; }`;
@@ -987,7 +955,7 @@ function scene() {
     gl.linkProgram(pr);
     return pr;
   }
-  // ореол: радиальное затухание, чтобы корпус был заметен и с 50+ м, где он в несколько пикселей
+
   const fsG = `precision mediump float; uniform float am; varying vec4 vc; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard; float ring = exp(-pow((r - 0.8) / 0.06, 2.0)); float f = 0.75 * exp(-r * r * 4.5) + 0.8 * ring; gl_FragColor = vec4(vc.rgb, vc.a * f * am); }`;
   const pP = prog(fsP), pL = prog(fsL), pG = prog(fsG);
   function buf(arr) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW); return b; }
@@ -1000,11 +968,10 @@ function scene() {
     { pr: pL, mode: gl.LINES, pos: buf(neonLn), col: buf(neonLnCol), sz: buf(new Array(neonLn.length / 3).fill(1)), n: neonLn.length / 3, minpx: 1, maxpx: 1, blend: 'add', pulse: true }
   ];
 
-  // --- камера: орбита вокруг цели
   const cam = { tx: 0, ty: 0, tz: -40, yaw: 0, pitch: .12, dist: 46, fov: 50 };
   const objPos = alarmObj ? [(alarmObj.box[0] + alarmObj.box[1]) / 2, (alarmObj.box[2] + alarmObj.box[3]) / 2, -(alarmObj.box[4] + alarmObj.box[5]) / 2] : [0, 0, -50];
   const axisAt = f => { const i = Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep))); return [axis[i][0], axis[i][1], -axis[i][2]]; };
-  // вид «откуда -> куда» в параметры орбиты
+
   const look = (e, tg) => { const dx = e[0] - tg[0], dy = e[1] - tg[1], dz = e[2] - tg[2], d = Math.hypot(dx, dy, dz);
     return { tx: tg[0], ty: tg[1], tz: tg[2], dist: d, yaw: Math.atan2(dx, dz), pitch: Math.asin(dy / d) }; };
   const VIEWS = {
@@ -1079,7 +1046,7 @@ function scene() {
       if (!e.classList.contains('obj')) e.style.opacity = Math.max(.25, Math.min(1, 60 / w)).toFixed(2);
     });
   }
-  // --- анимация вида (ответ на действие) и один вводный пролёт
+
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let anim = null;
   function goTo(target, ms = 900) {
@@ -1102,7 +1069,6 @@ function scene() {
     requestAnimationFrame(loop);
   }
 
-  // --- управление мышью и касанием
   const pts = new Map(); let last = null, pinch = null, mode = 'rot';
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); anim = null; press(null);
@@ -1128,9 +1094,6 @@ function scene() {
   setTimeout(() => goTo(VIEWS.cab(), 1800), 250);
 }
 
-/* =====================================================================
-   Навигация, тема, сборка
-   ===================================================================== */
 function nav() {
   const secs = [...document.querySelectorAll('section.slide')];
   $('#nav').innerHTML = secs.map(sc => `<li><a href="#${sc.id}">${sc.dataset.title}</a></li>`).join('');
@@ -1153,10 +1116,10 @@ function nav() {
 function theme() {
   const b = $('#theme'), modes = ['auto', 'light', 'dark'], names = { auto: 'авто', light: 'светлая', dark: 'тёмная' };
   let m = 'auto';
-  try { m = localStorage.getItem('tod-theme') || 'auto'; } catch (e) { /* хранилище недоступно */ }
+  try { m = localStorage.getItem('tod-theme') || 'auto'; } catch (e) {  }
   const apply = () => { if (m === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', m); b.textContent = 'Тема: ' + names[m]; };
   apply();
-  b.addEventListener('click', () => { m = modes[(modes.indexOf(m) + 1) % 3]; try { localStorage.setItem('tod-theme', m); } catch (e) { /* нет */ } apply(); renderCharts(); });
+  b.addEventListener('click', () => { m = modes[(modes.indexOf(m) + 1) % 3]; try { localStorage.setItem('tod-theme', m); } catch (e) {  } apply(); renderCharts(); });
 }
 function renderCharts() {
   [summary, qStrip, qApproach, qErr, qEmpty, qNd, sParse, sLat, sBudget, rBit, rFlow, rMatrix, mTable, method].forEach(fn => {

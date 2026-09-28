@@ -39,8 +39,6 @@ def main():
     if cmd not in COMMANDS:
         print(f'неизвестная команда: {cmd}\n{__doc__}', file=sys.stderr)
         return 2
-    # Скрипт запускается как файл (его каталог -- в sys.path), так же, как его запускает all:
-    # процессы multiprocessing и импорты между скриптами работают одинаково.
     return subprocess.call([sys.executable, str(HERE / f'{COMMANDS[cmd]}.py'), *sys.argv[2:]])
 
 

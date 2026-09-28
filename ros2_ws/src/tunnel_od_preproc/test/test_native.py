@@ -6,7 +6,7 @@ import pytest
 from tunnel_od_preproc import native
 
 pytest.importorskip('tunnel_od')
-from tunnel_od import parse_pointcloud2      # noqa: E402
+from tunnel_od import parse_pointcloud2
 
 pytestmark = pytest.mark.skipif(not native.available(), reason=f'нет библиотеки: {native.load_error}')
 H = 128

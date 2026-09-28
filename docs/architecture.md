@@ -103,12 +103,40 @@ jq -c 'select(.obstacle) | {frame, distance_m}' output/doubleT_obstacle_result.j
 
 ## Параметры
 
-Все параметры — в `config/detector.yaml`. Каталог `config/` монтируется в контейнер, после правки пересобирать образ не нужно.
+Все параметры — в `config/detector.yaml`. Каталог `config/` монтируется в контейнер, после правки пересобирать образ не нужно. Не заданные в файле аргументы алгоритма берутся по умолчанию из ядра.
 
-- Всё под `detector:` передаётся в `ObstacleDetector(**kwargs)` как есть: новый аргумент ядра достаточно дописать в YAML. Ключ, которого нет у ядра, узел пропускает с предупреждением.
-- `zone` — имя константы ядра (`GAUGE_METRO`) или плоский список троек `[низ, верх, полуширина, …]`.
-- `detector_json` — JSON-строка поверх `detector.*` для того, что ROS-параметром не задать (`null`, вложенные списки).
-- Параметры узла (`topic`, `refit_mode`, `qos_*`, `publish_markers`, `log_alarms`, `stats_period_s`, `result_file`, `stats_file`, …) и узла приёма (`input_format`, `input_axes`, `crop_*`, `apply_mount_tf`, …) описаны в комментариях YAML.
+**Алгоритм** (`tunnel_od_detector.detector`). Всё под `detector:` передаётся в `ObstacleDetector(**kwargs)` как есть: новый аргумент ядра достаточно дописать в YAML, ключ, которого нет у ядра, узел пропускает с предупреждением. Смысл параметров — в [algorithm.md](algorithm.md#основные-параметры-obstacledetector). `zone` — имя константы ядра (`GAUGE_METRO`) или плоский список троек `[низ, верх, полуширина, …]`.
+
+**Узел детектора** (`tunnel_od_detector`):
+
+| Параметр | По умолчанию | Смысл |
+|---|---|---|
+| `topic` | `""` | топик облака; пусто — первый `PointCloud2` с издателем |
+| `refit_mode` | `async` | `async` — путь в отдельном процессе по свежему кадру; `sync` — в том же вызове |
+| `refit_every` | 1 | для `sync`: пересчёт пути раз в N кадров |
+| `alarm_range_fits` | 3 | для `async`: объект в последних 20 % оси поднимает тревогу, только если он внутри оси по N последним пересчётам; 1 — без этого |
+| `qos_reliability`, `qos_depth` | `reliable`, 5 | QoS подписки (`ros2 bag play` публикует `RELIABLE`) |
+| `max_pending` | 2 | очередь кадров к детектору; полна — отбрасывается самый старый |
+| `parse_backend` | `auto` | без C++-узла: `auto` (нативная библиотека, иначе Python) \| `native` \| `python` |
+| `publish_markers`, `markers_every`, `marker_max_objects` | `true`, 1, 30 | маркеры RViz: публиковать, раз в N кадров, не больше стольких объектов |
+| `log_alarms` | `true` | строка `ТРЕВОГА …` в лог на каждый кадр с тревогой |
+| `stats_period_s` | 5 | период сводки в логе |
+| `result_file`, `stats_file` | `""` | JSONL с результатом каждого кадра; итог JSON при остановке (их задаёт `play.launch.py`) |
+| `detector_json` | `""` | JSON поверх `detector.*` для того, что ROS-параметром не задать (`null`, вложенные списки) |
+
+**Приём облака** (`tunnel_od_preproc`). На детекцию влияют только формат, оси, дубли и обрезка; проверка потока (`/tunnel_od/input_diagnostics`) только сообщает.
+
+| Параметр | По умолчанию | Смысл |
+|---|---|---|
+| `input_topic` | `""` | топик облака; пусто — первый `PointCloud2` с издателем |
+| `input_format` | `auto` | `auto` \| `legacy_hesai` \| `contract_v1` \| `generic` ([input_format.md](input_format.md)) |
+| `input_axes` | `auto` | `legacy` (x вбок, вперёд −y) \| `rep103`; `auto` — по формату |
+| `dedupe_dual_return` | `true` | удалять второе отражение, совпадающее с первым |
+| `crop_enabled`, `crop_fwd_min`, `crop_fwd_max` | `true`, 2, 250 м | обрезка по дальности вперёд — только то, что ядро отбрасывает само; launch проверяет это по `detector.*` и выключает обрезку, если она небезопасна |
+| `apply_mount_tf`, `base_frame` | `false`, `base_link` | поворот облака по `/tf_static`; меняет вход ядра — включать только после прогона `python -m evaluation alarms` и `approach` |
+| `speed_topic`, `speed_type` | `""`, `auto` | скорость поезда из `TwistStamped` / `Odometry` — только запись в результат |
+| `description_topic` | `/lidar/description` | описание датчика (M6 в [input_format.md](input_format.md)) |
+| `stats_period_s`, `qos_reliability`, `qos_depth` | 5, `reliable`, 5 | сводка и QoS |
 
 Свой bag подаётся каталогом: `BAG=/data/my_bag docker compose up play`. Облако должно быть в системе координат лидара, как в записях (`x` — вбок, вперёд — `−y`, `z` — вверх), либо в REP-103 по контракту ([input_format.md](input_format.md)).
 

@@ -1,5 +1,4 @@
-/* C-интерфейс разбора и проверки потока для Python (ctypes): tunnel_od_preproc/native.py.
- * Тот же исходник, что в узле preproc_node. ctypes отпускает GIL на время вызова. */
+
 #ifndef TUNNEL_OD_PREPROC__C_API_H_
 #define TUNNEL_OD_PREPROC__C_API_H_
 
@@ -24,11 +23,10 @@ typedef struct tod_cloud
 {
   uint32_t height, width, point_step, row_step;
   int32_t is_bigendian, is_dense;
-  int64_t stamp_ns;              /* header.stamp */
+  int64_t stamp_ns;
   const char * frame_id;
 } tod_cloud;
 
-/* format: 0 auto, 1 legacy_hesai, 2 contract_v1, 3 generic; axes: 0 auto, 1 legacy, 2 rep103 */
 typedef struct tod_options
 {
   int32_t format, axes, dedupe, crop_enabled, collect_stats;
@@ -37,9 +35,6 @@ typedef struct tod_options
 
 int32_t tod_api_version(void);
 
-/* Разбор кадра. Возвращает число точек (>= 0) или -1 (текст ошибки в err).
- * monitor (может быть NULL) -- тот же кадр уходит в проверку потока.
- * stats_json (может быть NULL) -- статистика кадра в JSON. */
 int64_t tod_parse(
   const uint8_t * data, size_t data_size, const tod_cloud * cloud,
   const tod_field * fields, size_t n_fields, const tod_options * opt,
@@ -52,7 +47,7 @@ void tod_monitor_tf(void * monitor, const char * parent, const char * child, con
   const double * rpy_deg);
 void tod_monitor_speed(void * monitor, double stamp_s, double speed_mps);
 void tod_monitor_description(void * monitor, const char * text);
-/* Сводка JSON / новые предупреждения (через '\n'). Возвращают нужную длину буфера с '\0'. */
+
 size_t tod_monitor_summary(void * monitor, char * buf, size_t len);
 size_t tod_monitor_new_warnings(void * monitor, char * buf, size_t len);
 
@@ -60,4 +55,4 @@ size_t tod_monitor_new_warnings(void * monitor, char * buf, size_t len);
 }
 #endif
 
-#endif  /* TUNNEL_OD_PREPROC__C_API_H_ */
+#endif

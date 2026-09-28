@@ -486,10 +486,10 @@ function nav() {
 function theme() {
   const b = $('#theme'), modes = ['auto', 'light', 'dark'], names = { auto: 'авто', light: 'светлая', dark: 'тёмная' };
   let m = 'auto';
-  try { m = localStorage.getItem('tod-theme') || 'auto'; } catch (e) { /* хранилище недоступно */ }
+  try { m = localStorage.getItem('tod-theme') || 'auto'; } catch (e) {  }
   const apply = () => { if (m === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', m); b.textContent = 'Тема: ' + names[m]; };
   apply();
-  b.addEventListener('click', () => { m = modes[(modes.indexOf(m) + 1) % 3]; try { localStorage.setItem('tod-theme', m); } catch (e) { /* нет */ } apply(); });
+  b.addEventListener('click', () => { m = modes[(modes.indexOf(m) + 1) % 3]; try { localStorage.setItem('tod-theme', m); } catch (e) {  } apply(); });
 }
 
 nav(); theme(); figs(); approach(); falseAlarms(); clips();

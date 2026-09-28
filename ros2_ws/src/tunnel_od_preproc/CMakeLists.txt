@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(tunnel_od_preproc)
 
-# Приём облака на C++: разбор в каноническое облако ядра + проверка входного потока.
-# Без PCL. Флаги: -O3 и -march=x86-64-v2 (не native: образ собирают на другой машине).
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -26,7 +24,6 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
 
-# разбор и проверка потока без ROS 2: узел, gtest и Python (ctypes, tunnel_od_preproc/native.py)
 add_library(tunnel_od_canonical SHARED src/canonical.cpp src/monitor.cpp src/c_api.cpp)
 target_include_directories(tunnel_od_canonical PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -55,7 +52,6 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_canonical test/test_canonical.cpp test/test_monitor.cpp)
   target_link_libraries(test_canonical tunnel_od_canonical)
-  # копия теста в install -- чтобы docker compose run test запускал его в готовом образе
   install(TARGETS test_canonical DESTINATION lib/${PROJECT_NAME})
 endif()
 

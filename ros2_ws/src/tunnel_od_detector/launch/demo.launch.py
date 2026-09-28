@@ -25,7 +25,7 @@ def generate_launch_description():
         DeclareLaunchArgument('port', default_value='6080', description='порт noVNC'),
         DeclareLaunchArgument('size', default_value='1600x900x24', description='размер экрана'),
         SetEnvironmentVariable('DISPLAY', DISPLAY),
-        SetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE', '1'),     # OpenGL без видеокарты (llvmpipe)
+        SetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE', '1'),
         ExecuteProcess(cmd=['Xvfb', DISPLAY, '-screen', '0', LaunchConfiguration('size'), '-nolisten', 'tcp'],
                        output='log', name='xvfb'),
         TimerAction(period=1.0, actions=[
