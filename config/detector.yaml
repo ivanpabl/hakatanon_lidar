@@ -61,6 +61,7 @@ tunnel_od_detector:
       sensor_axis_max_dev: 0.25
       # Правила против ложных СТОП (эксперимент exp/fp-range, разбор _exp_handoff/materials/fp_autopsy). По умолчанию ВЫКЛ:
       # persist_min_top_m: 0.5       # R1: persist не подтверждает объект с верхом < 0,5 м (0 -- выкл)
+      # persist_min_top_lat_m: 0.55  # R1: только для объектов с |lateral_m| >= 0,55 м (у головки рельса); null -- для всех
       # front_lift_caution_m: 0.1    # R2: front_maxh >= low_m + 0,1 и low_m < front_lift_max_low_m -> caution/front_lift (null -- выкл)
       # front_lift_max_low_m: 2.0    # R2: ограничение по низу объекта
       # stop_confirm_far_m: 30.0     # R3: СТОП на d >= 30 м только если был СТОП и в прошлом кадре, иначе caution/far_unconfirmed (null -- выкл)

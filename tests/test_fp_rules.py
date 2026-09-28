@@ -14,12 +14,12 @@ from tunnel_od.sim.lidar_sim import simulate_frame
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
-def _persist_run(top_m, n=8, **kw):
+def _persist_run(top_m, n=8, lateral_m=0.0, **kw):
     """Слабый (1 точка при ожидаемых 5) неподвижный объект: подтверждение возможно только по persist."""
     tr = EvidenceTracker(threshold=2.2, decay=0.8, ego_check=True, persist_hits=6, **kw)
     travel, ob = 0.0, None
     for k in range(n):
-        ob = {'distance_m': 40.0 - 1.2 * k, 'lateral_m': 0.0, 'n_points': 1, 'low_m': 0.1, 'height_m': top_m}
+        ob = {'distance_m': 40.0 - 1.2 * k, 'lateral_m': lateral_m, 'n_points': 1, 'low_m': 0.1, 'height_m': top_m}
         tr.update([ob], displacement=1.2, expected=lambda d: 5.0, travel=travel)
         travel += 1.2
     return ob
@@ -32,6 +32,15 @@ def test_r1_persist_min_top_rejects_low_object_and_off_by_default():
     assert not ob['persistent'] and not ob['confirmed']
     ob = _persist_run(2.9, persist_min_top=0.5)
     assert ob['persistent'] and ob['confirmed']
+
+
+def test_r1_lat_gate_keeps_low_object_on_axis_and_rejects_at_rail_head():
+    ob = _persist_run(0.2, persist_min_top=0.5, persist_min_top_lat=0.55)
+    assert ob['persistent'] and ob['confirmed']  # на оси (lateral 0) низкий объект подтверждается
+    ob = _persist_run(0.2, persist_min_top=0.5, persist_min_top_lat=0.55, lateral_m=0.72)
+    assert not ob['persistent'] and not ob['confirmed']  # у головки рельса -- нет
+    ob = _persist_run(0.2, persist_min_top=0.5, persist_min_top_lat=None, lateral_m=0.0)
+    assert not ob['persistent']  # без гейта по lat правило действует для всех
 
 
 def _o(d, **kw):

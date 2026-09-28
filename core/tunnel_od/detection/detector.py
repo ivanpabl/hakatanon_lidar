@@ -51,10 +51,12 @@ class ObstacleDetector:
                  sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25,
                  far_acc_from=None, far_acc_floor=1.5, far_acc_min_hits=4, range_hold=0,
                  persist_min_top_m=0.0, front_lift_caution_m=None, front_lift_max_low_m=2.0,
-                 stop_confirm_far_m=None):
+                 stop_confirm_far_m=None, persist_min_top_lat_m=None):
         """Правила против ложных СТОП (fp_autopsy R1-R3), по умолчанию ВЫКЛЮЧЕНЫ:
         persist_min_top_m    R1: подтверждение по устойчивому треку (persist) только при верхе объекта
                              (height_m) >= этого; 0 -- выкл. Рекомендуется 0.5.
+        persist_min_top_lat_m R1: правило по верху действует только при |lateral_m| >= этого (точки у головки
+                             рельса); None -- для всех объектов. Рекомендуется 0.55 (куб 0,2 м на оси не теряется).
         front_lift_caution_m R2: front_maxh >= low_m + это и low_m < front_lift_max_low_m -> caution
                              (reason front_lift) вместо stop; None -- выкл. Рекомендуется 0.1.
         stop_confirm_far_m   R3: СТОП на d >= этого только если трек был СТОП и в прошлом кадре,
@@ -130,7 +132,8 @@ class ObstacleDetector:
                                             persist_hits=persist_hits, persist_slope=tuple(persist_slope),
                                             persist_max_lat=(None if persist_edge_margin is None
                                                              else max(hw for _, _, hw in self.zone) - persist_edge_margin),
-                                            persist_min_top=persist_min_top_m)
+                                            persist_min_top=persist_min_top_m,
+                                            persist_min_top_lat=persist_min_top_lat_m)
             ego_motion = True
         else:
             self._tracker = Tracker(confirm_hits, confirm_window)
