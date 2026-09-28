@@ -3,10 +3,10 @@
 Сохраняет результат по каждому кадру, чтобы после изменений детектора сравнить
 версии на тех же кадрах (какие тревоги появились / исчезли).
 
-    python tools/alarms.py --tag v2                       # все записи -> runs/alarms_v2.csv
-    python tools/alarms.py --tag v2g --corridor gauge     # габарит вместо прямоугольника +-1м
-    python tools/alarms.py --tag v2n --minpts off         # без порога числа точек
-    python tools/alarms.py --tag test --bags roundT_doubleT
+    python -m evaluation alarms --tag v2                       # все записи -> runs/alarms_v2.csv
+    python -m evaluation alarms --tag v2g --corridor gauge     # габарит вместо прямоугольника +-1м
+    python -m evaluation alarms --tag v2n --minpts off         # без порога числа точек
+    python -m evaluation alarms --tag test --bags roundT_doubleT
 
 Эпизод тревоги -- подряд идущие кадры с тревогой (разрывы до GAP кадров склеиваются).
 Какие из тревог ложные, скрипт не знает: заведомо чистых записей нет

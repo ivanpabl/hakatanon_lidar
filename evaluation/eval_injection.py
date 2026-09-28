@@ -6,11 +6,11 @@
 на тех же кадрах без вставки -- базовая линия: если он и сам видит что-то в том
 же месте, испытание помечается как неоднозначное и в долю найденных не входит.
 
-    python tools/eval_injection.py                    # все записи, полная сетка (~20-30 мин на 2 процессах)
-    python tools/eval_injection.py --quick            # 1 окно на запись, меньше дальностей
-    python tools/eval_injection.py --bags roundT_doubleT doubleT_platform
-    python tools/eval_injection.py --corridor gauge   # габарит вместо прямоугольника +-1м
-    python tools/eval_injection.py --minpts off       # без порога числа точек
+    python -m evaluation injection                    # все записи, полная сетка (~20-30 мин на 2 процессах)
+    python -m evaluation injection --quick            # 1 окно на запись, меньше дальностей
+    python -m evaluation injection --bags roundT_doubleT doubleT_platform
+    python -m evaluation injection --corridor gauge   # габарит вместо прямоугольника +-1м
+    python -m evaluation injection --minpts off       # без порога числа точек
 
 Пишет runs/eval_injection_<вариант>.csv (строка = испытание) и .png,
 печатает таблицы: доля найденных по фигуре и дальности, число точек на объекте,

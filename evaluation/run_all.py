@@ -1,20 +1,20 @@
 """Полный прогон на датасете одной командой: тесты, метрики, дашборд и демонстрация.
 Работает на Windows, Linux и macOS без ROS 2 и Docker (на Windows запускается из run_all.bat).
 
-    python tools/run_all.py                         # всё: ~30-60 мин, результат в results/
-    python tools/run_all.py --quick                 # проверка окружения: пара минут, runs/quick
-    python tools/run_all.py --data D:/lidar/data    # данные не в ./data
-    python tools/run_all.py --skip-full             # без прогона всей new_data (самый долгий шаг)
+    python -m evaluation all                         # всё: ~20-60 мин, результат в output/report
+    python -m evaluation all --quick                 # проверка окружения: пара минут, output/report_quick
+    python -m evaluation all --data D:/lidar/data    # данные не в ./data
+    python -m evaluation all --skip-full             # без прогона всей new_data (самый долгий шаг)
 
 Результат:
-    results/metrics.html   дашборд метрик (tools/dashboard.py)
-    results/demo.html      плеер: детектор по кадрам записей в 3D (tools/demo.py)
-    results/site/          сайт: главная + метрики + плеер (tools/site.py)
-    runs/                  csv/json каждого шага, runs/logs/<шаг>.log -- их вывод
+    output/report/index.html     сайт: главная с разделами (site)
+    output/report/metrics.html   дашборд метрик (dashboard)
+    output/report/demo.html      плеер: детектор по кадрам записей в 3D (demo)
+    output/runs/                 csv/json каждого шага, output/runs/logs/<шаг>.log -- их вывод
 
 Шаги метрик идут параллельно, число процессов подбирается по числу ядер (--jobs). Каждый процесс
 считает numpy в один поток. Прогоны качества -- текущая версия детектора (config по умолчанию);
-исходная версия для сравнения, e2e в Docker и замер C++-разбора без компилятора берутся из reference/.
+исходная версия для сравнения, e2e в Docker и замер C++-разбора без компилятора -- из evaluation/baseline.json.
 """
 import argparse
 import os
@@ -102,18 +102,19 @@ def run_parallel(steps, env):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--data', help='каталог данных (по умолчанию ./data или TUNNEL_OD_DATA)')
-    ap.add_argument('--out', type=Path, default=ROOT / 'results', help='куда положить metrics.html и demo.html')
-    ap.add_argument('--runs', type=Path, help='каталог результатов шагов (по умолчанию runs/, для --quick runs/quick)')
-    ap.add_argument('--jobs', type=int, default=max(2, (os.cpu_count() or 4) - 2),
-                    help='сколько процессов детектора одновременно (по умолчанию ядер - 2)')
-    ap.add_argument('--quick', action='store_true', help='короткий прогон для проверки окружения (runs/quick)')
+    ap.add_argument('--out', type=Path, help='куда положить отчёт (по умолчанию output/report, для --quick output/report_quick)')
+    ap.add_argument('--runs', type=Path, help='каталог результатов шагов (по умолчанию output/runs, для --quick output/runs/quick)')
+    ap.add_argument('--jobs', type=int, default=2,
+                    help='сколько процессов детектора одновременно (по умолчанию 2; каждый -- одно ядро, до 1,3 ГБ памяти)')
+    ap.add_argument('--quick', action='store_true', help='короткий прогон для проверки окружения')
     ap.add_argument('--skip-full', action='store_true', help='не прогонять всю new_data (~11 тыс. кадров)')
     ap.add_argument('--skip-new-data', action='store_true', help='без new_data совсем (84 ГБ): только 6 записей')
     ap.add_argument('--skip-tests', action='store_true')
     args = ap.parse_args()
 
     data = data_dir(args)
-    runs = (args.runs or ROOT / 'runs' / ('quick' if args.quick else '')).resolve()
+    runs = (args.runs or ROOT / 'output' / 'runs' / ('quick' if args.quick else '')).resolve()
+    args.out = args.out or ROOT / 'output' / ('report_quick' if args.quick else 'report')
     logs = runs / 'logs'
     logs.mkdir(parents=True, exist_ok=True)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -131,7 +132,7 @@ def main():
               f'и data/new_data/metadata.yaml (или --data <каталог>; без new_data -- --skip-new-data).', file=sys.stderr)
         sys.exit(2)
     compiler = has_compiler()
-    print(f'компилятор C++ для библиотеки разбора: {"есть" if compiler else "нет -- проверка входа и замер разбора C++ из reference/"}')
+    print(f'компилятор C++ для библиотеки разбора: {"есть" if compiler else "нет -- проверка входа и замер разбора C++ из baseline.json"}')
 
     failed = []
     if not args.skip_tests:
@@ -145,28 +146,28 @@ def main():
     only_six = ['--bags', *six] if args.quick or args.skip_new_data else []   # иначе все 7 записей
     j = args.jobs
     if args.quick:
-        steps = [Step('alarms', ['tools/alarms.py', '--tag', TAG, '--bags', *six, '--workers', '2'], logs),
-                 Step('approach', ['tools/eval_approach.py', '--tag', TAG, '--bags', QUICK_APPROACH, '--workers', '1'], logs)]
+        steps = [Step('alarms', ['evaluation/alarms.py', '--tag', TAG, '--bags', *six, '--workers', '2'], logs),
+                 Step('approach', ['evaluation/eval_approach.py', '--tag', TAG, '--bags', QUICK_APPROACH, '--workers', '1'], logs)]
     else:
         # тяжёлые по времени -- вся new_data (1 процесс) и дальность при подъезде; остальное делит ядра
         w_alarms, w_approach = max(1, min(6, (j - 2) // 2)), max(1, j - 2 - max(1, min(6, (j - 2) // 2)))
-        steps = [Step('alarms', ['tools/alarms.py', '--tag', TAG, '--bags', *six, '--workers', str(w_alarms)], logs),
-                 Step('approach', ['tools/eval_approach.py', '--tag', TAG, '--workers', str(w_approach)], logs)]
+        steps = [Step('alarms', ['evaluation/alarms.py', '--tag', TAG, '--bags', *six, '--workers', str(w_alarms)], logs),
+                 Step('approach', ['evaluation/eval_approach.py', '--tag', TAG, '--workers', str(w_approach)], logs)]
         if not args.skip_new_data:
-            steps.append(Step('alarms_nd', ['tools/alarms.py', '--tag', f'nd_{TAG}', '--bags', 'new_data', '--segments',
+            steps.append(Step('alarms_nd', ['evaluation/alarms.py', '--tag', f'nd_{TAG}', '--bags', 'new_data', '--segments',
                                             '8', '--seglen', '400', '--workers', '1'], logs))
         if not args.skip_full and not args.skip_new_data:
-            steps.append(Step('alarms_nd_full', ['tools/alarms.py', '--tag', 'final_nd_full', '--bags', 'new_data',
+            steps.append(Step('alarms_nd_full', ['evaluation/alarms.py', '--tag', 'final_nd_full', '--bags', 'new_data',
                                                  '--workers', '1'], logs))
     if compiler:
-        steps.append(Step('input_report', ['tools/input_report.py', *only_six], logs))
+        steps.append(Step('input_report', ['evaluation/input_report.py', *only_six], logs))
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
 
     if compiler:
         # замер разбора -- отдельно, когда машина свободна
         print('\n[3/4] разбор C++ против Python: побитное совпадение и время')
-        s = Step('check_preproc', ['tools/check_preproc.py', *only_six], logs)
+        s = Step('check_preproc', ['evaluation/check_preproc.py', *only_six], logs)
         if not run_parallel([s], env):
             failed.append(s.name)
     else:
@@ -174,14 +175,14 @@ def main():
 
     print('\n[4/4] дашборд и демонстрация')
     metrics, demo = args.out / 'metrics.html', args.out / 'demo.html'
-    steps = [Step('dashboard', ['tools/dashboard.py', '--out', str(metrics)], logs),
-             Step('demo', ['tools/demo.py', '--out', str(demo), '--workers', '2',
+    steps = [Step('dashboard', ['evaluation/dashboard.py', '--out', str(metrics)], logs),
+             Step('demo', ['evaluation/demo.py', '--out', str(demo), '--workers', '2',
                            *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30'] if args.quick else [])],
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
     if metrics.exists() and demo.exists():
-        s = Step('site', ['tools/site.py', '--metrics', str(metrics), '--demo', str(demo), '--out', str(args.out / 'site')], logs)
+        s = Step('site', ['evaluation/site.py', '--out', str(args.out)], logs)
         if not run_parallel([s], env):
             failed.append(s.name)
 
@@ -189,7 +190,7 @@ def main():
     for p in (metrics, demo):
         if p.exists():
             print(f'  {p}  {p.stat().st_size / 1e6:.1f} МБ')
-    ref = [line for line in (logs / 'dashboard.log').read_text(encoding='utf-8').splitlines() if 'reference' in line] \
+    ref = [line for line in (logs / 'dashboard.log').read_text(encoding='utf-8').splitlines() if 'baseline' in line] \
         if (logs / 'dashboard.log').exists() else []
     for line in ref:
         print(' ', line.strip())

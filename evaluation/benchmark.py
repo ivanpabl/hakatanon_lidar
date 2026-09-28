@@ -1,8 +1,8 @@
 """Время обработки кадра по реальным записям: разбор облака, пересчёт пути, проверка кадра.
 Без ROS 2 -- чисто алгоритмический замер (критерий ТЗ 8.3: скорость).
 
-    python tools/benchmark.py                       # 6 записей из data/Датасет, по 15 кадров
-    python tools/benchmark.py --bags new_data --frames 50
+    python -m evaluation benchmark                       # 6 записей из data/Датасет, по 15 кадров
+    python -m evaluation benchmark --bags new_data --frames 50
 """
 import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):

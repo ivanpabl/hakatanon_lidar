@@ -1,8 +1,8 @@
 """Вставка синтетического объекта в несколько кадров записи подряд: как его видит детектор,
 плюс картинки кадра до и после вставки (runs/inject_*.png).
 
-    python tools/inject_demo.py --bag roundT_doubleT --start 100 --shape box --dims 0.5,0.5,1.45 --fwd 56
-    python tools/inject_demo.py --bag roundT_doubleT --shape cylinder --dims 0.25,1.7 --fwd 120
+    python -m evaluation inject-demo --bag roundT_doubleT --start 100 --shape box --dims 0.5,0.5,1.45 --fwd 56
+    python -m evaluation inject-demo --bag roundT_doubleT --shape cylinder --dims 0.25,1.7 --fwd 120
 """
 import argparse
 import warnings

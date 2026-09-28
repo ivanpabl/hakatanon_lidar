@@ -4,9 +4,9 @@
 разбирается, а /tf_static, описание датчика и скорость поезда, если они есть в записи,
 подаются в проверку как в узле.
 
-    python tools/input_report.py                              # все 7 записей
-    python tools/input_report.py --bags doubleT_platform contract_v1/doubleT_platform
-    python tools/input_report.py --max-frames 2000 --out runs/input_report.json
+    python -m evaluation input                              # все 7 записей
+    python -m evaluation input --bags doubleT_platform contract_v1/doubleT_platform
+    python -m evaluation input --max-frames 2000 --out runs/input_report.json
 """
 import argparse
 import json

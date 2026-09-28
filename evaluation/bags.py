@@ -2,7 +2,7 @@
 
 Данные -- в data/ (не в git): data/Датасет/archive/for_hackathon/<запись> и data/new_data.
 Другой каталог данных (например, на отдельном диске под Windows) -- переменная TUNNEL_OD_DATA.
-Результаты инструментов -- в runs/ (не в git), другой каталог -- TUNNEL_OD_RUNS.
+Результаты инструментов -- в output/runs (не в git), другой каталог -- TUNNEL_OD_RUNS.
 """
 import os
 from contextlib import contextmanager
@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('TUNNEL_OD_DATA') or ROOT / 'data')
 DATASET = DATA / 'Датасет' / 'archive' / 'for_hackathon'
-RUNS = Path(os.environ.get('TUNNEL_OD_RUNS') or ROOT / 'runs')
+RUNS = Path(os.environ.get('TUNNEL_OD_RUNS') or ROOT / 'output' / 'runs')
 BAGS = ['doubleT_obstacle', 'doubleT_platform', 'roundT_doubleT', 'roundT_pressureGate_roundT',
         'roundT_squareT_pressureGate_squareT', 'squareT_platform_squareT_switch', 'new_data']
 

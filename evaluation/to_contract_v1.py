@@ -10,8 +10,8 @@
 parse_pointcloud2 из исходного кадра: пустые лучи и дубли второго отражения
 (правило parse_pointcloud2: < 1 см по x, y, z в float32) -> NaN; x_rep = -y, y_rep = x.
 
-    python tools/to_contract_v1.py --bag doubleT_platform --out data/contract_v1_doubleT_platform
-    python tools/to_contract_v1.py --bag doubleT_obstacle --frames 60 --speed --out ...
+    python -m evaluation contract --bag doubleT_platform --out data/contract_v1_doubleT_platform
+    python -m evaluation contract --bag doubleT_obstacle --frames 60 --speed --out ...
 
 В записи: /lidar/points (облако), /tf_static (base_link -> lidar), /lidar/description
 (M6, латченый JSON), с --speed -- /train/twist (S1). Скорость в --speed СИНТЕТИЧЕСКАЯ:
@@ -108,7 +108,7 @@ def main():
     from bags import open_cloud_bag
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--bag', required=True, help='запись-источник (имя, см. tools/bags.py)')
+    ap.add_argument('--bag', required=True, help='запись-источник (имя, см. evaluation/bags.py)')
     ap.add_argument('--out', required=True, help='каталог новой записи (не должен существовать)')
     ap.add_argument('--start', type=int, default=0, help='с какого кадра')
     ap.add_argument('--frames', type=int, default=0, help='сколько кадров (0 -- до конца)')

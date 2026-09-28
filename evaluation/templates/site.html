@@ -374,25 +374,25 @@ ul.plain li b { font-weight: 600; }
       <div class="grid g2">
         <div class="panel">
           <h3>Docker + ROS 2 Humble</h3>
-          <span class="cmd"><span class="c"># собрать образ</span>
-./run.sh build</span>
-          <span class="cmd"><span class="c"># узел + ros2 bag play в одном контейнере</span>
-./run.sh play /путь/к/записи</span>
-          <span class="cmd"><span class="c"># только узел: для своего плеера или лидара</span>
-./run.sh detector topic:=/lidar_points</span>
-          <span class="cmd"><span class="c"># RViz на машине с графикой</span>
-rviz2 -d ros2_ws/src/tunnel_od_detector/rviz/tunnel_od.rviz</span>
-          <p class="note">Результат каждого кадра — в <code>/tunnel_od/result</code> и <code>runs/docker/&lt;запись&gt;_result.jsonl</code>, итог и задержка — в <code>_stats.json</code>.</p>
+          <span class="cmd"><span class="c"># собрать образы</span>
+docker compose build</span>
+          <span class="cmd"><span class="c"># узел + ros2 bag play, итог в output/</span>
+BAG=/путь/к/записи docker compose up play</span>
+          <span class="cmd"><span class="c"># то же по кругу + RViz в браузере: http://localhost:6080</span>
+BAG=/путь/к/записи docker compose up demo</span>
+          <span class="cmd"><span class="c"># только узел: для живого лидара или своего плеера</span>
+docker compose up detector</span>
+          <p class="note">Результат каждого кадра — в <code>/tunnel_od/result</code> и <code>output/&lt;запись&gt;_result.jsonl</code>, итог и задержка — в <code>_stats.json</code>.</p>
         </div>
         <div class="panel">
-          <h3>Метрики и этот сайт без ROS</h3>
-          <span class="cmd"><span class="c"># всё: тесты, метрики, дашборд, плеер (Windows: run_all.bat)</span>
-python tools/run_all.py --jobs 2</span>
+          <h3>Метрики и этот отчёт без ROS</h3>
+          <span class="cmd"><span class="c"># всё: метрики, дашборд, плеер, эта страница</span>
+python -m evaluation all</span>
           <span class="cmd"><span class="c"># проверка окружения за пару минут</span>
-python tools/run_all.py --quick</span>
-          <span class="cmd"><span class="c"># собрать сайт из results/ в site/</span>
-python tools/site.py</span>
-          <p class="note">Нужны Python 3.10+, <code>pip install -e ./core[tools]</code> и записи в <code>data/</code>. Видеокарта не нужна.</p>
+python -m evaluation all --quick</span>
+          <span class="cmd"><span class="c"># список команд</span>
+python -m evaluation --help</span>
+          <p class="note">Нужны Python 3.10+, <code>pip install -e "core[eval]"</code> и записи в <code>data/</code>. Видеокарта не нужна.</p>
         </div>
       </div>
     </section>
@@ -465,11 +465,11 @@ function clips() {
     return `<div class="panel clip"><h3>${esc(c.bag)}</h3><p class="d">${esc(about[c.bag] || '')}</p>
       <div class="bar" title="красное — кадры с тревогой">${bar.map(b => `<i class="${b ? 'a' : ''}"></i>`).join('')}</div>
       <div class="meta"><span>${n} кадров с ${c.start}-го, ${nf(c.seconds, 0)} с</span><span>тревога: ${k}${c.dist != null ? `, ~${nf(c.dist)} м` : ''}</span></div></div>`;
-  }).join('') : '<p class="note">Плеер не собран: <code>python tools/demo.py --out results/demo.html</code>.</p>';
+  }).join('') : '<p class="note">Плеер не собран: <code>python -m evaluation demo</code>.</p>';
   const v = DATA && DATA.video;
   $('#video').innerHTML = v
     ? `<div class="video"><video controls preload="metadata" src="${esc(v)}"></video></div>`
-    : '<div class="todo">Видео живого прогона в RViz (<code>./run.sh play</code> + <code>rviz2</code>) будет добавлено сюда.</div>';
+    : '<div class="todo">Видео прогона в RViz: <code>python -m evaluation site --video файл.mp4</code>.</div>';
 }
 
 function nav() {

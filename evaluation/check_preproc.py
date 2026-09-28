@@ -5,14 +5,14 @@
   cpp      -- тот же кадр через библиотеку tunnel_od_preproc (разбор + обрезка по
               дальности, как в узле), облако упаковано как /tunnel_od/cloud (x, y, z
               подряд) и взято представлениями без копии, как в узле -> detect;
-  contract -- кадр переведён в контракт v1 (tools/to_contract_v1.py) -> tunnel_od_preproc
+  contract -- кадр переведён в контракт v1 (evaluation/to_contract_v1.py) -> tunnel_od_preproc
               -> detect.
 Сравниваются: облако до обрезки (побитно, python vs cpp vs contract) и результат detect
 целиком (JSON). Путь пересчитывается в каждом кадре (как refit_mode: sync), поэтому
 результат детерминирован.
 
-    python tools/check_preproc.py                          # 7 записей по 30 кадров
-    python tools/check_preproc.py --bags doubleT_obstacle --frames 0      # все кадры
+    python -m evaluation preproc                          # 7 записей по 30 кадров
+    python -m evaluation preproc --bags doubleT_obstacle --frames 0      # все кадры
 """
 import argparse
 import json

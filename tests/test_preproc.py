@@ -15,7 +15,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'ros2_ws' / 'src' / 'tunnel_od_preproc'))
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'evaluation'))
 
 from tunnel_od import ObstacleDetector, parse_pointcloud2          # noqa: E402
 from tunnel_od.pointcloud import COLUMN_HEIGHT                    # noqa: E402
@@ -244,7 +244,7 @@ def test_diagnostics_finds_gaps(bag):
 def test_diagnostics_contract_recording_is_clean():
     from bags import DATA
     if not (DATA / 'contract_v1' / 'doubleT_platform').is_dir():
-        pytest.skip('нет записи контракта v1: tools/to_contract_v1.py --bag doubleT_platform '
+        pytest.skip('нет записи контракта v1: python -m evaluation contract --bag doubleT_platform '
                     '--out data/contract_v1/doubleT_platform --speed')
     s = _stream_summary('contract_v1/doubleT_platform')
     assert s['violations'] == [], s

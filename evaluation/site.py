@@ -1,13 +1,11 @@
 """Сайт проекта: главная страница с разделами + дашборд метрик + 3D-плеер, статические файлы без сервера.
 
-    python tools/site.py                                  # -> site/index.html, metrics.html, demo.html
-    python tools/site.py --metrics gui/dashboard.html     # метрики из другой сборки дашборда
-    python tools/site.py --video media/rviz.mp4           # видео прогона в разделе «Демонстрация»
+    python -m evaluation site                          # -> output/report/index.html рядом с metrics.html и demo.html
+    python -m evaluation site --video output/demo.mp4  # видео прогона в разделе «Демонстрация»
 
-Цифры на главной берутся из данных, встроенных в страницу метрик (tools/dashboard.py), а отрывки --
-из 3D-плеера (tools/demo.py): главная всегда согласована с тем, что лежит рядом. По умолчанию метрики --
-results/metrics.html, если это полный прогон (есть вся new_data), иначе gui/dashboard.html из git.
-Папка site/ открывается двойным щелчком по index.html или выкладывается как есть (GitHub Pages, Netlify).
+Цифры на главной берутся из данных, встроенных в страницу метрик (dashboard), а отрывки -- из 3D-плеера
+(demo): главная всегда согласована с тем, что лежит рядом. Метрики и плеер из другого места копируются
+в папку сайта. Папка открывается двойным щелчком по index.html или выкладывается как есть (GitHub Pages).
 """
 import argparse
 import json
@@ -20,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bags import ROOT                     # noqa: E402
 from dashboard import git_rev             # noqa: E402
 
-TEMPLATE = ROOT / 'gui' / 'site_template.html'
-RESULTS = ROOT / 'results'
+TEMPLATE = Path(__file__).resolve().parent / 'templates' / 'site.html'
+RESULTS = ROOT / 'output' / 'report'
 MARK = 'const DATA = '
 
 
@@ -36,22 +34,6 @@ def is_full(metrics):
     return bool(metrics.get('quality', {}).get('nd_full'))
 
 
-def pick_metrics(arg):
-    if arg:
-        return Path(arg)
-    fresh = RESULTS / 'metrics.html'
-    if fresh.exists() and is_full(page_data(fresh)):
-        return fresh
-    return ROOT / 'gui' / 'dashboard.html'
-
-
-def pick_demo(arg):
-    if arg:
-        return Path(arg)
-    for p in (RESULTS / 'demo.html', ROOT / 'gui' / 'demo.html'):
-        if p.exists():
-            return p
-    return None
 
 
 def quality_summary(q):
@@ -79,13 +61,17 @@ def clip_summary(demo):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--metrics', help='страница метрик (tools/dashboard.py)')
-    ap.add_argument('--demo', help='3D-плеер (tools/demo.py)')
+    ap.add_argument('--metrics', help='страница метрик (evaluation/dashboard.py)')
+    ap.add_argument('--demo', help='3D-плеер (evaluation/demo.py)')
     ap.add_argument('--video', help='видео прогона для раздела «Демонстрация» (mp4/webm)')
-    ap.add_argument('--out', type=Path, default=ROOT / 'site')
+    ap.add_argument('--out', type=Path, default=RESULTS)
     args = ap.parse_args()
 
-    metrics_path, demo_path = pick_metrics(args.metrics), pick_demo(args.demo)
+    metrics_path = Path(args.metrics) if args.metrics else args.out / 'metrics.html'
+    demo_path = Path(args.demo) if args.demo else args.out / 'demo.html'
+    if not metrics_path.exists():
+        raise SystemExit(f'нет {metrics_path}: сначала python -m evaluation dashboard (или all)')
+    demo_path = demo_path if demo_path.exists() else None
     metrics = page_data(metrics_path)
     if not is_full(metrics):
         print(f'внимание: {metrics_path} -- не полный прогон (нет всей new_data), часть цифр будет пустой')
@@ -100,12 +86,13 @@ def main():
                     if k in ('e2e_ms_p50', 'e2e_ms_p95', 'latency_ms_p50', 'latency_ms_p95', 'processed', 'received')},
             'clips': [], 'video': None}
 
-    shutil.copyfile(metrics_path, args.out / 'metrics.html')
+    for src, name in ((metrics_path, 'metrics.html'), (demo_path, 'demo.html')):
+        if src and src.resolve() != (args.out / name).resolve():
+            shutil.copyfile(src, args.out / name)
     if demo_path:
-        shutil.copyfile(demo_path, args.out / 'demo.html')
         data['clips'] = clip_summary(page_data(demo_path))
     else:
-        print('3D-плеера нет: python tools/demo.py --out results/demo.html')
+        print('3D-плеера нет: python -m evaluation demo')
     if args.video:
         v = Path(args.video)
         (args.out / 'media').mkdir(exist_ok=True)

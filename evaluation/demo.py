@@ -1,11 +1,11 @@
 """Демонстрация: HTML-плеер (один файл, без сети) -- детектор по кадрам реальных записей в 3D.
 
-    python tools/demo.py                                        # -> gui/demo.html
-    python tools/demo.py --clip doubleT_obstacle --clip roundT_doubleT:0:150
-    python tools/demo.py --bg-points 10000 --out /tmp/demo.html   # файл меньше
+    python -m evaluation demo                                        # -> output/report/demo.html
+    python -m evaluation demo --clip doubleT_obstacle --clip roundT_doubleT:0:150
+    python -m evaluation demo --bg-points 10000 --out /tmp/demo.html   # файл меньше
 
 Отрывок -- запись[:первый кадр[:число кадров]]. Детектор идёт с первого кадра отрывка и пересчитывает
-путь в каждом кадре, как офлайн-инструменты (tools/alarms.py). В плеере на каждом кадре: облако,
+путь в каждом кадре, как офлайн-инструменты (evaluation/alarms.py). В плеере на каждом кадре: облако,
 ось пути, коридор, объекты, решение и дистанция, время разбора и проверки кадра на этой машине.
 Точки зоны и объектов сохраняются все, фона -- не больше --bg-points на кадр (размер файла).
 """
@@ -26,8 +26,8 @@ import numpy as np
 from bags import ROOT, open_cloud_bag
 from dashboard import frame_view, git_rev, host
 
-TEMPLATE = ROOT / 'gui' / 'demo_template.html'
-OUT = ROOT / 'gui' / 'demo.html'
+TEMPLATE = Path(__file__).resolve().parent / 'templates' / 'demo.html'
+OUT = ROOT / 'output' / 'report' / 'demo.html'
 # реальный объект на рельсе на 56 м; пустой перегон -- детектор молчит
 CLIPS = ['doubleT_obstacle', 'roundT_doubleT:0:150']
 

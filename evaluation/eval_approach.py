@@ -7,8 +7,8 @@
 Пройденный путь за кадр берётся из оценки скорости по сцене (EgoMotion) на тех же
 кадрах без вставки. Окна выбираются там, где поезд едет (скорость > MIN_SPEED).
 
-    python tools/eval_approach.py --tag base
-    python tools/eval_approach.py --tag acc --det '{"method": "background"}'
+    python -m evaluation approach --tag base
+    python -m evaluation approach --tag acc --det '{"method": "background"}'
 
 Пишет runs/approach_<tag>.csv (строка = испытание) и печатает сводку:
 доля найденных, медиана дальности первого подтверждения, ошибка дистанции,

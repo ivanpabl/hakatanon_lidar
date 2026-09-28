@@ -1,20 +1,20 @@
 """Дашборд метрик: один HTML-файл без внешних зависимостей (открывается без сети).
 
-    python tools/dashboard.py                        # -> gui/dashboard.html
-    python tools/dashboard.py --no-scene             # без 3D-сцены (не нужны записи в data/)
-    python tools/dashboard.py --scene-frame 60 --out /tmp/d.html
+    python -m evaluation dashboard                   # -> output/report/metrics.html
+    python -m evaluation dashboard --no-scene        # без 3D-сцены (не нужны записи в data/)
+    python -m evaluation dashboard --scene-frame 60 --out /tmp/d.html
 
-Цифры берутся из результатов инструментов в runs/, а не переписываются руками:
+Цифры берутся из результатов инструментов в output/runs, а не переписываются руками:
   alarms_A_base.csv / alarms_P_ev_f20.csv      тревоги исходной и текущей версии на 6 записях
   alarms_nd_A_base.csv / alarms_nd_P_ev_f20.csv  отрезки new_data (8 x 400 кадров)
   alarms_final_nd_full.csv                     вся new_data, текущая версия
   approach_A_base.csv / approach_P_ev_f20.csv  дальность при подъезде (eval_approach.py)
   check_preproc.json                           побитное совпадение и время разбора (check_preproc.py)
   input_report.json                            проверка входного потока (input_report.py)
-  smoke/doubleT_platform_*                     e2e в Docker с C++-приёмом (./run.sh play)
-Файла нет в runs/ -- берётся из reference/ (результаты с машины разработки, в git): исходная
-версия A_base (её код -- ae38df6, текущим не воспроизводится), e2e в Docker, проверка входа
-и замер разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
+  smoke/doubleT_platform_*                     e2e в Docker с C++-приёмом (docker compose up play)
+Файла нет в output/runs -- берётся из evaluation/baseline.json (эталон, в git): исходная версия
+A_base (её код -- ae38df6, текущим не воспроизводится), e2e в Docker, проверка входа и замер
+разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
 Чего нет ни там, ни там (замер десериализации, число тестов), лежит в DOCUMENTED с источником.
 3D-сцена -- кадр doubleT_obstacle после прогона детектора с первого кадра: облако, ось пути,
 коридор, объект на 56 м.
@@ -37,47 +37,59 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bags import BAGS, RUNS, ROOT, open_cloud_bag   # noqa: E402
 
-TEMPLATE = ROOT / 'gui' / 'template.html'
-REFERENCE = ROOT / 'reference'
-OUT = ROOT / 'gui' / 'dashboard.html'
+HERE = Path(__file__).resolve().parent
+TEMPLATE = HERE / 'templates' / 'dashboard.html'
+BASELINE = json.loads((HERE / 'baseline.json').read_text(encoding='utf-8'))
+OUT = ROOT / 'output' / 'report' / 'metrics.html'
 BEFORE, AFTER = 'A_base', 'P_ev_f20'           # исходная версия (ae38df6) и текущая по умолчанию
 EMPTY = [b for b in BAGS if b not in ('doubleT_obstacle', 'new_data')]
 FRAME_MB = {'doubleT_obstacle': 23}            # остальные записи -- 8 МБ
-GAP = 2                                        # как tools/alarms.py: разрыв до 2 кадров -- тот же эпизод
+GAP = 2                                        # как alarms.py: разрыв до 2 кадров -- тот же эпизод
 
 # Замеры, которых нет в runs/: значение и откуда оно.
 DOCUMENTED = {
     'deser_ms': {'p50': 5.5, 'p95': 10.6,
-                 'src': 'research/ingest_timing.py: десериализация 23 МБ в Python, которой больше нет в узле'},
-    'pytest': {'n': 35, 'src': 'последний прогон тестов: ./run.sh test и pytest tests'},
-    'bench': 'Intel i5-1038NG7, 4 ядра / 8 потоков, Docker в VM OrbStack',
+                 'src': 'ветка research, research/ingest_timing.py: десериализация 23 МБ в Python, которой больше нет в узле'},
+    'pytest': {'n': 35, 'src': 'последний прогон тестов: docker compose run test и pytest tests'},
+    'bench': BASELINE['bench'],
 }
 
 
-SOURCES = {}                                   # файл -> 'runs' | 'reference': откуда взят
+SOURCES = {}                                   # файл -> 'runs' | 'baseline': откуда взят
 
 
-def source(name):
-    """Путь к результату: runs/, иначе reference/ (или несуществующий путь в runs/)."""
-    for kind, base in (('runs', RUNS), ('reference', REFERENCE)):
-        p = base / name
-        if p.exists():
-            SOURCES[name] = kind
-            return p
-    return RUNS / name
+def _found(name, kind):
+    SOURCES[name] = kind
+    return True
 
 
 def read_csv(name):
-    p = source(name)
-    if not p.exists():
+    """Строки csv из output/runs, иначе из baseline.json (значения -- строки, как в csv)."""
+    p = RUNS / name
+    if p.exists() and _found(name, 'runs'):
+        with open(p, encoding='utf-8', newline='') as f:
+            return list(csv.DictReader(f))
+    b = BASELINE['files'].get(name)
+    if b is None:
         return None
-    with open(p, encoding='utf-8', newline='') as f:
-        return list(csv.DictReader(f))
+    _found(name, 'baseline')
+    return [dict(zip(b['columns'], row)) for row in b['rows']]
 
 
 def read_json(name):
-    p = source(name)
-    return json.loads(p.read_text(encoding='utf-8')) if p.exists() else None
+    p = RUNS / name
+    if p.exists() and _found(name, 'runs'):
+        return json.loads(p.read_text(encoding='utf-8'))
+    b = BASELINE['files'].get(name)
+    return b if b is None or _found(name, 'baseline') else None
+
+
+def read_jsonl(name):
+    p = RUNS / name
+    if p.exists() and _found(name, 'runs'):
+        return [json.loads(line) for line in p.read_text(encoding='utf-8').splitlines() if line.strip()]
+    b = BASELINE['files'].get(name)
+    return b if b is None or _found(name, 'baseline') else None
 
 
 def host():
@@ -175,9 +187,9 @@ def speed():
     if d:
         s['parse'] = [{'bag': b, 'mb': FRAME_MB.get(b, 8), 'python': v['parse_ms_python'], 'cpp': v['parse_ms_cpp'],
                        'kept_after_crop': v['kept_after_crop']} for b, v in d.items()]
-    stats, res = read_json('smoke/doubleT_platform_stats.json'), source('smoke/doubleT_platform_result.jsonl')
+    stats = read_json('smoke/doubleT_platform_stats.json')
     if stats:
-        rows = [json.loads(line) for line in open(res, encoding='utf-8') if line.strip()] if res.exists() else []
+        rows = read_jsonl('smoke/doubleT_platform_result.jsonl') or []
         pre = stats.get('preproc', {})
         s['e2e'] = {k: stats.get(k) for k in ('received', 'processed', 'dropped_stale', 'latency_ms_p50', 'latency_ms_p95',
                                               'latency_ms_max', 'e2e_ms_p50', 'e2e_ms_p95', 'e2e_ms_max', 'alarm_frames')}
@@ -326,10 +338,10 @@ def main():
     html = TEMPLATE.read_text(encoding='utf-8').replace('/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html, encoding='utf-8')
-    ref = [k for k, v in SOURCES.items() if v == 'reference']
+    ref = [k for k, v in SOURCES.items() if v == 'baseline']
     print(f'{args.out}  {args.out.stat().st_size / 1e6:.1f} МБ')
     if ref:
-        print(f'  из reference/: {", ".join(sorted(ref))}')
+        print(f'  из baseline.json: {", ".join(sorted(ref))}')
 
 
 if __name__ == '__main__':
