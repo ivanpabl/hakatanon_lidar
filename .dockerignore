@@ -1,7 +1,6 @@
 data/
 runs/
 venv/
-labeling/
 research/
 tools/
 .git/

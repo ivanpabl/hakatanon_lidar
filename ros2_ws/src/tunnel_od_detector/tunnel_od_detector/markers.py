@@ -7,6 +7,7 @@ from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
 NS = 'tunnel_od'
+NS_TEXT = 'tunnel_od_text'   # текст решения отдельно: в RViz его можно выключить (Namespaces)
 AXIS_STEP_M = 2.0          # шаг точек оси; каждая точка -- объект Point (~40 мкс в rclpy)
 CORRIDOR_STEP_M = 4.0
 FRAME_EVERY_M = 20.0       # поперечные рамки коридора
@@ -103,21 +104,22 @@ def build_markers(result, track, det, header, max_objects=30):
         box.pose.position = _pt(x, -(d + 0.3), base + h / 2)
         arr.markers.append(box)
 
-    # текст с решением над коридором
+    # текст с решением над коридором. Латиницей: шрифт RViz2 (Ogre) не содержит кириллицы,
+    # русский текст выводится пустым.
     if result.get('obstacle'):
-        text = f"ПРЕПЯТСТВИЕ {float(result['distance_m']):.1f} м"
+        text = f"OBSTACLE {float(result['distance_m']):.1f} m"
         col = _color(1.0, 0.2, 0.2)
     else:
-        text = 'путь свободен'
+        text = 'track clear'
         col = _color(0.3, 1.0, 0.3)
     extra = []
     if result.get('clear_to_m') is not None:
-        extra.append(f"просмотр {float(result['clear_to_m']):.0f} м")
+        extra.append(f"view {float(result['clear_to_m']):.0f} m")
     if path_range:
-        extra.append(f'ось {float(path_range):.0f} м')
+        extra.append(f'axis {float(path_range):.0f} m')
     if extra:
         text += ' (' + ', '.join(extra) + ')'
-    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, col, (0, 0, 1.0))
+    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, col, (0, 0, 1.0), ns=NS_TEXT)
     label.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 1.5)
     label.text = text
     arr.markers.append(label)

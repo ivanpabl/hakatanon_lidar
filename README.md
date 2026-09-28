@@ -19,10 +19,9 @@ core/tunnel_od/        ядро детекции: пакет Python без ROS 2
 ├── detection/         зона, кластеры, подтверждение, ObstacleDetector
 └── sim/               симулятор тоннеля, фигуры, вставка объектов в реальные кадры
 tools/                 офлайн-инструменты: оценка, замеры, демонстрация, отрисовка
-labeling/              ручная разметка кадров (см. labeling/README.md)
 gui/                   шаблоны дашборда метрик, демо-плеера и сайта проекта
 reference/             эталонные результаты с машины разработки (исходная версия, e2e в Docker)
-data/                  записи и картинки разметки (не в git)
+data/                  записи (не в git)
 runs/                  результаты инструментов (не в git)
 ```
 
@@ -278,13 +277,26 @@ rviz2 -d ros2_ws/src/tunnel_od_detector/rviz/tunnel_od.rviz                 # fr
 rviz2 -d ros2_ws/src/tunnel_od_detector/rviz/tunnel_od.rviz -f lidar_livox  # doubleT_obstacle
 ```
 
-На экране видны облако (обе версии имени топика), ось пути зелёным, коридор синим и объекты. Красные объекты — тревога, жёлтые — не подтверждены, серые — мелкие или за концом оси. Сверху выводится текст с решением и дистанцией.
+На экране видны облако (обе версии имени топика), ось пути зелёным, коридор синим и объекты. Красные объекты — тревога, жёлтые — не подтверждены, серые — мелкие или за концом оси. Сверху выводится текст с решением и дистанцией, латиницей (`OBSTACLE 56.4 m`): шрифт RViz2 не содержит кириллицы. Текст — отдельное пространство имён `tunnel_od_text`, в RViz его можно выключить.
+
+### Видео прогона
+
+Образ `tunnel-od-viz` (поверх `tunnel-od`) добавляет RViz2, виртуальный экран Xvfb и ffmpeg. Экран хоста и доступ к X-серверу не нужны: RViz рисует на виртуальном экране, ffmpeg пишет его в mp4 и накладывает строку статуса по `/tunnel_od/result` (решение, дистанция, задержка, дальность оси, скорость).
+
+```bash
+./run.sh build-viz                                                    # один раз, после ./run.sh build
+./run.sh record data/cloud_with_fake_obj 26                           # первые 26 с записи -> runs/docker/cloud_with_fake_obj.mp4
+FRAME=lidar_livox ./run.sh record data/Датасет/archive/for_hackathon/doubleT_obstacle
+START=67 TITLE="низкая балка" ./run.sh record data/cloud_with_fake_obj 8
+```
+
+Узел во время записи работает как в `play`: итог и покадровый результат пишутся рядом с видео (`*_video_stats.json`, `*_video_result.jsonl`). Конфиг RViz для записи — `docker/record.rviz`: окно без панелей, вид из-за кабины, текстовый маркер выключен.
 
 ### DDS и большие кадры
 
-Кадр весит 8 МБ, а в `doubleT_obstacle` — 23 МБ (полный оборот). Выбрана схема «плеер и узел в одном контейнере + FastDDS с транспортом shared memory». `docker/fastdds_shm.xml` задаёт сегмент 256 МБ, `run.sh` добавляет `--shm-size=2g`. Кадр целиком копируется через `/dev/shm` без фрагментации UDP и не зависит от `net.core.rmem_max`. Между контейнерами схема тоже работает (`--network host --ipc host`, режим `detector`). В e2e узел принял все кадры: 345/345 для 8 МБ и 201/201 для 23 МБ.
+Кадр весит 8 МБ, а в `doubleT_obstacle` — 23 МБ (полный оборот). Выбрана схема «плеер и узел в одном контейнере + FastDDS с транспортом shared memory». `docker/fastdds_shm.xml` задаёт сегмент 256 МБ, `run.sh` добавляет `--shm-size=2g`. Кадр целиком копируется через `/dev/shm` без фрагментации UDP и не зависит от `net.core.rmem_max`. Поэтому `run.sh` поднимает `net.core.rmem_max`/`wmem_max` (`--sysctl`) только для `TUNNEL_OD_DDS=cyclone|default`: на части Linux-ядер эти параметры внутри контейнера менять нельзя, и `docker run` с ними не стартует. Между контейнерами схема тоже работает (`--network host --ipc host`, режим `detector`). В e2e узел принял все кадры: 345/345 для 8 МБ и 201/201 для 23 МБ.
 
-CycloneDDS с `docker/cyclone_big.xml` и FastDDS по умолчанию тоже дают 10 Гц, но только с увеличенным `net.core.rmem_max`. Поэтому `run.sh` на всякий случай поднимает его через `--sysctl`. Вариант DDS выбирается переменной `TUNNEL_OD_DDS=fastdds_shm|cyclone|default`. Проверка подписчиком без обработки: 8 МБ — 10 Гц у всех трёх вариантов; 23 МБ — FastDDS SHM 201/201, по умолчанию 190/201, Cyclone 189/201.
+CycloneDDS с `docker/cyclone_big.xml` и FastDDS по умолчанию тоже дают 10 Гц, но только с увеличенным `net.core.rmem_max`. Для этих вариантов `run.sh` поднимает его через `--sysctl`. Вариант DDS выбирается переменной `TUNNEL_OD_DDS=fastdds_shm|cyclone|default`. Проверка подписчиком без обработки: 8 МБ — 10 Гц у всех трёх вариантов; 23 МБ — FastDDS SHM 201/201, по умолчанию 190/201, Cyclone 189/201.
 
 У `ros2 bag play` в Humble есть две ловушки, и `play.sh` обходит обе.
 
@@ -368,7 +380,6 @@ CycloneDDS с `docker/cyclone_big.xml` и FastDDS по умолчанию тож
 ```
 data/Датасет/archive/for_hackathon/<запись>/   шесть записей от организаторов
 data/new_data/                                  длинная запись, ~20 мин
-data/labeling/                                  картинки и результаты разметки
 ```
 
 Ядро требует Python ≥ 3.10 и numpy, инструменты — ещё `rosbags` и `matplotlib`. Ядро ставится командой `pip install ./core` (или `pip install -e ./core[tools]` для разработки).

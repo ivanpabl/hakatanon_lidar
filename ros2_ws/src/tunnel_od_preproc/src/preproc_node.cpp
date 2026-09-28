@@ -198,8 +198,11 @@ private:
   // ------------------------------------------------------------------ подписки
   void discover()
   {
+    // Только топик, у которого уже есть издатель: подписчик (например RViz с конфигом на
+    // /lidar_points) тоже добавляет топик в граф, и без этой проверки узел цепляется к пустому.
     for (const auto & kv : get_topic_names_and_types()) {
       if (kv.first.rfind("/tunnel_od/", 0) == 0) {continue;}
+      if (count_publishers(kv.first) == 0) {continue;}
       for (const auto & t : kv.second) {
         if (t == "sensor_msgs/msg/PointCloud2") {
           discover_timer_->cancel();

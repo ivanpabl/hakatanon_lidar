@@ -1,0 +1,11 @@
+# Образ для показа и записи видео: tunnel-od + RViz2 + виртуальный экран (Xvfb) + ffmpeg.
+# Основной образ tunnel-od графики не содержит; этот собирается поверх него:
+#   ./run.sh build && ./run.sh build-viz
+FROM tunnel-od
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-rviz2 xvfb ffmpeg fonts-dejavu-core libgl1-mesa-dri \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/record.sh docker/hud.py docker/record.rviz /opt/tunnel_od/docker/
+RUN chmod +x /opt/tunnel_od/docker/record.sh

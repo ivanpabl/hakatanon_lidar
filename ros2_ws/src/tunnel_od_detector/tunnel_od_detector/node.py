@@ -173,7 +173,8 @@ class DetectorNode(Node):
     # ------------------------------------------------------------------ подписка
     def _discover(self):
         for name, types in sorted(self.get_topic_names_and_types()):
-            if CLOUD_TYPE in types and not name.startswith('/tunnel_od/'):
+            # только топик с издателем: подписчик (RViz) тоже добавляет топик в граф
+            if CLOUD_TYPE in types and not name.startswith('/tunnel_od/') and self.count_publishers(name):
                 self._discover_timer.cancel()
                 self._subscribe(name)
                 return

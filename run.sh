@@ -9,6 +9,10 @@
 #                                           например: ./run.sh detector topic:=/lidar_points
 #   ./run.sh test                           gtest + pytest узлов внутри образа
 #   ./run.sh shell                          bash в контейнере с настроенным окружением
+#   ./run.sh build-viz                      образ tunnel-od-viz: + RViz2, Xvfb, ffmpeg (после build)
+#   ./run.sh record /путь/к/записи [секунд] [rate]
+#                                           видео RViz: узел + RViz на виртуальном экране + bag play,
+#                                           mp4 со строкой статуса в $OUT_DIR/<запись>.mp4
 #
 # Переменные окружения:
 #   IMAGE          имя образа (tunnel-od)
@@ -19,6 +23,8 @@
 #   READ_AHEAD, PLAY_DELAY  параметры плеера для play (очередь 20 кадров, старт через 3 с)
 #   LAUNCH_ARGS    доп. аргументы detector.launch.py для play, например "use_cpp_preproc:=false"
 #   PROBE          1 (по умолчанию) -- замер e2e-задержки latency_probe в play, 0 -- без него
+#   FRAME, TITLE, START, CPUS  для record: frame_id облака (hesai_lidar), подпись, с какой секунды
+#                  записи начать, сколько ядер дать контейнеру (6)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,14 +33,17 @@ OUT_DIR="${OUT_DIR:-$ROOT/runs/docker}"
 CONFIG_DIR="${CONFIG_DIR:-$ROOT/config}"
 DDS="${TUNNEL_OD_DDS:-fastdds_shm}"
 
-# Большие кадры (8-23 МБ): /dev/shm под сегменты FastDDS SHM (по 256 МБ на участника)
-# и большие буферы сокетов на случай UDP/CycloneDDS.
+# Большие кадры (8-23 МБ): /dev/shm под сегменты FastDDS SHM (по 256 МБ на участника).
+# Большие буферы сокетов нужны только UDP-транспорту (cyclone, default). fastdds_shm их не
+# использует, а на части Linux-ядер net.core.*mem_max внутри контейнера менять нельзя --
+# docker run с --sysctl тогда не стартует. Поэтому --sysctl -- только для UDP.
 BIG_FRAMES=(--shm-size=2g)
-NET_SYSCTL=(--sysctl net.core.rmem_max=134217728 --sysctl net.core.wmem_max=134217728)
+NET_SYSCTL=()
+[ "$DDS" != fastdds_shm ] && NET_SYSCTL=(--sysctl net.core.rmem_max=134217728 --sysctl net.core.wmem_max=134217728)
 COMMON=(--rm -e "TUNNEL_OD_DDS=$DDS" -v "$CONFIG_DIR:/opt/tunnel_od/config:ro")
 [ -t 0 ] && [ -t 1 ] && COMMON+=(-it)
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 cmd="${1:-}"; [ $# -gt 0 ] && shift
 case "$cmd" in
@@ -65,6 +74,20 @@ case "$cmd" in
     docker run "${COMMON[@]}" "$IMAGE" bash -o pipefail -c \
         '/ws/install/tunnel_od_preproc/lib/tunnel_od_preproc/test_canonical 2>&1 | tail -3 && \
          python3 -m pytest -q -p no:cacheprovider /ws/src/tunnel_od_detector/test /ws/src/tunnel_od_preproc/test "$@"' _ "$@"
+    ;;
+  build-viz)
+    docker build -t "$IMAGE-viz" -f "$ROOT/docker/Dockerfile.viz" "$@" "$ROOT"
+    ;;
+  record)
+    [ $# -ge 1 ] || usage 1
+    BAG="$(cd "$1" && pwd)"; shift
+    [ -f "$BAG/metadata.yaml" ] || { echo "нет $BAG/metadata.yaml -- укажите каталог записи ros2 bag" >&2; exit 1; }
+    NAME="$(basename "$BAG")"
+    mkdir -p "$OUT_DIR"
+    docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" --cpus "${CPUS:-6}" \
+        -e "FRAME=${FRAME:-hesai_lidar}" -e "TITLE=${TITLE:-$NAME}" -e "START=${START:-}" -e "TOPIC=${TOPIC:-}" \
+        -v "$BAG:/bags/$NAME:ro" -v "$OUT_DIR:/out" \
+        "$IMAGE-viz" record.sh "/bags/$NAME" "/out/$NAME.mp4" "$@"
     ;;
   shell)
     docker run "${COMMON[@]}" "${BIG_FRAMES[@]}" "${NET_SYSCTL[@]}" -v "$OUT_DIR:/out" "$IMAGE" bash "$@"

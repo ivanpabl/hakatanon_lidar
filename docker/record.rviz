@@ -1,10 +1,6 @@
-Panels:
-  - Class: rviz_common/Displays
-    Name: Displays
-    Help Height: 0
-    Property Tree Widget:
-      Expanded: ~
-      Splitter Ratio: 0.5
+# Копия rviz/tunnel_od.rviz для записи видео (docker/record.sh): окно 1600x900 без боковой
+# панели, вид из-за кабины вдоль пути, точки крупнее. Для интерактивной работы -- tunnel_od.rviz.
+Panels: []
 Visualization Manager:
   Class: ""
   Displays:
@@ -14,7 +10,7 @@ Visualization Manager:
       Cell Size: 10
       Plane Cell Count: 30
       Color: 160; 160; 164
-      Alpha: 0.3
+      Alpha: 0.12
       Reference Frame: <Fixed Frame>
       Value: true
     # Облако: в записях топик называется по-разному, включены оба (работает тот, что есть)
@@ -28,7 +24,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
       Style: Points
-      Size (Pixels): 2
+      Size (Pixels): 3
       Color Transformer: AxisColor
       Axis: Z
       Use Fixed Frame: true
@@ -48,7 +44,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
       Style: Points
-      Size (Pixels): 2
+      Size (Pixels): 3
       Color Transformer: AxisColor
       Axis: Z
       Use Fixed Frame: true
@@ -70,7 +66,7 @@ Visualization Manager:
         History Policy: Keep Last
       Namespaces:
         tunnel_od: true
-        tunnel_od_text: true
+        tunnel_od_text: false
       Value: true
   Enabled: true
   Global Options:
@@ -90,12 +86,12 @@ Visualization Manager:
       # Вид сзади-сверху вдоль пути: вперёд -- это -y
       Class: rviz_default_plugins/Orbit
       Name: Current View
-      Distance: 45
+      Distance: 32
       Focal Point:
         X: 0
         Y: -30
         Z: 0
-      Pitch: 0.35
+      Pitch: 0.16
       Yaw: 1.5708
       Near Clip Distance: 0.01
       Target Frame: <Fixed Frame>
@@ -103,7 +99,7 @@ Visualization Manager:
     Saved: ~
 Window Geometry:
   Height: 900
-  Width: 1400
-  Hide Left Dock: false
+  Width: 1600
+  Hide Left Dock: true
   Displays:
     collapsed: false
