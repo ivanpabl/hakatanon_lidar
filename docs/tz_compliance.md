@@ -22,7 +22,7 @@
 | §4 Демонстрация: облако → детекция → расстояние, RViz2 | ✅ | `docker compose up demo`: RViz2 в браузере через noVNC; маркеры `/tunnel_od/markers`; офлайн-плеер `demo.html` | — |
 | §5 README: описание, сборка, запуск, bag, параметры | ✅ | [README](../README.md), [`config/detector.yaml`](../config/detector.yaml), [architecture.md](architecture.md#параметры) | — |
 | §5 Архитектура, алгоритм, эксперименты, сложные случаи | ✅ | [architecture.md](architecture.md), [algorithm.md](algorithm.md), [experiments.md](experiments.md), [hard_cases.md](hard_cases.md) | — |
-| §5 Видео работы | ◐ | анимация плеера [docs/img/demo.gif](img/demo.gif); отдельного видео в репозитории нет | — |
+| §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](../report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](img/demo.gif); запись экрана — [ссылка будет добавлена] | — |
 | §8.5 Тесты | ✅ | gtest (`tunnel_od_preproc`), pytest (`tests/`, узел); `docker compose run --rm test` | — |
 | §8.6 docker build → docker run → ros2 bag play → результат | ✅ | [запуск в 3 команды](../README.md); вариант голым `docker run` — в [README](../README.md#без-compose) | — |
 | §8.7 Подход команды | ✅ | [«Подход команды»](experiments.md#подход-команды), [эксперименты 28–29.09](experiments.md#эксперименты-282909-финальная-доводка) | — |

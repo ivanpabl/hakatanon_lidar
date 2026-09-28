@@ -22,7 +22,7 @@ ls output/                                     # 3. результат: <зап�
 
 Финальный прогон 29.09 по всем записям; подробности и оговорки — в разделе [«Результаты»](#результаты).
 
-**Смотреть:** отчёт `output/report/index.html` и плеер `demo.html` (собирается `python -m evaluation all`, быстрая версия `--quick` — в `output/report_quick/`) · [ответы жюри](docs/qa_jury.md) · [сложные участки](docs/hard_cases.md) · [плеер, анимация](docs/img/demo.gif)
+**Смотреть:** [report/demo.html](report/demo.html) — 3D-плеер записей (открыть двойным щелчком, без сети) · [report/index.html](report/index.html) — отчёт · [ответы жюри](docs/qa_jury.md) · [сложные участки](docs/hard_cases.md) · [анимация плеера](docs/img/demo.gif). Пересборка: `python -m evaluation all --quick`.
 
 ## Соответствие ТЗ
 
@@ -48,7 +48,7 @@ ls output/                                     # 3. результат: <зап�
 | §4 Демонстрация: облако → детекция → расстояние, RViz2 | ✅ | `docker compose up demo`: RViz2 в браузере через noVNC; маркеры `/tunnel_od/markers`; офлайн-плеер `demo.html` | — |
 | §5 README: описание, сборка, запуск, bag, параметры | ✅ | этот README, [`config/detector.yaml`](config/detector.yaml), [architecture.md](docs/architecture.md#параметры) | — |
 | §5 Архитектура, алгоритм, эксперименты, сложные случаи | ✅ | [architecture.md](docs/architecture.md), [algorithm.md](docs/algorithm.md), [experiments.md](docs/experiments.md), [hard_cases.md](docs/hard_cases.md) | — |
-| §5 Видео работы | ◐ | анимация плеера [docs/img/demo.gif](docs/img/demo.gif); отдельного видео в репозитории нет | — |
+| §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](docs/img/demo.gif); запись экрана — [ссылка будет добавлена] | — |
 | §8.5 Тесты | ✅ | gtest (`tunnel_od_preproc`), pytest (`tests/`, узел); `docker compose run --rm test` | — |
 | §8.6 docker build → docker run → ros2 bag play → результат | ✅ | запуск в 3 команды выше; вариант голым `docker run` — в разделе «Без Compose» | — |
 | §8.7 Подход команды | ✅ | [«Подход команды»](docs/experiments.md#подход-команды), [эксперименты 28–29.09](docs/experiments.md#эксперименты-282909-финальная-доводка) | — |
@@ -225,7 +225,7 @@ python -m evaluation all --quick      # проверка окружения, п�
 python -m evaluation all              # всё: ложные тревоги, дальность, скорость; ~20–60 мин
 ```
 
-Отчёт — одна страница `output/report/index.html` и 3D-плеер `demo.html` рядом с ней (после `--quick` — в `output/report_quick/`). Открывается в браузере без сети. Список команд — `python -m evaluation --help`.
+Отчёт — одна страница `output/report/index.html` и 3D-плеер `demo.html` рядом с ней (после `--quick` — в `output/report_quick/`). Открывается в браузере без сети. Готовая копия финального прогона лежит в [`report/`](report/). Список команд — `python -m evaluation --help`.
 
 ## Ограничения
 
