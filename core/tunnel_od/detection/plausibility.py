@@ -34,12 +34,26 @@ def count_rings(elev):
     return int(1 + np.count_nonzero(np.diff(e) > RING_GAP_RAD))
 
 
+def _stable_argsort(a):
+    """np.argsort(a, kind='stable') для float32 через один np.sort int64-ключей:
+    старшие 32 бита -- монотонный образ float32 (-0.0 приравнен к +0.0, как при сравнении),
+    младшие -- исходный индекс, поэтому равные значения остаются в порядке входа.
+    Иные dtype и NaN -- обычный стабильный argsort."""
+    if a.dtype != np.float32 or len(a) >= 1 << 31 or np.isnan(a).any():
+        return np.argsort(a, kind='stable')
+    b = (a + np.float32(0.0)).view(np.int32).astype(np.int64)
+    key = np.where(b < 0, ~b & 0xFFFFFFFF, b | 0x80000000).astype(np.uint64)
+    key = (key << np.uint64(32)) | np.arange(len(a), dtype=np.uint64)
+    key.sort()
+    return (key & np.uint64(0xFFFFFFFF)).astype(np.intp)
+
+
 class Context:
     """Точки кадра в координатах пути (fwd, lat, h над головкой рельса), отсортированные по fwd:
     выборка окна по дальности -- два searchsorted."""
 
     def __init__(self, fwd, lat, h):
-        o = np.argsort(fwd, kind='stable')
+        o = _stable_argsort(fwd)
         self.f, self.l, self.h = fwd[o], lat[o], h[o]
 
     def window(self, lo, hi):

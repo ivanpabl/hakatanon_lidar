@@ -31,6 +31,19 @@ def _sliding(a, w, fill):
     return np.lib.stride_tricks.sliding_window_view(np.concatenate([pad, a, pad], axis=-1), 2 * w + 1, axis=-1)
 
 
+def _nanmedian_last(w):
+    """np.nanmedian(w, axis=-1) для узкого окна без маскированных массивов (в разы быстрее):
+    сортировка (NaN уходят в конец), медиана по числу не-NaN k -- элемент k//2 при нечётном k,
+    среднее (lo + hi) / 2 двух средних при чётном (как в np.ma.median), NaN при пустом окне."""
+    s = np.sort(w, axis=-1)
+    n = np.count_nonzero(~np.isnan(s), axis=-1)
+    hi = n // 2
+    lo = np.where(n % 2 == 1, hi, np.maximum(hi - 1, 0))
+    lo = np.take_along_axis(s, lo[..., None], axis=-1)[..., 0]
+    hi = np.take_along_axis(s, hi[..., None], axis=-1)[..., 0]
+    return (lo + hi) / 2.0
+
+
 def find_floor_bumps(x, y, z, return_z=False):
     """Кандидаты в головки рельсов: локальные максимумы поперечного профиля высоты
     над медианной подложкой, в каждом 1-метровом срезе по дальности.
@@ -74,7 +87,7 @@ def find_floor_bumps(x, y, z, return_z=False):
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
-        baseline = np.nanmedian(_sliding(profile, _BASELINE_W, np.nan), axis=-1)
+        baseline = _nanmedian_last(_sliding(profile, _BASELINE_W, np.nan))
         local_max = np.nanmax(_sliding(profile, _PEAK_W, np.nan), axis=-1)
     prominence = profile - baseline
     with np.errstate(invalid='ignore'):
