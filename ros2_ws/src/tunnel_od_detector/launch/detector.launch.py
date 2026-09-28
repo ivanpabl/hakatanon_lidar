@@ -85,6 +85,9 @@ def _nodes(context):
         det['refit_every'] = int(lc('refit_every'))
     if lc('max_pending'):
         det['max_pending'] = int(lc('max_pending'))
+    for name in ('watchdog_timeout_s', 'watchdog_grace_s'):
+        if lc(name):
+            det[name] = float(lc(name))
 
     if use_cpp:
         pre = _section(cfg, 'tunnel_od_preproc')
@@ -140,6 +143,8 @@ def generate_launch_description():
         arg('refit_every', '', 'пересчёт пути раз в N кадров (sync)'),
         arg('max_pending', os.environ.get('TUNNEL_OD_MAX_PENDING', ''),
             'очередь кадров детектора ("" -- из config; по умолчанию $TUNNEL_OD_MAX_PENDING)'),
+        arg('watchdog_timeout_s', '', 'нет облаков дольше (с) -- node_state fault ("" -- из config)'),
+        arg('watchdog_grace_s', '', 'запас до первого кадра (с), play.launch.py ставит start_delay + 2'),
         arg('result_file', '', 'JSONL с результатом каждого кадра'),
         arg('stats_file', '', 'итоговая статистика JSON (C++-узел -- в <имя>_preproc.json)'),
         arg('log_level', 'info', ''),

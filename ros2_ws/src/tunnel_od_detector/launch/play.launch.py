@@ -36,7 +36,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from tunnel_od_detector.bag import bag_info
-from tunnel_od_detector.input_guard import DEFAULT_READ_AHEAD, play_args
+from tunnel_od_detector.input_guard import DEFAULT_READ_AHEAD, play_args, watchdog_params
 
 HERE = Path(__file__).resolve().parent
 RVIZ_CONFIG = os.environ.get('TUNNEL_OD_RVIZ', '/opt/tunnel_od/config/tunnel_od.rviz')
@@ -57,11 +57,14 @@ def _actions(context):
     if info['warning']:
         actions.append(LogInfo(msg=f'[tunnel_od] {info["warning"]}'))
 
+    # watchdog узла: до снятия плеера с паузы (delay) кадров нет -- это не провал входа;
+    # порог между кадрами -- под rate (0.5 с при rate >= 1, 0.5/rate медленнее).
+    wd = {k: str(v) for k, v in watchdog_params(delay, rate).items()}
     actions.append(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(HERE / 'detector.launch.py')),
         launch_arguments={'topic': topic,
                           'result_file': f'{out}/{name}_result.jsonl',
-                          'stats_file': f'{out}/{name}_stats.json'}.items()))
+                          'stats_file': f'{out}/{name}_stats.json', **wd}.items()))
     if _on(lc('probe')):
         actions.append(Node(package='tunnel_od_preproc', executable='latency_probe', output='log',
                             parameters=[{'input_topic': topic, 'out_file': f'{out}/{name}_e2e.json'}]))

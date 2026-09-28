@@ -88,8 +88,8 @@ docker compose run --rm test                   # gtest + pytest внутри о�
 | `latency_ms`, `parse_ms`, `detect_ms`, `queue_ms` | от приёма до публикации; разбор; детектор; ожидание в очереди |
 | `refit_mode`, `refit_path`, `path_fit_ms` | как пересчитывается путь, обновился ли он перед кадром, время пересчёта |
 | `repeated` | кадр — побитовый повтор предыдущего облака: результат прошлого кадра, детектор не вызывался (`skip_repeated`) |
-| `dropped_total` | сколько кадров отброшено к этому моменту (пришёл более новый) |
-| `node_state`, `reason` | защита по входу: `ok` \| `warmup` (первые кадры до построения оси — `status: unknown`, `clear_to_m: 0`, `stop` не гасится) \| `fault` (нет облаков дольше `watchdog_timeout_s` — снимок `reason: no_lidar_data`, `since_last_cloud_s`, `fault: true`, публикуется по таймеру, пока данные не возобновятся). При `unknown` от детектора `reason` — `no_path` / `short_sight`. `status` остаётся в множестве `stop` / `caution` / `clear` / `unknown` |
+| `dropped_total` | сколько кадров отброшено к этому моменту: очередь была полна (`dropped_stale` в итоге) плюс догон (`dropped_catchup`) |
+| `node_state`, `reason` | защита по входу: `ok` \| `warmup` (первые `warmup_frames` кадров — `status: unknown`, `clear_to_m: 0`, `stop` не гасится) \| `fault` (нет облаков дольше `watchdog_timeout_s` — снимок `reason: no_lidar_data`, `since_last_cloud_s`, `fault: true`, публикуется по таймеру в топик, пока данные не возобновятся; в `<запись>_result.jsonl` снимки не пишутся, `frame`/`stamp` в них `null`). При `unknown` от детектора `reason` — `no_path` / `short_sight`. `status` остаётся в множестве `stop` / `caution` / `clear` / `unknown` |
 
 ```bash
 docker compose run --rm play bash                               # оболочка с настроенным ROS
@@ -101,7 +101,7 @@ jq -c 'select(.obstacle) | {frame, distance_m}' output/doubleT_obstacle_result.j
 
 **Очередь.** Колбэк подписки кладёт кадр в слот, обработка идёт в отдельном потоке. Если детектор не успел, старый кадр заменяется новым и учитывается в `dropped_stale` — задержка не копится.
 
-**Защита по входу** (`input_guard.py`, без ROS, тесты `tests/test_input_guard.py`): watchdog по таймеру — нет облаков дольше `watchdog_timeout_s` (0,5 с) → снимок `node_state: fault` / `reason: no_lidar_data` в `/tunnel_od/result` и красная подпись `NO LIDAR DATA` в RViz, пока данные не возобновятся (в итоге `fault_episodes`, `fault_snapshots`); прогрев — первые кадры до построения оси (`warmup_frames`) отдают `status: unknown`, а не `clear`; после провала входа прогрев начинается заново; догон стартового всплеска `ros2 bag play` — обрабатывается самый свежий кадр очереди, старые считаются в `dropped_catchup`.
+**Защита по входу** (`input_guard.py`, без ROS, тесты `tests/test_input_guard.py`): watchdog по таймеру — нет облаков дольше `watchdog_timeout_s` (0,5 с) → снимок `node_state: fault` / `reason: no_lidar_data` в `/tunnel_od/result` и красная подпись `NO LIDAR DATA` в RViz, пока данные не возобновятся (в итоге `fault_episodes`, `fault_snapshots`); прогрев — первые `warmup_frames` кадров отдают `status: unknown`, а не `clear`; после провала входа прогрев начинается заново; догон стартового всплеска `ros2 bag play` — обрабатывается самый свежий кадр очереди, старые считаются в `dropped_catchup`.
 
 **Пересчёт пути** стоит 25–30 мс (на Mac — ~80 мс), разбор и проверка кадра вместе — 15–25 мс. По умолчанию (`refit_mode: async`) путь считается в отдельном процессе по самому свежему кадру и подставляется в детектор перед следующим кадром: путь отстаёт на 1–2 кадра и побитно совпадает с синхронным пересчётом. `refit_mode: sync` — пересчёт в том же вызове раз в `refit_every` кадров.
 
@@ -124,8 +124,8 @@ jq -c 'select(.obstacle) | {frame, distance_m}' output/doubleT_obstacle_result.j
 | `qos_reliability`, `qos_depth` | `reliable`, 5 | QoS подписки (`ros2 bag play` публикует `RELIABLE`) |
 | `max_pending` | 2 | очередь кадров к детектору; полна — отбрасывается самый старый |
 | `catch_up` | `auto` | догон: из очереди берётся самый свежий кадр, старые отбрасываются (`dropped_catchup`); `auto` — включён при `max_pending` ≤ 10 (детерминированный прогон с 100000 обрабатывает все кадры) |
-| `watchdog_timeout_s`, `watchdog_grace_s` | 0.5, 2.0 | нет облаков дольше порога — `node_state: fault` в `/tunnel_od/result` и подпись `NO LIDAR DATA` в RViz; до первого кадра порог `watchdog_grace_s` |
-| `warmup_frames` | 3 | прогрев: пока не построена ось и не обработано N кадров — `node_state: warmup`, `status: unknown` (0 — без прогрева) |
+| `watchdog_timeout_s`, `watchdog_grace_s` | 0.5, 2.0 | нет облаков дольше порога — `node_state: fault` в `/tunnel_od/result` и подпись `NO LIDAR DATA` в RViz; до первого кадра порог `watchdog_grace_s`. `play.launch.py` ставит grace = `start_delay` + 2 с (плеер на паузе — не провал) и порог max(0.5, 0.5 / `rate`) |
+| `warmup_frames` | 3 | прогрев: первые N обработанных кадров — `node_state: warmup`, `status: unknown` (0 — без прогрева); кончается по числу кадров, даже если ось не построилась (дальше `unknown` / `reason: no_path`) |
 | `parse_backend` | `auto` | без C++-узла: `auto` (нативная библиотека, иначе Python) \| `native` \| `python` |
 | `publish_markers`, `markers_every`, `marker_max_objects` | `true`, 1, 30 | маркеры RViz: публиковать, раз в N кадров, не больше стольких объектов |
 | `log_alarms` | `true` | строка `СТОП кадр …` в лог на каждый кадр со СТОП |

@@ -3,9 +3,10 @@
 - Watchdog: облака от лидара не приходят дольше watchdog_timeout_s -- узел публикует снимок
   с `node_state: fault`, `reason: no_lidar_data` (статус контракта -- `unknown`), пока данные
   не возобновятся. До первого кадра действует запас watchdog_grace_s (плеер ещё на паузе).
-- Прогрев: первые кадры, пока детектор не построил ось (path_available) и не набралось
-  warmup_frames кадров, -- `node_state: warmup`, `reason: warmup`, статус `unknown` вместо
-  `clear`/`caution` (`stop` остаётся). После провала входа прогрев начинается заново.
+- Прогрев: первые warmup_frames кадров (ось и треки ещё строятся) -- `node_state: warmup`,
+  `reason: warmup`, статус `unknown` вместо `clear`/`caution` (`stop` остаётся). Кончается по
+  числу кадров и тогда, когда ось так и не построилась (пустая запись, кривая) -- дальше
+  решение детектора с `reason: no_path`. После провала входа прогрев начинается заново.
 - Догон всплеска ros2 bag play: из очереди берётся самый свежий кадр, старые отбрасываются
   и считаются в dropped (catch_up).
 - Аргументы `ros2 bag play` для play.launch.py (`--read-ahead-queue-size`).
@@ -67,9 +68,10 @@ class Watchdog:
         return max(0.05, self.timeout_s / 2.0)
 
 
-def fault_result(age_s, timeout_s, frame=None, topic='', stamp=None):
+def fault_result(age_s, timeout_s, topic=''):
     """Снимок для /tunnel_od/result, пока данных нет: статус контракта unknown, тревоги нет,
-    ничего не проверено (clear_to_m 0). frame/stamp -- последнего обработанного кадра."""
+    ничего не проверено (clear_to_m 0). Это не кадр: frame/stamp -- null, в <запись>_result.jsonl
+    снимки не пишутся (в итоге -- fault_episodes / fault_snapshots)."""
     return {
         'status': 'unknown',
         'node_state': STATE_FAULT,
@@ -84,16 +86,18 @@ def fault_result(age_s, timeout_s, frame=None, topic='', stamp=None):
         'fault': True,
         'since_last_cloud_s': float(age_s),
         'watchdog_timeout_s': float(timeout_s),
-        'frame': frame,
-        'stamp': stamp,
+        'frame': None,
+        'stamp': None,
         'topic': topic,
         'repeated': False,
     }
 
 
 class Warmup:
-    """Прогрев: первые кадры до построения оси. Заканчивается, когда детектор хотя бы раз
-    сообщил path_available и обработано min_frames кадров (min_frames <= 0 -- прогрева нет)."""
+    """Прогрев: первые min_frames обработанных кадров (min_frames <= 0 -- прогрева нет).
+    Заканчивается по числу кадров независимо от того, построилась ли ось: если нет, дальше
+    честный unknown детектора с reason no_path, а не вечный warmup. path_seen -- построилась ли
+    ось за прогрев (в лог)."""
 
     def __init__(self, min_frames=3):
         self.min_frames = int(min_frames)
@@ -106,7 +110,7 @@ class Warmup:
 
     @property
     def active(self):
-        return self.min_frames > 0 and not (self.path_seen and self.frames >= self.min_frames)
+        return self.frames < self.min_frames
 
     def update(self, path_available):
         """Учесть обработанный кадр. Возвращает True, если кадр ещё прогревочный (решение по
@@ -115,7 +119,7 @@ class Warmup:
             return False
         self.frames += 1
         self.path_seen = self.path_seen or bool(path_available)
-        return self.active
+        return True
 
 
 def annotate(out, warming):
@@ -159,6 +163,18 @@ def catch_up_enabled(value, max_pending):
     if v != 'auto':
         raise ValueError(f'catch_up: true | false | auto, получено {value!r}')
     return int(max_pending) <= CATCH_UP_AUTO_MAX_PENDING
+
+
+def watchdog_params(start_delay_s, rate=1.0, timeout_s=0.5, margin_s=2.0):
+    """Параметры watchdog узла для прогона записи: до первого кадра плеер стоит на паузе
+    start_delay_s -- запас grace = start_delay + margin, иначе штатный прогон начинался бы с
+    ложного fault; порог между кадрами -- под скорость проигрывания (rate 0.25 -> кадры раз в
+    0.4 с при 10 Гц, порог 0.5/rate = 2 с)."""
+    rate = float(rate)
+    if rate <= 0:
+        raise ValueError(f'rate: > 0, получено {rate}')
+    return {'watchdog_grace_s': float(start_delay_s) + float(margin_s),
+            'watchdog_timeout_s': max(float(timeout_s), float(timeout_s) / rate)}
 
 
 def play_args(bag, rate=1.0, read_ahead=DEFAULT_READ_AHEAD, loop=False, start_paused=True, qos_file=None):

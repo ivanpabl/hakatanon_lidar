@@ -23,8 +23,9 @@
 
 Защита по входу (input_guard.py): watchdog -- нет облаков дольше watchdog_timeout_s --
 в /tunnel_od/result и маркер RViz идёт снимок `node_state: fault`, `reason: no_lidar_data`
-(status unknown), пока данные не возобновятся; прогрев -- первые warmup_frames кадров до
-построения оси -- `node_state: warmup` (status unknown вместо clear).
+(status unknown), пока данные не возобновятся (снимки -- только в топик, не в result_file);
+прогрев -- первые warmup_frames кадров -- `node_state: warmup` (status unknown вместо clear).
+Отброшенные кадры: dropped_stale (очередь полна), dropped_catchup (догон), dropped_total = сумма.
 
 Путь (update_path, ~80 мс) по умолчанию пересчитывается в отдельном процессе по самому
 свежему кадру (refit_mode: async, см. path_worker.py) -- тогда задержка кадра = разбор +
@@ -263,7 +264,6 @@ class DetectorNode(Node):
                 with self._lock:
                     if self.catch_up:
                         item, skipped = take_latest(self._pending)
-                        self.stats.dropped += skipped
                         self.stats.dropped_catchup += skipped
                     else:
                         item = self._pending.popleft() if self._pending else None
@@ -273,7 +273,7 @@ class DetectorNode(Node):
                     break
                 if skipped:
                     self.get_logger().warning(f'догон: пропущено {skipped} старых кадр(ов) из очереди, '
-                                              f'обрабатывается самый свежий (всего отброшено {self.stats.dropped})',
+                                              f'обрабатывается самый свежий (догоном всего {self.stats.dropped_catchup})',
                                               throttle_duration_sec=5.0)
                 try:
                     self._process(*item)
@@ -351,7 +351,7 @@ class DetectorNode(Node):
             'repeated': False,
         })
         with self._lock:
-            out['dropped_total'] = self.stats.dropped
+            out['dropped_total'] = self.stats.dropped + self.stats.dropped_catchup
         if self.canonical_input:
             parse = (meta or {}).get('parse') or {}
             out.update({
@@ -365,10 +365,16 @@ class DetectorNode(Node):
             if meta and meta.get('source_ts_ns'):
                 out['e2e_ms'] = (time.time_ns() - int(meta['source_ts_ns'])) * 1e-6
                 self._e2e.append(out['e2e_ms'])
+        warmup_done = path_seen = False
         with self._lock:
             warming = self._warmup.update(res.get('path_available'))
             if warming:
                 self.stats.warmup_frames += 1
+                warmup_done = not self._warmup.active
+                path_seen = self._warmup.path_seen
+        if warming and warmup_done:
+            self.get_logger().info(f'прогрев закончен ({self._warmup.frames} кадр(ов)): '
+                                   f'{"ось построена" if path_seen else "ось не построена -- дальше unknown/no_path"}')
         annotate(out, warming)
         res['node_state'], res['reason'] = out['node_state'], out['reason']   # подпись в RViz
         if warming:
@@ -405,8 +411,19 @@ class DetectorNode(Node):
                 self._result_fh.write(text + '\n')
 
     def _watchdog_tick(self):
-        """Таймер: нет облаков дольше watchdog_timeout_s -- снимок fault в результат и RViz,
-        пока данные не возобновятся (решение -- input_guard.Watchdog)."""
+        """Таймер: нет облаков дольше watchdog_timeout_s -- снимок fault в топик результата и RViz,
+        пока данные не возобновятся (решение -- input_guard.Watchdog). В result_file снимки не
+        пишутся: это не кадры (после конца записи их было бы ~10 на каждый прогон)."""
+        if self._stop:
+            return
+        try:
+            self._watchdog_publish()
+        except Exception as e:
+            if not self.context.ok():   # SIGINT во время publish: не ошибка, узел останавливается
+                return
+            self.get_logger().warning(f'watchdog: {type(e).__name__}: {e}', throttle_duration_sec=10.0)
+
+    def _watchdog_publish(self):
         now = time.monotonic()
         with self._lock:
             fault, age, changed = self._watchdog.check(now)
@@ -417,17 +434,10 @@ class DetectorNode(Node):
             header = self._last_header
         if not fault:
             return
-        last = self._last_out or {}
-        out = fault_result(age, self._watchdog.timeout_s, frame=last.get('frame'), topic=self.topic,
-                           stamp=last.get('stamp'))
-        text = dumps(out)
-        self.pub_result.publish(String(data=text))
-        self._write_result(text)
+        out = fault_result(age, self._watchdog.timeout_s, topic=self.topic)
+        self.pub_result.publish(String(data=dumps(out)))
         if self.publish_markers and header is not None:
-            try:
-                self.pub_markers.publish(build_state_markers(out, header))
-            except Exception as e:
-                self.get_logger().warning(f'маркер состояния не построен: {e}', throttle_duration_sec=10.0)
+            self.pub_markers.publish(build_state_markers(out, header))
         if changed:
             self.get_logger().warning(f'НЕТ ДАННЫХ от лидара {age:.1f} с (порог {self._watchdog.timeout_s:.2f} с): '
                                       f'статус fault, пока облака не возобновятся')
@@ -442,8 +452,8 @@ class DetectorNode(Node):
             s = self.stats
             line = (f'{p["processed"] / dt:.1f} кадр/с (принято {p["received"] / dt:.1f}/с), '
                     f'задержка p50 {percentile(p["latency"], 50) or 0:.0f} / p95 {percentile(p["latency"], 95) or 0:.0f} мс; '
-                    f'всего: принято {s.received}, обработано {s.processed}, отброшено {s.dropped} '
-                    f'(догон {s.dropped_catchup}), пропуски по stamp {s.stamp_gaps}, ошибок {s.errors}, '
+                    f'всего: принято {s.received}, обработано {s.processed}, отброшено {s.dropped + s.dropped_catchup} '
+                    f'(не успел {s.dropped}, догон {s.dropped_catchup}), пропуски по stamp {s.stamp_gaps}, ошибок {s.errors}, '
                     f'кадров с тревогой {s.alarm_frames}, провалов входа {s.fault_episodes}')
         if p['received'] or p['processed']:
             self.get_logger().info(line)

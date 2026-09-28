@@ -280,6 +280,7 @@ class Stats:
             'processed': self.processed,
             'dropped_stale': self.dropped,
             'dropped_catchup': self.dropped_catchup,
+            'dropped_total': self.dropped + self.dropped_catchup,
             'fault_snapshots': self.fault_snapshots,
             'fault_episodes': self.fault_episodes,
             'warmup_frames': self.warmup_frames,
