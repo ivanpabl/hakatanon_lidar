@@ -165,3 +165,19 @@ def test_limit_alarms_recomputes_decision_levels():
     res = {'status': 'unknown', 'obstacle': False, 'distance_m': None, 'caution_distance_m': None,
            'sight_m': 0.0, 'clear_to_m': 0.0, 'objects': []}
     assert limit_alarms(res, 50.0)['status'] == 'unknown'
+
+
+def test_pick_topic_any_name_preferred_and_explicit():
+    from tunnel_od_detector.bag import _best_effort, pick_topic
+    assert pick_topic({'/some/other_points': 10}) == ('/some/other_points', '')
+    topic, warn = pick_topic({'/a/points': 50, '/lidar_points': 10})
+    assert topic == '/lidar_points' and warn
+    assert pick_topic({'/a': 5, '/b': 50})[0] == '/b'
+    assert pick_topic({'/a': 5, '/b': 50}, '/a') == ('/a', '')
+    with pytest.raises(RuntimeError):
+        pick_topic({'/a': 5}, '/missing')
+    with pytest.raises(RuntimeError):
+        pick_topic({})
+    assert _best_effort('- history: 1\n  depth: 5\n  reliability: 2\n')
+    assert not _best_effort('- history: 1\n  depth: 10\n  reliability: 1\n')
+    assert _best_effort([{'reliability': 'best_effort'}]) and not _best_effort('')

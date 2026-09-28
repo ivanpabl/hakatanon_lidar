@@ -14,6 +14,11 @@ AXIS_STEP_M = 2.0
 CORRIDOR_STEP_M = 4.0
 FRAME_EVERY_M = 20.0
 DEFAULT_AXIS_M = 40.0
+# Цвет зоны проверки по решению: зелёный -- свободно, жёлтый -- внимание, красный -- СТОП.
+ZONE_COLOR = {'stop': (1.0, 0.15, 0.15, 0.9), 'caution': (1.0, 0.85, 0.1, 0.8),
+              'clear': (0.2, 1.0, 0.3, 0.7), 'unknown': (0.6, 0.6, 0.6, 0.5)}
+LABEL_SIZE_M = 2.4      # высота главной подписи решения
+OBJ_LABEL_SIZE_M = 1.6  # подпись дистанции над объектом тревоги
 
 
 def _color(r, g, b, a=1.0):
@@ -52,6 +57,7 @@ def build_markers(result, track, det, header, max_objects=30):
     clear = Marker()
     clear.header = header
     clear.ns = NS
+    clear.id = -1  # не совпадает с осью (id 0): иначе RViz -- «Duplicate Markers»
     clear.action = Marker.DELETEALL
     arr.markers.append(clear)
 
@@ -69,13 +75,13 @@ def build_markers(result, track, det, header, max_objects=30):
     arr.markers.append(axis)
 
     lo, hi, hw = _zone_bounds(det)
-    corr_col = _color(0.2, 0.6, 1.0, 0.5)
+    corr_col = _color(*ZONE_COLOR.get(result.get('status'), ZONE_COLOR['clear']))
     k = np.unique(np.r_[np.arange(0, len(fwd), max(1, int(CORRIDOR_STEP_M / AXIS_STEP_M))), len(fwd) - 1])
     for j, (side, h) in enumerate(((-1, lo), (-1, hi), (1, lo), (1, hi))):
-        edge = _marker(header, 10 + j, Marker.LINE_STRIP, corr_col, (0.04, 0, 0))
+        edge = _marker(header, 10 + j, Marker.LINE_STRIP, corr_col, (0.08, 0, 0))
         edge.points = [_pt(cx[i] + side * hw, -fwd[i], tor[i] + h) for i in k]
         arr.markers.append(edge)
-    frames = _marker(header, 1, Marker.LINE_LIST, corr_col, (0.04, 0, 0))
+    frames = _marker(header, 1, Marker.LINE_LIST, corr_col, (0.06, 0, 0))
     for i in range(0, len(fwd), max(1, int(FRAME_EVERY_M / AXIS_STEP_M))):
         c = [(cx[i] - hw, tor[i] + lo), (cx[i] + hw, tor[i] + lo),
              (cx[i] + hw, tor[i] + hi), (cx[i] - hw, tor[i] + hi)]
@@ -91,16 +97,27 @@ def build_markers(result, track, det, header, max_objects=30):
         h = max(float(o.get('height_m', 0.3) or 0.3), 0.2)
         base = float(track.rail_top_at(d)[0])
         x = float(track.center_at(d)) + lat
-        box = _marker(header, 100 + i, Marker.CUBE, _color(*LEVEL_COLOR.get(o.get('level'), LEVEL_COLOR[None])),
-                      (0.6, 0.6, h))
-        box.pose.position = _pt(x, -(d + 0.3), base + h / 2)
+        level = o.get('level')
+        alarm = level in rank
+        w = 1.2 if alarm else 0.6
+        box = _marker(header, 100 + i, Marker.CUBE, _color(*LEVEL_COLOR.get(level, LEVEL_COLOR[None])), (w, w, h))
+        box.pose.position = _pt(x, -(d + w / 2), base + h / 2)
         arr.markers.append(box)
+        if alarm and i < 3:  # дистанция над объектом тревоги: видно, какой объект дал решение
+            tag = _marker(header, 200 + i, Marker.TEXT_VIEW_FACING, _color(*LEVEL_COLOR[level][:3]),
+                          (0, 0, OBJ_LABEL_SIZE_M))
+            tag.pose.position = _pt(x, -(d + w / 2), base + h + 1.2)
+            tag.text = f'{d:.0f} m'
+            arr.markers.append(tag)
 
     text, rgb = status_text(result)
-    if path_range:
-        text += f' (axis {float(path_range):.0f} m)'
-    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, 1.0), ns=NS_TEXT)
-    label.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 1.5)
+    label = _marker(header, 2, Marker.TEXT_VIEW_FACING, _color(*rgb), (0, 0, LABEL_SIZE_M), ns=NS_TEXT)
+    label.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 3.0)
     label.text = text
     arr.markers.append(label)
+    if path_range:  # мелко под главной подписью: до скольких метров найдена ось пути
+        sub = _marker(header, 3, Marker.TEXT_VIEW_FACING, _color(0.8, 0.8, 0.85), (0, 0, 0.8))
+        sub.pose.position = _pt(float(cx[0]), -8.0, float(tor[0]) + hi + 1.3)
+        sub.text = f'path axis {float(path_range):.0f} m'
+        arr.markers.append(sub)
     return arr

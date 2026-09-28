@@ -5,7 +5,9 @@
     ros2 launch tunnel_od_detector detector.launch.py use_cpp_preproc:=false      # без C++-узла
 
 config по умолчанию: $TUNNEL_OD_CONFIG, иначе /opt/tunnel_od/config/detector.yaml (образ Docker).
-topic, result_file, stats_file, refit_every, refit_mode -- перекрывают config, если не пустые.
+topic, result_file, stats_file, refit_every, refit_mode, max_pending -- перекрывают config, если не пустые;
+topic, refit_mode и max_pending по умолчанию берутся из $TUNNEL_OD_TOPIC / $TUNNEL_OD_REFIT_MODE / $TUNNEL_OD_MAX_PENDING
+(детерминированный прогон: TUNNEL_OD_REFIT_MODE=sync TUNNEL_OD_MAX_PENDING=100000).
 
 use_cpp_preproc:=true (по умолчанию): C++-узел tunnel_od_preproc в component container
 разбирает облако любого поддерживаемого формата и публикует каноническое облако на
@@ -125,16 +127,19 @@ def generate_launch_description():
     arg = lambda name, default, desc: DeclareLaunchArgument(name, default_value=default, description=desc)
     return LaunchDescription([
         arg('config', DEFAULT_CONFIG, 'YAML с параметрами узлов'),
-        arg('topic', '', 'топик PointCloud2 лидара ("" -- автопоиск)'),
+        arg('topic', os.environ.get('TUNNEL_OD_TOPIC', ''),
+            'топик PointCloud2 лидара ("" -- автопоиск, при нескольких /lidar_points; по умолчанию $TUNNEL_OD_TOPIC)'),
         arg('use_cpp_preproc', 'true', 'C++-приём облака (tunnel_od_preproc): true | false'),
         arg('input_format', '', 'auto | legacy_hesai | contract_v1 | generic ("" -- из config)'),
         arg('input_axes', '', 'auto | legacy | rep103 ("" -- из config)'),
         arg('speed_topic', '', 'скорость поезда (TwistStamped / Odometry), только запись в результат'),
         arg('intra_process', 'false', 'intra-process в контейнере компонентов (для драйвера-компонента)'),
         arg('parse_backend', '', 'без C++-узла: auto | native | python'),
-        arg('refit_mode', '', 'async | sync ("" -- из config)'),
+        arg('refit_mode', os.environ.get('TUNNEL_OD_REFIT_MODE', ''),
+            'async | sync ("" -- из config; по умолчанию $TUNNEL_OD_REFIT_MODE)'),
         arg('refit_every', '', 'пересчёт пути раз в N кадров (sync)'),
-        arg('max_pending', '', 'очередь кадров детектора ("" -- из config)'),
+        arg('max_pending', os.environ.get('TUNNEL_OD_MAX_PENDING', ''),
+            'очередь кадров детектора ("" -- из config; по умолчанию $TUNNEL_OD_MAX_PENDING)'),
         arg('result_file', '', 'JSONL с результатом каждого кадра'),
         arg('stats_file', '', 'итоговая статистика JSON (C++-узел -- в <имя>_preproc.json)'),
         arg('log_level', 'info', ''),

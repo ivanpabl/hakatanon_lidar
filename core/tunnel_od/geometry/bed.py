@@ -20,6 +20,8 @@ BED_TOL = 0.15
 def estimate_floor_z(x, y, z, near=2.0, far=15.0, half_width=3.0):
     """Грубая оценка высоты пола одной константой -- запасной вариант, когда
     профиль полотна по дальности (estimate_bed_profile) построить не удалось."""
+    if len(z) == 0:
+        return 0.0
     fwd = -y
     m = (fwd > near) & (fwd < far) & (np.abs(x) < half_width)
     if m.sum() < 50:

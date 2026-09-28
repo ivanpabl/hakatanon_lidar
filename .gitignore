@@ -18,3 +18,7 @@ ros2_ws/src/tunnel_od_preproc/build_host/
 .superpowers/
 .DS_Store
 tunnel_od_image.tar.gz
+*.tar.gz
+/runs/
+/output/runs/
+/presentation/ЛЦТ2026 Шаблон презентации.pptx

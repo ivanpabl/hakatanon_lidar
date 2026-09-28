@@ -24,12 +24,12 @@ tunnel_od_detector:
       max_range: 250.0
       half_width: 1.0
       clearance: 0.15
-      height: 2.5
+      height: 3.0  # габарит ТЗ 2.1x3 м
       far_axis: true
       path_margin: 0.0
       far_from: 20.0
       far_half_width: 0.7
-      far_top: 1.5
+      far_top: 1.5  # высота 3.0 по ТЗ ближе far_from; дальше 1.5 -- f3.0 давал 20 ложных СТОП/1510 против 4, см. output/runs/fake_obj_fo_h3f15.txt
       edge_lines: true
       tracker: evidence
       evidence_threshold: 2.2
@@ -49,6 +49,12 @@ tunnel_od_detector:
       default_rail_offset: 0.5
       min_points_k: 12000.0
       min_points_floor: 3
+      persist_hits: 6  # подтверждение по устойчивому неподвижному треку (объект 10: 5/7→6/7, ложные 4→5/1510, пустые 1,6→2,0 %); scratchpad exp3 V3
+      persist_slope: [-1.25, -0.75]
+      persist_edge_margin: 0.25
+      min_sight_m: 30.0  # путь виден ближе 30 м (ось оборвалась у лидара) -- unknown, не clear; ~тормозной путь с 25 км/ч; scratchpad exp6 a
+      sensor_axis_union_m: 40.0  # организаторы ставят объекты от оси лидара, рельсы повёрнуты на −0,27°; 7/8→8/8, объект 4 СТОП с 33 м, ложные 5/1510, пустые 2,01 %; scratchpad/exp7 V1
+      sensor_axis_max_dev: 0.25
 
 tunnel_od_preproc:
   ros__parameters:

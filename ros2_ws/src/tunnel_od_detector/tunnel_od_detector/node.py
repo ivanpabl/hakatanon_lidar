@@ -79,6 +79,7 @@ class DetectorNode(Node):
         reliability = str(p('qos_reliability', 'reliable')).lower()
         self.canonical_input = bool(p('canonical_input', False))
         self.meta_topic = p('meta_topic', '/tunnel_od/input_meta')
+        self.meta_wait_s = max(0.0, float(p('meta_wait_s', 0.05)))
         self.max_pending = max(1, int(p('max_pending', 2)))
         self.parse_backend = str(p('parse_backend', 'auto')).lower()
         self.skip_repeated = bool(p('skip_repeated', True))
@@ -108,6 +109,7 @@ class DetectorNode(Node):
 
         self.stats = Stats()
         self._lock = threading.Lock()
+        self._meta_cv = threading.Condition(self._lock)
         self._event = threading.Event()
         self._pending = deque()
         self._meta = OrderedDict()
@@ -226,6 +228,7 @@ class DetectorNode(Node):
             self._last_meta = meta
             if 'input' in meta:
                 self._last_input = meta['input']
+            self._meta_cv.notify_all()
 
     def _work_loop(self):
         while not self._stop:
@@ -241,14 +244,23 @@ class DetectorNode(Node):
                 try:
                     self._process(*item)
                 except Exception as e:
+                    if not self.context.ok():   # SIGINT: rclpy закрыл контекст, кадр не ошибка -- останов
+                        self._stop = True
+                        break
                     self.stats.errors += 1
                     self.get_logger().error(f'ошибка обработки кадра: {type(e).__name__}: {e}')
 
     def _process(self, msg, t_recv):
         t0 = time.monotonic()
         stamp = _stamp_sec(msg.header)
+        key = (msg.header.stamp.sec, msg.header.stamp.nanosec)
         with self._lock:
-            meta = self._meta.pop((msg.header.stamp.sec, msg.header.stamp.nanosec), None)
+            # meta C++-узел публикует до облака, но доставка по двум топикам не упорядочена:
+            # ждём её (до meta_wait_s), иначе решение о дедупе зависело бы от порядка доставки.
+            if self.canonical_input and self.meta_wait_s > 0:
+                self._meta_cv.wait_for(lambda: key in self._meta, timeout=self.meta_wait_s)
+            meta = self._meta.pop(key, None)
+            fmt_meta = meta or self._last_meta
         if self.skip_repeated and self._repeat.check(msg.data) and self._last_out is not None:
             out = dict(self._last_out, frame=self._frame, stamp=stamp, repeated=True,
                        queue_ms=(t0 - t_recv) * 1e3, latency_ms=(time.monotonic() - t_recv) * 1e3)
@@ -262,8 +274,13 @@ class DetectorNode(Node):
             return
         x, y, z = self._parse(msg)
         if self._parse_kind != 'python':
-            n_raw = raw_point_count(msg.width * msg.height, meta, self.canonical_input)
-            hesai = raw_hesai_format(meta) if self.canonical_input else hesai_columns(n_raw, msg.fields)
+            if self.canonical_input and fmt_meta is None:
+                # meta ещё не было ни одной: формат неизвестен -- дедуп (для Hesai почти no-op)
+                n_raw, hesai = msg.width * msg.height, False
+            else:
+                # meta кадра потерялась -- формат по прошлой meta (в потоке он не меняется)
+                n_raw = raw_point_count(msg.width * msg.height, fmt_meta, self.canonical_input)
+                hesai = raw_hesai_format(fmt_meta) if self.canonical_input else hesai_columns(n_raw, msg.fields)
             if unordered_raw(n_raw, hesai):
                 x, y, z = dedupe_rounded(x, y, z)
         t1 = time.monotonic()

@@ -14,3 +14,18 @@ ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
 ros2_ws/src/tunnel_od_preproc/build_host/
+# в образ идут только core/, ros2_ws/src/, config/ (см. COPY в Dockerfile) -- остальное не шлём в контекст
+tunnel_od_image.tar.gz
+*.tar.gz
+runs/
+out/
+gui/
+tools/
+build_host/
+**/build_host/
+**/*.pyc
+.pytest_cache/
+.claude/
+.superpowers/
+**/.DS_Store
+presentation/

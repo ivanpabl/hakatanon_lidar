@@ -164,6 +164,9 @@ public:
     if (!speed_topic_.empty()) {
       speed_timer_ = create_wall_timer(std::chrono::milliseconds(500), [this] {subscribe_speed();});
     }
+    if (rel != "best_effort") {
+      qos_timer_ = create_wall_timer(std::chrono::seconds(1), [this] {check_qos();});
+    }
     stats_timer_ = create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(stats_period_)),
       [this] {report();});
@@ -180,17 +183,37 @@ public:
   }
 
 private:
+  // Первый топик PointCloud2 с издателем; если таких несколько -- /lidar_points (иначе нужен input_topic).
   void discover()
   {
+    std::string found;
     for (const auto & kv : get_topic_names_and_types()) {
       if (kv.first.rfind("/tunnel_od/", 0) == 0) {continue;}
+      if (std::find(kv.second.begin(), kv.second.end(), "sensor_msgs/msg/PointCloud2") == kv.second.end()) {
+        continue;
+      }
       if (count_publishers(kv.first) == 0) {continue;}
-      for (const auto & t : kv.second) {
-        if (t == "sensor_msgs/msg/PointCloud2") {
-          discover_timer_->cancel();
-          subscribe(kv.first);
-          return;
-        }
+      if (found.empty() || kv.first == "/lidar_points") {found = kv.first;}
+    }
+    if (!found.empty()) {
+      discover_timer_->cancel();
+      subscribe(found);
+    }
+  }
+
+  // Подписка reliable не получает кадры от издателя best_effort (драйверы лидаров часто публикуют
+  // с SensorDataQoS): если такой издатель есть, подписка пересоздаётся как best_effort.
+  void check_qos()
+  {
+    if (!sub_cloud_) {return;}
+    for (const auto & info : get_publishers_info_by_topic(input_topic_)) {
+      if (info.qos_profile().reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
+        qos_timer_->cancel();
+        qos_.best_effort();
+        RCLCPP_WARN(get_logger(), "издатель %s публикует с QoS best_effort -- подписка переключена на best_effort",
+          input_topic_.c_str());
+        subscribe(input_topic_);
+        return;
       }
     }
   }
@@ -203,7 +226,8 @@ private:
       [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg, const rclcpp::MessageInfo & info) {
         on_cloud(*msg, info);
       });
-    RCLCPP_INFO(get_logger(), "подписка на %s", topic.c_str());
+    RCLCPP_INFO(get_logger(), "подписка на %s (QoS %s)", topic.c_str(),
+      qos_.reliability() == rclcpp::ReliabilityPolicy::BestEffort ? "best_effort" : "reliable");
   }
 
   void subscribe_speed()
@@ -546,7 +570,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_meta_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_diag_;
   rclcpp::Publisher<tf2_msgs::msg::TFMessage>::SharedPtr pub_tf_static_;
-  rclcpp::TimerBase::SharedPtr discover_timer_, speed_timer_, stats_timer_;
+  rclcpp::TimerBase::SharedPtr discover_timer_, speed_timer_, stats_timer_, qos_timer_;
 };
 
 }

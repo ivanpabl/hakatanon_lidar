@@ -58,21 +58,23 @@ def sight_distance(path_range, curvature, c=SIGHT_C_M, cap=RANGE_CAP_M):
 
 
 def decide(objects, *, path_available, path_range, curvature, sight_c=SIGHT_C_M, range_cap=RANGE_CAP_M,
-           pending_score=1.1):
+           pending_score=1.1, min_sight_m=0.0):
+    """min_sight_m -- путь виден ближе этого (ось оборвалась у лидара): габарит не проверен, статус
+    unknown, как без оси."""
     for o in objects:
         o['level'], o['reason'] = object_level(o, in_path=not o.get('beyond_path', False),
                                                pending_score=pending_score)
     stop = [o['distance_m'] for o in objects if o['level'] == 'stop']
     caution = [o['distance_m'] for o in objects if o['level'] == 'caution']
+    sight = sight_distance(path_range, curvature, sight_c, range_cap) if path_available else 0.0
     if stop:
         status = 'stop'
-    elif not path_available:
+    elif not path_available or sight < min_sight_m:
         status = 'unknown'
     elif caution:
         status = 'caution'
     else:
         status = 'clear'
-    sight = sight_distance(path_range, curvature, sight_c, range_cap) if path_available else 0.0
     near = min(stop + caution, default=None)
     clear_to = 0.0 if not path_available else max(0.0, sight if near is None else min(sight, near))
     return {'status': status,

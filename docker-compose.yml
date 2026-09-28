@@ -1,11 +1,23 @@
 x-common: &common
   image: tunnel-od
-  build: {context: ., target: detector}
-  user: "${UID:-1000}:${GID:-1000}"
-  shm_size: 2g                
+  build: {context: ., target: detector, args: {BASE_IMAGE: "${BASE_IMAGE:-ros:humble-ros-base-jammy}"}}
+  # user не задан: entrypoint стартует от root и сразу переходит (setpriv) на uid:gid владельца
+  # ./output, так output/ пишется при любом uid хоста и файлы в нём -- его.
+  # SIGINT, а не SIGTERM: ros2 launch на SIGTERM не останавливает узлы, и stop кончался SIGKILL (137)
+  # без итога <запись>_stats.json; на SIGINT узлы завершаются штатно и пишут итог.
+  stop_signal: SIGINT
+  environment:
+    TUNNEL_OD_TOPIC: ${TOPIC:-}               # топик PointCloud2 ("" -- единственный в записи / автопоиск)
+    TUNNEL_OD_REFIT_MODE: ${REFIT_MODE:-}     # sync -- детерминированный пересчёт пути ("" -- из config)
+    TUNNEL_OD_MAX_PENDING: ${MAX_PENDING:-}   # напр. 100000 -- кадры не отбрасываются ("" -- из config)
+  shm_size: 2g
   volumes:
     - ./config:/opt/tunnel_od/config:ro
     - ./output:/out
+
+x-bag: &bag   # нет каталога BAG -- понятная ошибка compose, а не пустой каталог от root
+  {type: bind, source: "${BAG:-./data/cloud_with_fake_obj}", target: /bag, read_only: true,
+   bind: {create_host_path: false}}
 
 services:
   play:
@@ -13,26 +25,26 @@ services:
     volumes:
       - ./config:/opt/tunnel_od/config:ro
       - ./output:/out
-      - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
+      - *bag
     command: ros2 launch tunnel_od_detector play.launch.py bag:=/bag rate:=${RATE:-1.0}
 
   demo:
     <<: *common
     image: tunnel-od-viz
-    build: {context: ., target: viz}
-    cpus: 6                     
+    build: {context: ., target: viz, args: {BASE_IMAGE: "${BASE_IMAGE:-ros:humble-ros-base-jammy}"}}
+    cpus: ${CPUS:-0}            # 0 -- без ограничения (Docker Desktop с < 6 CPU); CPUS=6 -- как было
     ports:
-      - "127.0.0.1:6080:6080"  
+      - "127.0.0.1:6080:6080"
     volumes:
       - ./config:/opt/tunnel_od/config:ro
       - ./output:/out
-      - ${BAG:-./data/cloud_with_fake_obj}:/bag:ro
+      - *bag
     command: ros2 launch tunnel_od_detector demo.launch.py bag:=/bag rate:=${RATE:-1.0}
 
   detector:
     <<: *common
-    network_mode: host       
-    ipc: host                    
+    network_mode: host
+    ipc: host
     command: ros2 launch tunnel_od_detector detector.launch.py
 
   test:

@@ -25,6 +25,7 @@ CLIP_M = 0.3
 MIN_CELLS = 200
 SMOOTH = 5
 DEFAULT_DT = 0.1
+MAX_GAP_S = 1.0
 
 
 class EgoMotion:
@@ -73,13 +74,19 @@ class EgoMotion:
 
     def update(self, fwd, lat, z_rel, stamp=None):
         """Новый кадр в координатах пути. Возвращает (скорость м/с или None, смещение за кадр м или None)."""
-        dt_frame = DEFAULT_DT if stamp is None or self._last_stamp is None else max(stamp - self._last_stamp, 1e-3)
+        dt_frame = DEFAULT_DT if stamp is None or self._last_stamp is None else stamp - self._last_stamp
         self._last_stamp = stamp
+        if not 0.0 < dt_frame <= MAX_GAP_S:
+            # время назад / повтор кадра / разрыв: сдвиг не сопоставить со временем -- история заново
+            self._hist.clear()
+            self._raw.clear()
+            self.speed = None
+            dt_frame = DEFAULT_DT
         img = self._image(fwd, lat, z_rel)
         t = stamp
         if len(self._hist) == self.lag:
             prev, t_prev = self._hist[0]
-            dt = DEFAULT_DT * self.lag if t is None or t_prev is None else max(t - t_prev, 1e-3)
+            dt = DEFAULT_DT * self.lag if t is None or t_prev is None else t - t_prev
             if self.speed is None:
                 lo, hi = -int(1.0 / S_BIN), int(self._max_shift / S_BIN)
             else:

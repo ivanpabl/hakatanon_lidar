@@ -28,7 +28,8 @@ Visualization Manager:
         History Policy: Keep Last
       Style: Points
       Size (Pixels): 2
-      Color Transformer: AxisColor
+      Color Transformer: FlatColor
+      Color: 150; 170; 205
       Axis: Z
       Use Fixed Frame: true
       Autocompute Value Bounds: false
@@ -48,7 +49,8 @@ Visualization Manager:
         History Policy: Keep Last
       Style: Points
       Size (Pixels): 2
-      Color Transformer: AxisColor
+      Color Transformer: FlatColor
+      Color: 150; 170; 205
       Axis: Z
       Use Fixed Frame: true
       Autocompute Value Bounds: false
@@ -85,13 +87,13 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/Orbit
       Name: Current View
-      Distance: 45
+      Distance: 85
       Focal Point:
         X: 0
-        Y: -30
-        Z: 0
-      Pitch: 0.35
-      Yaw: 1.5708
+        Y: -46
+        Z: -1
+      Pitch: 0.55
+      Yaw: 2.6
       Near Clip Distance: 0.01
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
@@ -99,6 +101,6 @@ Visualization Manager:
 Window Geometry:
   Height: 900
   Width: 1600
-  Hide Left Dock: false
+  Hide Left Dock: true
   Displays:
-    collapsed: false
+    collapsed: true

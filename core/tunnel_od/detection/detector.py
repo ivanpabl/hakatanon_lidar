@@ -24,6 +24,8 @@ from .plausibility import CTX_HALF_WIDTH, Context, is_implausible, object_featur
 from .tracking import EvidenceTracker, Tracker
 from .zone import RECT_DEFAULT, rect_zone, zone_mask
 
+MIN_FRAME_POINTS = 50  # меньше -- кадр пустой/обрезанный: полотно и зону не оценить, статус unknown
+
 
 class ObstacleDetector:
     """Состояние между кадрами: путь (рельсы), смещение головки рельса над
@@ -35,19 +37,24 @@ class ObstacleDetector:
     не оценить -- как method='zone' с прямоугольником RECT_DEFAULT."""
 
     def __init__(self, near_cutoff=2.0, max_range=250.0, half_width=1.0,
-                 clearance=0.15, height=2.5, confirm_hits=3, confirm_window=5,
+                 clearance=0.15, height=3.0, confirm_hits=3, confirm_window=5,
                  max_path_age=30, default_rail_offset=0.5, path_margin=0.0, zone=None,
                  min_points_k=MIN_POINTS_K, min_points_floor=MIN_POINTS_FLOOR,
                  method='zone', bg_residual=background.RESIDUAL_M, ego_motion=False,
                  tracker='evidence', evidence_threshold=2.2, evidence_decay=0.8, far_axis=True,
                  edge_lines=True, far_half_width=0.7, far_top=1.5, far_from=20.0, alarm_hold=3,
                  alarm_hold_min=5, path_hold=0, ego_check=True, ego_min_travel=4.0, ego_max_slope=-0.35,
-                 features=True, plausibility=True, plausible_min_dist=60.0, plausible_behind_n=2):
+                 features=True, plausibility=True, plausible_min_dist=60.0, plausible_behind_n=2,
+                 persist_hits=6, persist_slope=(-1.25, -0.75), persist_edge_margin=0.25, min_sight_m=30.0,
+                 sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25):
+        self.min_sight_m = min_sight_m
         if method not in ('zone', 'background'):
             raise ValueError(method)
         if tracker not in ('hits', 'evidence'):
             raise ValueError(tracker)
         self.method = method
+        self.sensor_axis_union_m = sensor_axis_union_m
+        self.sensor_axis_max_dev = sensor_axis_max_dev
         self.features = features
         self.plausibility = plausibility
         self.plausible_min_dist = plausible_min_dist
@@ -88,7 +95,10 @@ class ObstacleDetector:
         if tracker == 'evidence':
             self._tracker = EvidenceTracker(evidence_threshold, evidence_decay, min_hits=confirm_hits,
                                             hold=alarm_hold, hold_min=alarm_hold_min, ego_check=ego_check,
-                                            ego_min_travel=ego_min_travel, ego_max_slope=ego_max_slope)
+                                            ego_min_travel=ego_min_travel, ego_max_slope=ego_max_slope,
+                                            persist_hits=persist_hits, persist_slope=tuple(persist_slope),
+                                            persist_max_lat=(None if persist_edge_margin is None
+                                                             else max(hw for _, _, hw in self.zone) - persist_edge_margin))
             ego_motion = True
         else:
             self._tracker = Tracker(confirm_hits, confirm_window)
@@ -171,6 +181,8 @@ class ObstacleDetector:
         """Быстрый путь, каждый кадр: использует последний известный путь."""
         self._frame += 1
         path_ok = self._path_valid()
+        if len(x) < MIN_FRAME_POINTS:
+            return self._unknown_frame(path_ok, stamp)
         if path_ok and self._path_frame != self._seen_path_frame:
             self._seen_path_frame = self._path_frame
             self._hold_far_axis()
@@ -191,6 +203,7 @@ class ObstacleDetector:
             self.speed, self._displacement = self._ego.update(
                 fwd[e], lat[e], z[e] - self._tor_at(fwd[e], self._bed), stamp)
             self._travel += self._displacement or 0.0
+        lat = self._axis_union(fwd, x, lat)
         if self.method == 'zone':
             m = np.abs(lat) < self.half_width
             fwd, lat, z, x = fwd[m], lat[m], z[m], x[m]
@@ -217,6 +230,8 @@ class ObstacleDetector:
             o['edge_line'] = o.get('edge_line', False) or bool(o['distance_m'] > far_start and (
                 (self.far_half_width is not None and abs(o['lateral_m']) > self.far_half_width)
                 or (self.far_top is not None and o['low_m'] > self.far_top)))
+        if hasattr(self._tracker, 'persist_max_d'):
+            self._tracker.persist_max_d = far_start
         self._tracker.update([o for o in objects if not o.get('edge_line')], self._displacement,
                              lambda d: min_points_at(d, self.min_points_k, self.min_points_floor),
                              travel=self._travel if self._displacement is not None else None)
@@ -242,13 +257,14 @@ class ObstacleDetector:
                             'ego_slope': None, 'ego_carried': False,
                             'level': tr.get('level', 'stop'), 'reason': tr.get('reason', 'in_gauge'),
                             'rail_z_m': float(self._tor_at(np.array([d]), self._bed)[0])})
+        self._add_output_fields(objects)
         path_range = self._path_range if path_ok else None
         limit = (path_range if path_range is not None else 0.0) + self.path_margin
         for o in objects:
             o['beyond_path'] = o['distance_m'] > limit and not o['held']
         curvature = axis_curvature(self._fit_fwd, self._fitted_cl) if path_ok else 0.0
         dec = decide(objects, path_available=path_ok, path_range=path_range, curvature=curvature,
-                     pending_score=0.5 * self.evidence_threshold)
+                     pending_score=0.5 * self.evidence_threshold, min_sight_m=self.min_sight_m)
         for o in objects:
             o.pop('_idx', None)
         self._tracker.set_alarm({o['track_id'] for o in objects if o['level'] == 'stop' and 'track_id' in o})
@@ -272,6 +288,59 @@ class ObstacleDetector:
             'travel_m': self._travel,
             'stamp': stamp,
         }
+
+    def _axis_union(self, fwd, x, lat):
+        """sensor_axis_union_m: ближе этой дальности точка в зоне, если она в зоне от оси пути ИЛИ
+        от оси лидара (x=0) -- пока ось пути на участке от лидара не отходит от оси лидара дальше
+        sensor_axis_max_dev (на прямой оси расходятся из-за разворота лидара; в кривой -- только ось
+        пути). Объединение полос [c-hw, c+hw] и [-hw, hw] -- полоса вокруг отрезка [min(c,0), max(c,0)]:
+        lat = x - clip(x, min(c,0), max(c,0)) -- непрерывно; зона, кластеры, края и persist -- от неё."""
+        if self.sensor_axis_union_m is None or self._fitted_cl is None:
+            return lat
+        f, cl = self._fit_fwd, self._fitted_cl
+        bad = (f <= self.sensor_axis_union_m) & (np.abs(cl) > self.sensor_axis_max_dev)
+        to = float(min(self.sensor_axis_union_m, f[-1], f[bad][0] if bad.any() else np.inf))
+        c = x - lat
+        u = fwd < to
+        return np.where(u, x - np.clip(x, np.minimum(c, 0.0), np.maximum(c, 0.0)), lat)
+
+    def _unknown_frame(self, path_ok, stamp):
+        """Результат той же структуры для пустого/крошечного кадра: габарит не проверить."""
+        return {
+            'status': 'unknown',
+            'obstacle': False,
+            'distance_m': None,
+            'caution_distance_m': None,
+            'sight_m': 0.0,
+            'clear_to_m': 0.0,
+            'n_points': 0,
+            'path_available': path_ok,
+            'gauge_m': self._track_gauge,
+            'path_age_frames': None if not path_ok else self._frame - self._path_frame,
+            'path_range_m': self._path_range if path_ok else None,
+            'objects': [],
+            'speed_mps': self.speed,
+            'displacement_m': None,
+            'travel_m': self._travel,
+            'stamp': stamp,
+        }
+
+    def _add_output_fields(self, objects):
+        """Размер, уверенность и центр объекта в системе облака (обратное к fwd=-y, lat=x-ось(fwd))."""
+        for o in objects:
+            has_edges = 'lat_min_m' in o and not o.get('held')
+            o['size_m'] = None if not has_edges else {
+                'length': round(o['far_m'] - o['distance_m'], 2),
+                'width': round(o['lat_max_m'] - o['lat_min_m'], 2),
+                'height': round(o['height_m'] - o['low_m'], 2)}
+            ev = o.get('evidence')
+            o['confidence'] = 1.0 if o.get('confirmed') else (
+                0.0 if ev is None else round(min(1.0, ev / self.evidence_threshold), 2))
+            f = 0.5 * (o['distance_m'] + o.get('far_m', o['distance_m']))
+            lat = 0.5 * (o['lat_min_m'] + o['lat_max_m']) if has_edges else o['lateral_m']
+            z = o.get('rail_z_m', 0.0) + 0.5 * (o.get('low_m', 0.0) + o.get('height_m', 0.0))
+            o['position_m'] = {'x': round(float(self._center_of_fwd(np.array([f]))[0]) + lat, 2),
+                               'y': round(-f, 2), 'z': round(float(z), 2)}
 
     def _add_features(self, objects, all_pts, elev):
         """Признаки правдоподобности (plausibility.object_features) объектам с треком."""
