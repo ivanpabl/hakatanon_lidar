@@ -12,9 +12,8 @@
     preproc      C++-разбор облака против Python: совпадение и время (check_preproc.py)
     input        проверка входного потока по контракту (input_report.py)
     contract     перевод записи в формат контракта v1 (to_contract_v1.py)
-    dashboard    страница метрик output/report/metrics.html (dashboard.py)
-    demo         3D-плеер output/report/demo.html (demo.py)
-    site         главная страница отчёта output/report/index.html (site.py)
+    dashboard    страница отчёта output/report/index.html: как работает, результаты, демо, запуск (dashboard.py)
+    demo         3D-плеер output/report/demo.html, встроен в index.html (demo.py)
     inject-demo  картинки кадра до и после вставки объекта (inject_demo.py)
     selflabel    эпизоды СТОП на new_data, проверенные проездом (selflabel.py)
     fake-obj     метрики по эталону записи cloud_with_fake_obj (eval_fake_obj.py)
@@ -31,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 COMMANDS = {
     'all': 'run_all', 'alarms': 'alarms', 'approach': 'eval_approach', 'injection': 'eval_injection',
     'benchmark': 'benchmark', 'preproc': 'check_preproc', 'input': 'input_report', 'contract': 'to_contract_v1',
-    'dashboard': 'dashboard', 'demo': 'demo', 'site': 'site', 'inject-demo': 'inject_demo',
+    'dashboard': 'dashboard', 'demo': 'demo', 'inject-demo': 'inject_demo',
     'selflabel': 'selflabel', 'fake-obj': 'eval_fake_obj', 'compare-row': 'compare_row',
     'approach-trace': 'approach_trace',
 }

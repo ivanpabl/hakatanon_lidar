@@ -1,0 +1,134 @@
+# docker compose up play (cloud_with_fake_obj, финальный прогон 2026-09-29), обрезано до значимого.
+# Удалены повторы: 234 строк «СТОП кадр», 27 строк «отброшен кадр», 6 повторов numpy RuntimeWarning.
+# Периодические сводки preproc/detector, ИТОГ, latency_probe и завершение процессов сохранены полностью.
+ Container hakatanon_lidar-play-1 Recreate 
+ Container hakatanon_lidar-play-1 Recreated 
+Attaching to play-1
+ Container hakatanon_lidar-play-1 Starting 
+ Container hakatanon_lidar-play-1 Started 
+play-1  | [INFO] [launch]: All log files can be found below /tmp/ros/log/2026-09-28-22-35-17-373448-481e630e498c-1
+play-1  | [INFO] [launch]: Default logging verbosity is set to INFO
+play-1  | [INFO] [1790634917.758186708] [rosbag2_storage]: Opened database '/bag/cloud_with_fake_obj_0.db3' for READ_ONLY.
+play-1  | [INFO] [launch.user]: [tunnel_od] запись cloud_with_fake_obj: /lidar_points, frame_id hesai_lidar, 151 с, rate 1.0
+play-1  | [INFO] [component_container-1]: process started with pid [35]
+play-1  | [INFO] [detector_node-2]: process started with pid [37]
+play-1  | [INFO] [latency_probe-3]: process started with pid [39]
+play-1  | [latency_probe-3] [INFO] [1790634919.570644095] [tunnel_od_latency_probe]: замер задержки: /lidar_points -> /tunnel_od/result
+play-1  | [component_container-1] [INFO] [1790634919.783018924] [tunnel_od_container]: Load Library: /ws/install/tunnel_od_preproc/lib/libpreproc_component.so
+play-1  | [component_container-1] [INFO] [1790634919.787590142] [tunnel_od_container]: Found class: rclcpp_components::NodeFactoryTemplate<tunnel_od::PreprocNode>
+play-1  | [component_container-1] [INFO] [1790634919.787767249] [tunnel_od_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<tunnel_od::PreprocNode>
+play-1  | [component_container-1] [INFO] [1790634919.807292540] [tunnel_od_preproc]: подписка на /lidar_points (QoS reliable)
+play-1  | [component_container-1] [INFO] [1790634919.807413382] [tunnel_od_preproc]: формат auto, оси auto, dual return удалять, обрезка да [2.0, 250.0] м, apply_mount_tf нет, выход /tunnel_od/cloud
+play-1  | [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/tunnel_od_preproc' in container '/tunnel_od_container'
+play-1  | [detector_node-2] [INFO] [1790634919.999335833] [tunnel_od_detector]: вход: каноническое облако tunnel_od_preproc (np.frombuffer без копии)
+play-1  | [detector_node-2] [INFO] [1790634920.178870331] [tunnel_od_detector]: прогрев детектора 178 мс
+play-1  | [detector_node-2] [INFO] [1790634920.180089022] [tunnel_od_detector]: ObstacleDetector(alarm_hold=3, alarm_hold_min=5, clearance=0.15, confirm_hits=3, confirm_window=5, default_rail_offset=0.5, edge_lines=True, ego_check=True, ego_max_slope=-0.35, ego_min_travel=4.0, evidence_decay=0.8, evidence_threshold=2.2, far_axis=True, far_from=20.0, far_half_width=0.7, far_top=1.5, half_width=1.0, height=3.0, max_path_age=30, max_range=250.0, method='zone', min_points_floor=3, min_points_k=12000.0, min_sight_m=30.0, near_cutoff=2.0, path_hold=0, path_margin=0.0, persist_edge_margin=0.25, persist_hits=6, persist_slope=(-1.25, -0.75), plausibility=True, plausible_behind_n=2, plausible_min_dist=60.0, sensor_axis_max_dev=0.25, sensor_axis_union_m=40.0, tracker='evidence')
+play-1  | [detector_node-2] [INFO] [1790634920.199483103] [tunnel_od_detector]: подписка на /tunnel_od/cloud (QoS RELIABLE, depth 5), пересчёт пути раз в 1 кадр(ов) синхронно
+play-1  | [INFO] [player-4]: process started with pid [72]
+play-1  | [player-4] stdin is not a terminal device. Keyboard handling disabled.[INFO] [1790634922.532118131] [rosbag2_storage]: Opened database '/bag/cloud_with_fake_obj_0.db3' for READ_ONLY.
+play-1  | [player-4] [INFO] [1790634922.532230975] [rosbag2_player]: Set rate to 1
+play-1  | [player-4] [INFO] [1790634922.554508410] [rosbag2_storage]: Opened database '/bag/cloud_with_fake_obj_0.db3' for READ_ONLY.
+play-1  | [INFO] [launch.user]: [tunnel_od] воспроизведение запущено
+play-1  | [INFO] [resume-5]: process started with pid [86]
+play-1  | [player-4] [INFO] [1790634926.414433921] [rosbag2_player]: Resuming play.
+play-1  | [component_container-1] [WARN] [1790634926.479183289] [tunnel_od_preproc]: вход: M4: header.stamp в 2000 году -- часы датчика не синхронизированы
+play-1  | [component_container-1] [WARN] [1790634926.479287789] [tunnel_od_preproc]: вход: формат не распознан (generic): только x, y, z, без удаления дублей; оси -- legacy, задайте input_format / input_axes
+play-1  | [component_container-1] [WARN] [1790634926.479295680] [tunnel_od_preproc]: вход: M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)
+play-1  | [component_container-1] [WARN] [1790634926.479300295] [tunnel_od_preproc]: вход: M1: пустые лучи -- (0, 0, 0) вместо NaN
+play-1  | [component_container-1] [WARN] [1790634926.479308326] [tunnel_od_preproc]: вход: M4: нет времени точки (t_offset_ns / timestamp)
+play-1  | [component_container-1] [INFO] [1790634926.479314254] [tunnel_od_preproc]: первый кадр: /lidar_points, 1x307187, point_step 16, fields [x:0:7,y:4:7,z:8:7,intensity:12:7,] -> формат generic, оси legacy, 307187 -> 168074 точек
+play-1  | [component_container-1] [WARN] [1790634926.522459056] [tunnel_od_preproc]: вход: размер облака сменился посреди потока: 1x307187 -> 1x307174
+play-1  | [INFO] [resume-5]: process has finished cleanly [pid 86]
+play-1  | [detector_node-2] [WARN] [1790634926.932827082] [tunnel_od_detector]: детектор не успевает: отброшен кадр (всего 1)
+play-1  | [detector_node-2] [WARN] [1790634927.213111047] [tunnel_od_detector]: СТОП кадр 4: препятствие 98.0 м, объектов stop 1, ось до 163 м, свободно до 98 м, задержка 278 мс
+play-1  | [detector_node-2] [WARN] [1790634927.424278419] [tunnel_od_detector]: СТОП кадр 5: препятствие 97.9 м, объектов stop 1, ось до 99 м, свободно до 98 м, задержка 372 мс
+play-1  | [detector_node-2] [WARN] [1790634927.751592525] [tunnel_od_detector]: СТОП кадр 7: препятствие 97.3 м, объектов stop 1, ось до 153 м, свободно до 97 м, задержка 327 мс
+play-1  | [component_container-1] [WARN] [1790634928.311793260] [tunnel_od_preproc]: вход: M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)
+play-1  | [component_container-1] [WARN] [1790634928.311877961] [tunnel_od_preproc]: вход: M6: нет описания датчика
+# ... пропущено 234 однотипных строк «СТОП кадр N» (всего таких строк 239) ...
+play-1  | [component_container-1] [INFO] [1790634929.808085754] [tunnel_od_preproc]: 6.8 кадр/с, разбор p50 5.6 / p95 8.3 мс; всего: принято 34, опубликовано 34, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634930.207360723] [tunnel_od_detector]: 4.6 кадр/с (принято 7.6/с), задержка p50 285 / p95 347 мс; всего: принято 38, обработано 23, отброшено 12, пропуски по stamp 0, ошибок 0, кадров с тревогой 6
+# ... пропущено 27 строк «детектор не успевает: отброшен кадр» (всего 29) ...
+play-1  | [component_container-1] [INFO] [1790634934.808890483] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 6.1 / p95 10.8 мс; всего: принято 84, опубликовано 84, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634935.201492275] [tunnel_od_detector]: 6.2 кадр/с (принято 10.0/с), задержка p50 290 / p95 375 мс; всего: принято 88, обработано 54, отброшено 32, пропуски по stamp 0, ошибок 0, кадров с тревогой 19
+play-1  | [component_container-1] [INFO] [1790634939.814077056] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.3 / p95 9.3 мс; всего: принято 134, опубликовано 134, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634940.210927485] [tunnel_od_detector]: 6.6 кадр/с (принято 10.0/с), задержка p50 283 / p95 341 мс; всего: принято 138, обработано 87, отброшено 48, пропуски по stamp 0, ошибок 0, кадров с тревогой 50
+play-1  | [component_container-1] [INFO] [1790634944.807027337] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.0 / p95 6.6 мс; всего: принято 184, опубликовано 184, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634945.200859514] [tunnel_od_detector]: 7.4 кадр/с (принято 10.0/с), задержка p50 282 / p95 344 мс; всего: принято 188, обработано 124, отброшено 62, пропуски по stamp 0, ошибок 0, кадров с тревогой 87
+play-1  | [component_container-1] [INFO] [1790634949.807786251] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.5 / p95 5.9 мс; всего: принято 234, опубликовано 234, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634950.200809961] [tunnel_od_detector]: 8.2 кадр/с (принято 10.0/с), задержка p50 256 / p95 324 мс; всего: принято 238, обработано 165, отброшено 70, пропуски по stamp 0, ошибок 0, кадров с тревогой 116
+play-1  | [detector_node-2] /usr/local/lib/python3.10/dist-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+play-1  | [detector_node-2]   return _methods._mean(a, axis=axis, dtype=dtype,
+play-1  | [detector_node-2] /usr/local/lib/python3.10/dist-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in divide
+play-1  | [detector_node-2]   ret = ret.dtype.type(ret / rcount)
+play-1  | [component_container-1] [INFO] [1790634954.807059755] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.5 / p95 6.2 мс; всего: принято 284, опубликовано 284, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634955.224340099] [tunnel_od_detector]: 7.6 кадр/с (принято 10.0/с), задержка p50 276 / p95 332 мс; всего: принято 288, обработано 203, отброшено 83, пропуски по stamp 0, ошибок 0, кадров с тревогой 116
+play-1  | [component_container-1] [INFO] [1790634959.806176405] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.9 / p95 8.6 мс; всего: принято 334, опубликовано 334, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634960.205678539] [tunnel_od_detector]: 7.0 кадр/с (принято 10.0/с), задержка p50 290 / p95 353 мс; всего: принято 338, обработано 238, отброшено 98, пропуски по stamp 0, ошибок 0, кадров с тревогой 116
+play-1  | [component_container-1] [INFO] [1790634964.805293296] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.7 / p95 7.3 мс; всего: принято 384, опубликовано 384, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634965.200711882] [tunnel_od_detector]: 7.2 кадр/с (принято 10.0/с), задержка p50 292 / p95 349 мс; всего: принято 388, обработано 274, отброшено 112, пропуски по stamp 0, ошибок 0, кадров с тревогой 133
+play-1  | [component_container-1] [INFO] [1790634969.805347213] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.0 / p95 7.2 мс; всего: принято 434, опубликовано 434, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634970.202332723] [tunnel_od_detector]: 7.6 кадр/с (принято 10.0/с), задержка p50 278 / p95 330 мс; всего: принято 438, обработано 312, отброшено 123, пропуски по stamp 0, ошибок 0, кадров с тревогой 152
+play-1  | [component_container-1] [INFO] [1790634974.805587554] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.0 / p95 6.7 мс; всего: принято 484, опубликовано 484, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634975.201995709] [tunnel_od_detector]: 8.0 кадр/с (принято 10.0/с), задержка p50 278 / p95 327 мс; всего: принято 488, обработано 352, отброшено 133, пропуски по stamp 0, ошибок 0, кадров с тревогой 164
+play-1  | [component_container-1] [INFO] [1790634979.804998666] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.3 / p95 8.1 мс; всего: принято 534, опубликовано 534, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634980.211882563] [tunnel_od_detector]: 7.6 кадр/с (принято 10.0/с), задержка p50 279 / p95 350 мс; всего: принято 538, обработано 390, отброшено 145, пропуски по stamp 0, ошибок 0, кадров с тревогой 165
+play-1  | [component_container-1] [INFO] [1790634984.805281153] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.4 / p95 8.2 мс; всего: принято 584, опубликовано 584, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634985.202033380] [tunnel_od_detector]: 7.0 кадр/с (принято 10.0/с), задержка p50 292 / p95 378 мс; всего: принято 588, обработано 425, отброшено 160, пропуски по stamp 0, ошибок 0, кадров с тревогой 176
+play-1  | [component_container-1] [INFO] [1790634989.804793210] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.8 / p95 6.4 мс; всего: принято 634, опубликовано 634, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634990.201869193] [tunnel_od_detector]: 7.8 кадр/с (принято 10.0/с), задержка p50 278 / p95 327 мс; всего: принято 638, обработано 464, отброшено 171, пропуски по stamp 0, ошибок 0, кадров с тревогой 176
+play-1  | [component_container-1] [INFO] [1790634994.804406166] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.4 / p95 8.2 мс; всего: принято 684, опубликовано 684, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790634995.201552477] [tunnel_od_detector]: 6.8 кадр/с (принято 10.0/с), задержка p50 289 / p95 363 мс; всего: принято 688, обработано 498, отброшено 188, пропуски по stamp 0, ошибок 0, кадров с тревогой 193
+play-1  | [component_container-1] [INFO] [1790634999.806157187] [tunnel_od_preproc]: 10.2 кадр/с, разбор p50 5.5 / p95 9.8 мс; всего: принято 735, опубликовано 735, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635000.203963350] [tunnel_od_detector]: 6.0 кадр/с (принято 10.0/с), задержка p50 299 / p95 377 мс; всего: принято 738, обработано 528, отброшено 207, пропуски по stamp 0, ошибок 0, кадров с тревогой 221
+play-1  | [component_container-1] [INFO] [1790635004.805969828] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.3 / p95 7.9 мс; всего: принято 785, опубликовано 785, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635005.202019646] [tunnel_od_detector]: 7.2 кадр/с (принято 10.2/с), задержка p50 284 / p95 345 мс; всего: принято 789, обработано 564, отброшено 222, пропуски по stamp 0, ошибок 0, кадров с тревогой 228
+play-1  | [component_container-1] [INFO] [1790635009.804261858] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.4 / p95 6.3 мс; всего: принято 835, опубликовано 835, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635010.201386126] [tunnel_od_detector]: 9.2 кадр/с (принято 10.0/с), задержка p50 252 / p95 302 мс; всего: принято 839, обработано 610, отброшено 227, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635014.804215844] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.5 / p95 6.5 мс; всего: принято 885, опубликовано 885, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635015.209800224] [tunnel_od_detector]: 9.2 кадр/с (принято 10.0/с), задержка p50 260 / p95 307 мс; всего: принято 889, обработано 656, отброшено 230, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635019.804109348] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.2 / p95 7.3 мс; всего: принято 935, опубликовано 935, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635020.202607131] [tunnel_od_detector]: 9.4 кадр/с (принято 10.0/с), задержка p50 252 / p95 306 мс; всего: принято 939, обработано 703, отброшено 234, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635024.803478243] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.6 / p95 8.0 мс; всего: принято 985, опубликовано 985, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635025.202383674] [tunnel_od_detector]: 8.4 кадр/с (принято 10.0/с), задержка p50 249 / p95 317 мс; всего: принято 989, обработано 745, отброшено 241, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635029.803554284] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.6 / p95 6.5 мс; всего: принято 1035, опубликовано 1035, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635030.201382078] [tunnel_od_detector]: 8.8 кадр/с (принято 10.0/с), задержка p50 261 / p95 336 мс; всего: принято 1039, обработано 789, отброшено 248, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635034.802925883] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 4.3 / p95 8.0 мс; всего: принято 1085, опубликовано 1085, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635035.201462388] [tunnel_od_detector]: 9.0 кадр/с (принято 10.0/с), задержка p50 184 / p95 305 мс; всего: принято 1089, обработано 834, отброшено 252, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635039.803969178] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.1 / p95 8.5 мс; всего: принято 1135, опубликовано 1135, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635040.202807026] [tunnel_od_detector]: 7.8 кадр/с (принято 10.0/с), задержка p50 280 / p95 339 мс; всего: принято 1139, обработано 873, отброшено 263, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635044.803473407] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 6.3 / p95 7.9 мс; всего: принято 1185, опубликовано 1185, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635045.202522607] [tunnel_od_detector]: 6.8 кадр/с (принято 10.0/с), задержка p50 289 / p95 343 мс; всего: принято 1189, обработано 907, отброшено 279, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635049.803279400] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.6 / p95 7.4 мс; всего: принято 1235, опубликовано 1235, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635050.203155251] [tunnel_od_detector]: 7.6 кадр/с (принято 10.0/с), задержка p50 280 / p95 342 мс; всего: принято 1239, обработано 945, отброшено 291, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [component_container-1] [INFO] [1790635054.803110305] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.6 / p95 7.3 мс; всего: принято 1285, опубликовано 1285, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635055.217794237] [tunnel_od_detector]: 7.4 кадр/с (принято 10.0/с), задержка p50 283 / p95 341 мс; всего: принято 1289, обработано 982, отброшено 304, пропуски по stamp 0, ошибок 0, кадров с тревогой 237
+play-1  | [detector_node-2] [WARN] [1790635055.680705732] [tunnel_od_detector]: СТОП кадр 985: препятствие 112.1 м, объектов stop 1, ось до 208 м, свободно до 112 м, задержка 294 мс
+play-1  | [detector_node-2] [WARN] [1790635057.349551584] [tunnel_od_detector]: СТОП кадр 995: препятствие 145.6 м, объектов stop 1, ось до 161 м, свободно до 140 м, задержка 262 мс
+play-1  | [component_container-1] [INFO] [1790635059.803579123] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.6 / p95 8.3 мс; всего: принято 1335, опубликовано 1335, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635060.202304821] [tunnel_od_detector]: 7.0 кадр/с (принято 10.0/с), задержка p50 289 / p95 377 мс; всего: принято 1339, обработано 1017, отброшено 320, пропуски по stamp 0, ошибок 0, кадров с тревогой 239
+play-1  | [component_container-1] [INFO] [1790635064.802215509] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.7 / p95 7.8 мс; всего: принято 1385, опубликовано 1385, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635065.211958920] [tunnel_od_detector]: 7.8 кадр/с (принято 10.0/с), задержка p50 269 / p95 331 мс; всего: принято 1389, обработано 1056, отброшено 330, пропуски по stamp 0, ошибок 0, кадров с тревогой 239
+play-1  | [component_container-1] [INFO] [1790635069.802371678] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.7 / p95 8.2 мс; всего: принято 1435, опубликовано 1435, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635070.201002248] [tunnel_od_detector]: 7.6 кадр/с (принято 10.0/с), задержка p50 277 / p95 330 мс; всего: принято 1439, обработано 1094, отброшено 342, пропуски по stamp 0, ошибок 0, кадров с тревогой 239
+play-1  | [component_container-1] [INFO] [1790635074.803633919] [tunnel_od_preproc]: 10.0 кадр/с, разбор p50 5.5 / p95 9.1 мс; всего: принято 1485, опубликовано 1485, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635075.203977016] [tunnel_od_detector]: 7.2 кадр/с (принято 10.0/с), задержка p50 281 / p95 346 мс; всего: принято 1489, обработано 1130, отброшено 356, пропуски по stamp 0, ошибок 0, кадров с тревогой 239
+play-1  | [detector_node-2] [WARN] [1790635075.379861911] [tunnel_od_detector]: детектор не успевает: отброшен кадр (всего 357)
+play-1  | [INFO] [player-4]: process has finished cleanly [pid 72]
+play-1  | [INFO] [launch.user]: [tunnel_od] запись закончилась; итог: /out/cloud_with_fake_obj_stats.json
+play-1  | [component_container-1] [INFO] [1790635079.802377511] [tunnel_od_preproc]: 5.0 кадр/с, разбор p50 4.8 / p95 7.5 мс; всего: принято 1510, опубликовано 1510, потеряно до узла 0, ошибок 0
+play-1  | [detector_node-2] [INFO] [1790635080.201060404] [tunnel_od_detector]: 3.8 кадр/с (принято 4.2/с), задержка p50 285 / p95 368 мс; всего: принято 1510, обработано 1149, отброшено 361, пропуски по stamp 0, ошибок 0, кадров с тревогой 239
+play-1  | [INFO] [latency_probe-3]: sending signal 'SIGINT' to process[latency_probe-3]
+play-1  | [INFO] [detector_node-2]: sending signal 'SIGINT' to process[detector_node-2]
+play-1  | [INFO] [component_container-1]: sending signal 'SIGINT' to process[component_container-1]
+play-1  | [latency_probe-3] [INFO] [1790635081.015063870] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+play-1  | [component_container-1] [INFO] [1790635081.016987954] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+play-1  | [detector_node-2] [INFO] [1790635081.018956614] [tunnel_od_detector]: ИТОГ {"received": 1510, "processed": 1149, "dropped_stale": 361, "stamp_gaps": 0, "errors": 0, "alarm_frames": 239, "min_alarm_distance_m": 2.002795457839966, "latency_ms_p50": 274.3704599997727, "latency_ms_p95": 344.9747047998244, "latency_ms_max": 552.290391000497, "proc_ms_p50": 123.44382800074527, "proc_ms_p95": 170.79203899993445, "topic": "/tunnel_od/cloud", "refit_mode": "sync", "refit_every": 1, "path_fits_async": null, "wall_s": 160.81894669800022, "max_pending": 2, "canonical_input": true, "e2e_ms_p50": 285.864967, "e2e_ms_p95": 357.9520296, "e2e_ms_max": 570.914214, "preproc": {"received": 1510, "published": 1509, "dropped": 0, "errors": 0, "seq_supported": true, "unrotated": 0}, "input": {"frames": 1510, "rejected": 0, "violations": ["format", "M1", "M3", "M4", "M6"], "checks": {"format": {"level": "warn", "title": "распознанный формат и оси", "message": "generic/legacy", "frames:generic/legacy": 1510, "frames": 1510, "rejected": 0, "frame_id": "hesai_lidar", "height": 1, "width": 307200, "frame_id_changes": 0, "layout_changes": 0, "size_changes": 734, "sector_center_deg": -0.3}, "M1": {"level": "warn", "title": "упорядоченное облако, NaN для пустых лучей", "message": "неупорядоченное (height=1); нули вместо NaN", "unordered_frames": 1510, "empty_share": 0.405, "zero_share": 0.405, "nan_share": 0.0, "ring_checked_frames": 0, "ring_mismatch_frames": 0, "dense_mismatch_frames": 0}, "M2": {"level": "ok", "title": "режим отражений", "message": "single return", "mode": "single"}, "M3": {"level": "warn", "title": "оси и /tf_static", "message": "нет /tf_static для 'hesai_lidar'", "tf_children_seen": ""}, "M4": {"level": "warn", "title": "время: синхронизация, шаг 100 +- 1 мс, время точек", "message": "часы не синхронизированы (2000 год); нет времени точек", "stamp_year": 2000, "nonmonotonic": 0, "gaps": 0, "gap_total_s": 0.0, "gap_max_s": 0.0, "off_step": 0, "step_median_ms": 100.0, "sweep_ms_median": null, "first_point_after_stamp_ms": null, "frames_without_point_time": 1510}, "M5": {"level": "ok", "title": "сектор и частота", "message": "сектор -50..50 град, 10.0 Гц", "az_min_deg": -49.8, "az_max_deg": 50.0, "sector_deg": 99.8, "rate_hz_stamp": 10.0, "rate_hz_received": 10.01}, "M6": {"level": "warn", "title": "описание датчика", "message": "нет"}, "S1": {"level": "unknown", "title": "скорость поезда", "message": "speed_topic не задан"}}, "warnings": {"clock": {"count": 1, "text": "M4: header.stamp в 2000 году -- часы датчика не синхронизированы"}, "generic": {"count": 1510, "text": "формат не распознан (generic): только x, y, z, без удаления дублей; оси -- legacy, задайте input_format / input_axes"}, "no_description": {"count": 1491, "text": "M6: нет описания датчика"}, "no_point_time": {"count": 1510, "text": "M4: нет времени точки (t_offset_ns / timestamp)"}, "no_tf": {"count": 1491, "text": "M3: нет /tf_static base_link -> 'hesai_lidar' (высота и наклон лидара неизвестны)"}, "unordered": {"count": 1510, "text": "M1: облако неупорядоченное (height = 1, нужно 128 строк по ring)"}, "width_change": {"count": 734, "text": "размер облака сменился посреди потока: 1x307187 -> 1x307174"}, "zeros": {"count": 1510, "text": "M1: пустые лучи -- (0, 0, 0) вместо NaN"}}}}
+play-1  | [detector_node-2] Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+play-1  | [latency_probe-3] [latency_probe] кадров 1510, результатов 1149, сопоставлено 1149: e2e p50 286.3 / p95 358.3 / max 571.6 мс
+play-1  | [INFO] [latency_probe-3]: process has finished cleanly [pid 39]
+play-1  | [INFO] [component_container-1]: process has finished cleanly [pid 35]
+play-1  | [INFO] [detector_node-2]: process has finished cleanly [pid 37]
+
+play-1 exited with code 0
+play exit 0

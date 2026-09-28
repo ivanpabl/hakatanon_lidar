@@ -4,6 +4,7 @@
     python -m evaluation demo --clip doubleT_obstacle --clip roundT_doubleT:0:150
     python -m evaluation demo --approach roundT_squareT_pressureGate_squareT:30:cube:130
     python -m evaluation demo --bg-points 10000 --out /tmp/demo.html   # файл меньше
+    python -m evaluation demo --from-snapshot                         # без записей: из evaluation/reference/demo_snapshot.json.gz
 
 Подъезд (--approach запись:первый кадр:фигура:дальность) -- как evaluation/eval_approach.py:
 синтетический объект неподвижен в мире на заданной дальности, поезд к нему едет. Объект
@@ -15,9 +16,19 @@
 путь в каждом кадре, как офлайн-инструменты (evaluation/alarms.py). В плеере на каждом кадре: облако,
 ось пути, коридор, объекты, решение и дистанция, время разбора и проверки кадра на этой машине.
 Точки зоны и объектов сохраняются все, фона -- не больше --bg-points на кадр (размер файла).
+
+Встроенный плеер на главной (index.html, demo.html?embed=1) крутит отрывок и диапазон кадров из
+поля embed страницы: он считается здесь по фактическим кадрам (где подтверждён объект выше 1 м,
+иначе кадры с тревогой, иначе весь отрывок).
+
+Снимок: --save-snapshot сохраняет отрывки (каждый SNAPSHOT_EVERY-й кадр) в сжатый json, --from-snapshot
+собирает плеер из него без записей и без tunnel_od. Снимок в git -- evaluation/reference/demo_snapshot.json.gz:
+    python -m evaluation demo --clip doubleT_obstacle:0:72 --no-approach --bg-points 5000 \
+        --save-snapshot evaluation/reference/demo_snapshot.json.gz
 """
 import argparse
 import base64
+import gzip
 import json
 import os
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
@@ -31,12 +42,13 @@ from pathlib import Path
 import numpy as np
 
 from bags import ROOT, open_cloud_bag
-from dashboard import frame_view, git_rev, host, zone_params
-from approach_trace import category
-from eval_injection import front_of
+from dashboard import font_css, frame_view, git_rev, host, zone_params
 
 TEMPLATE = Path(__file__).resolve().parent / 'templates' / 'demo.html'
 OUT = ROOT / 'output' / 'report' / 'demo.html'
+SNAPSHOT = Path(__file__).resolve().parent / 'reference' / 'demo_snapshot.json.gz'
+SNAPSHOT_EVERY = 2
+EMBED_BAG = 'doubleT_obstacle'
 CLIPS = ['doubleT_obstacle', 'roundT_doubleT:0:150']
 APPROACH = ['roundT_squareT_pressureGate_squareT:30:person:170']
 SHAPES = {'person': ('человек стоит', 'cylinder', (0.25, 1.7)),
@@ -71,6 +83,8 @@ def truth_box(kind, dims, d, lat, z0):
 
 def run_approach(job):
     spec, bg_points, max_fwd = job
+    from approach_trace import category
+    from eval_injection import front_of
     from tunnel_od import ObstacleDetector, parse_pointcloud2
     from tunnel_od.pointcloud import beam_directions, xyz_views
     from tunnel_od.sim.inject import inject, on_track
@@ -182,6 +196,53 @@ def run_clip(job):
             'tags': base64.b64encode(np.concatenate(tags).tobytes()).decode()}
 
 
+def embed_loop(clips):
+    """Отрывок и кадры [start, end] (индексы в отрывке) для встроенного плеера на главной: кадры, где
+    подтверждён объект выше 1 м (человек), иначе кадры с тревогой, иначе весь отрывок."""
+    cand = [c for c in clips if 'approach' not in c]
+    if not cand:
+        return None
+    c = next((c for c in cand if c['bag'] == EMBED_BAG), cand[0])
+    f = c['frames']
+    tests = (lambda x: any(o['alarm'] and o['height_m'] >= 1.0 for o in x['objects']), lambda x: x['obstacle'])
+    for test in tests:
+        idx = [k for k, x in enumerate(f) if test(x)]
+        if len(idx) >= 5:
+            return {'clip': c['bag'], 'start': max(0, idx[0] - 2), 'end': min(len(f) - 1, idx[-1] + 2)}
+    return {'clip': c['bag'], 'start': 0, 'end': len(f) - 1}
+
+
+def thin(clip, every):
+    """Каждый every-й кадр отрывка вместе с его точками (детектор при этом шёл по всем кадрам)."""
+    q = np.frombuffer(base64.b64decode(clip['points']), np.int16).reshape(-1, 3)
+    tg = np.frombuffer(base64.b64decode(clip['tags']), np.uint8)
+    keep = list(range(0, len(clip['frames']), every))
+    offs, pts, tags = [0], [], []
+    for k in keep:
+        a, b = clip['offs'][k], clip['offs'][k + 1]
+        pts.append(q[a:b])
+        tags.append(tg[a:b])
+        offs.append(offs[-1] + b - a)
+    out = {**clip, 'frames': [clip['frames'][k] for k in keep], 'offs': offs,
+           'points': base64.b64encode(np.concatenate(pts).tobytes()).decode(),
+           'tags': base64.b64encode(np.concatenate(tags).tobytes()).decode()}
+    if 'approach' in clip:
+        a = dict(clip['approach'])
+        if a.get('first_frame') is not None:
+            a['first_frame'] //= every
+        out['approach'] = a
+    return out
+
+
+def write_page(page, out):
+    page['embed'] = embed_loop(page['clips'])
+    html = TEMPLATE.read_text(encoding='utf-8').replace('/*__FONTS__*/', font_css()).replace(
+        '/*__DATA__*/null', json.dumps(page, ensure_ascii=False, separators=(',', ':')))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding='utf-8')
+    print(f'{out}  {out.stat().st_size / 1e6:.1f} МБ')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--clip', action='append', help=f'запись[:первый кадр[:число кадров]], по умолчанию {CLIPS}')
@@ -192,7 +253,17 @@ def main():
     ap.add_argument('--max-fwd', type=float, default=200.0, help='показывать облако до этой дальности, м')
     ap.add_argument('--workers', type=int, default=2)
     ap.add_argument('--out', type=Path, default=OUT)
+    ap.add_argument('--save-snapshot', type=Path, help=f'сохранить отрывки (каждый {SNAPSHOT_EVERY}-й кадр) в сжатый json')
+    ap.add_argument('--from-snapshot', nargs='?', type=Path, const=SNAPSHOT,
+                    help=f'собрать плеер из снимка без записей (по умолчанию {SNAPSHOT.relative_to(ROOT)})')
     args = ap.parse_args()
+    if args.from_snapshot:
+        with gzip.open(args.from_snapshot, 'rt', encoding='utf-8') as f:
+            page = json.load(f)
+        page['snapshot'] = True
+        print(f'снимок {args.from_snapshot}: ' + ', '.join(f'{c["bag"]} {len(c["frames"])} кадров' for c in page['clips']))
+        write_page(page, args.out)
+        return
     clips = args.clip or CLIPS
     approach = [] if args.no_approach else (args.approach or APPROACH)
     jobs = [('approach', a, args.bg_points, args.max_fwd) for a in approach] + \
@@ -213,11 +284,13 @@ def main():
 
     page = {'generated': date.today().isoformat(), 'commit': git_rev(), 'host': host(),
             'zone': zone_params(), 'clips': data}
-    html = TEMPLATE.read_text(encoding='utf-8').replace(
-        '/*__DATA__*/null', json.dumps(page, ensure_ascii=False, separators=(',', ':')))
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(html, encoding='utf-8')
-    print(f'{args.out}  {args.out.stat().st_size / 1e6:.1f} МБ')
+    if args.save_snapshot:
+        snap = {**page, 'clips': [thin(c, SNAPSHOT_EVERY) for c in data]}
+        args.save_snapshot.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(args.save_snapshot, 'wt', encoding='utf-8', compresslevel=9) as f:
+            json.dump(snap, f, ensure_ascii=False, separators=(',', ':'))
+        print(f'снимок {args.save_snapshot}  {args.save_snapshot.stat().st_size / 1e6:.2f} МБ')
+    write_page(page, args.out)
 
 
 if __name__ == '__main__':

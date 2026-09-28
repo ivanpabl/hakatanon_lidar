@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Детектор препятствий в тоннеле метро</title>
+<meta name="description" content="Детектор препятствий по 128-канальному лидару для тоннелей метро: как он решает, результаты испытаний, демо на записи, архитектура и запуск.">
+<meta name="theme-color" content="#0b1c22">
+<link rel="icon" href="data:,">
+<style>
+/*__FONTS__*/
+</style>
+<style>
+/* =====================================================================
+   Одна страница отчёта. Токены -- из лендинга (тоннель без света):
+     tunnel / bone / haze / line   -- нейтральная основа
+     ice                           -- ось и зона; на графиках -- итоговая версия
+     go / warn / stop              -- только решения детектора (и промахи в метриках)
+   Шрифты: Tektur (узкий, заголовки и крупные числа), Onest (текст). Встроены в base64.
+   ===================================================================== */
+:root {
+  color-scheme: dark;
+  /* нейтральная основа */
+  --tunnel: #0b1c22;      /* тоннель без света */
+  --bone: #d8e0dc;        /* текст и облако точек */
+  --haze: #9fb3b4;        /* вторичный текст */
+  --line: rgba(216, 224, 220, .14);
+  /* функциональные цвета: только геометрия пути и решения детектора */
+  --ice: #7cc4d8;         /* ось и зона */
+  --go: #4fd18b;
+  --warn: #ffb22e;
+  --stop: #ff4a3d;
+  --status: var(--go);
+
+  --display: "Tektur", "Arial Narrow", system-ui, sans-serif;
+  --text: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --col: min(34rem, 100%);
+  --pad: clamp(1rem, 5vw, 5.5rem);
+  --r-pill: 1.5rem;
+  --r-box: 6px;
+}
+body[data-status="warn"] { --status: var(--warn); }
+body[data-status="stop"] { --status: var(--stop); }
+
+* { box-sizing: border-box; }
+html { background: var(--tunnel); -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  margin: 0; color: var(--bone);
+  font: 400 1.125rem/1.6 var(--text);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  font-kerning: normal; hanging-punctuation: first;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--bone); outline-offset: 3px; border-radius: 2px; }
+.skip { position: absolute; left: -999px; top: 8px; z-index: 50; background: var(--bone); color: var(--tunnel); padding: .5rem .9rem; }
+.skip:focus { left: 8px; }
+
+/* ---------- сцена ---------- */
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+.scrim {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(11, 28, 34, .92) 0, rgba(11, 28, 34, .7) 30rem, rgba(11, 28, 34, 0) 50rem),
+    linear-gradient(180deg, rgba(11, 28, 34, .6) 0, rgba(11, 28, 34, 0) 7rem);
+}
+.fallback { display: none; position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; color: var(--bone); }
+body[data-status="warn"] .fallback, body[data-status="stop"] .fallback { color: var(--status); }
+.no-gl #scene { display: none; }
+.no-gl .fallback { display: block; }
+
+/* метка человека в сцене */
+.tag {
+  position: fixed; left: 0; top: 0; z-index: 3; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center;
+  color: var(--bone); opacity: 0; transition: opacity .3s, color .35s;
+  will-change: transform;
+}
+.tag[data-st="warn"] { color: var(--warn); }
+.tag[data-st="stop"] { color: var(--stop); }
+.tag b {
+  display: flex; gap: .45em; align-items: baseline; white-space: nowrap;
+  padding: .3rem .75rem .35rem; border: 1.5px solid currentColor; border-radius: 1.2rem;
+  background: rgba(11, 28, 34, .88);
+  font: 600 1rem/1.1 var(--display); font-variation-settings: "wdth" 85;
+  font-variant-numeric: tabular-nums;
+}
+.tag b span { color: var(--bone); font-weight: 500; }
+.tag i { width: 1.5px; height: 2.4rem; background: linear-gradient(currentColor, transparent); }
+.no-gl .tag { display: none; }
+@media (prefers-reduced-motion: reduce) { .tag { transition: none; } }
+
+.synth {
+  position: fixed; z-index: 1; right: var(--pad); bottom: 1.1rem; margin: 0;
+  font-size: .85rem; color: var(--haze);
+  display: flex; align-items: center; gap: .5rem;
+  padding: .2rem .65rem; border-radius: 1rem; background: rgba(11, 28, 34, .8);
+}
+.synth::before {
+  content: ""; width: .6rem; height: .6rem; border-radius: 50%;
+  border: 1.5px dashed var(--haze);
+}
+
+/* ---------- шапка ---------- */
+.bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 2rem;
+  padding: 1.1rem var(--pad);
+}
+.brand {
+  font: 600 1.05rem/1 var(--display); font-variation-settings: "wdth" 80;
+  letter-spacing: .01em; text-decoration: none;
+}
+.bar nav { display: flex; gap: 1.6rem; font-size: .95rem; }
+.bar nav a { color: var(--haze); text-decoration: none; }
+.bar nav a:hover { color: var(--bone); }
+
+/* ---------- дальномер ---------- */
+.finder {
+  position: fixed; z-index: 5; right: var(--pad); top: 50%; transform: translateY(-50%);
+  width: 10rem; display: grid; justify-items: start; gap: .9rem;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 3px var(--tunnel), 0 0 14px var(--tunnel);
+}
+.lamps {
+  display: grid; gap: .55rem; padding: .7rem; border-radius: 2.2rem;
+  background: linear-gradient(145deg, #1d3a44, #081419);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), inset 0 -2px 6px rgba(0, 0, 0, .6), 0 18px 40px rgba(0, 0, 0, .45);
+}
+.lamp {
+  --c: var(--go);
+  width: 1.5rem; height: 1.5rem; border-radius: 50%; display: block;
+  background: #071014;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 30%, #fff 8%) 0, color-mix(in srgb, var(--c) 18%, #050b0d) 60%, #04090b 100%);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .7);
+  transition: background .35s, box-shadow .35s;
+}
+.lamp.l-stop { --c: var(--stop); }
+.lamp.l-warn { --c: var(--warn); }
+.lamp.on {
+  background: var(--c);
+  box-shadow: 0 0 16px 3px var(--c);
+  background: radial-gradient(circle at 35% 30%, #fff 0, var(--c) 38%, color-mix(in srgb, var(--c) 55%, #000) 100%);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c) 70%, transparent), 0 0 42px 6px color-mix(in srgb, var(--c) 30%, transparent);
+}
+.finder-state { margin: 0; font-size: .95rem; line-height: 1.2; color: var(--status); transition: color .35s; }
+.finder-value {
+  margin: -.55rem 0 0; font: 700 3.25rem/1 var(--display); font-variation-settings: "wdth" 76;
+  letter-spacing: -.01em;
+}
+.finder-value small { font-size: .38em; font-weight: 500; color: var(--haze); margin-left: .15em; }
+.scale { position: relative; height: min(34vh, 16rem); width: 2.75rem; margin-top: .3rem; }
+.scale::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.scale-fill {
+  position: absolute; left: 0; bottom: 0; width: 2px; height: calc(var(--clear, 1) * 100%);
+  background: var(--status); box-shadow: 0 0 10px var(--status); transition: background .35s;
+}
+.scale-obj {
+  position: absolute; left: -5px; bottom: calc(var(--obj, 1.1) * 100%); width: 12px; height: 12px;
+  margin-bottom: -6px; border-radius: 50%; background: var(--status);
+  box-shadow: 0 0 0 4px rgba(11, 28, 34, .9), 0 0 16px var(--status);
+  opacity: var(--obj-on, 0); transition: opacity .3s, background .35s;
+}
+.scale span { position: absolute; left: .75rem; transform: translateY(50%); font-size: .75rem; color: var(--haze); line-height: 1; white-space: nowrap; }
+
+/* ---------- текст ---------- */
+main { position: relative; z-index: 2; }
+.panel {
+  min-height: 100vh; min-height: 100svh;
+  padding: 7rem var(--pad) 6rem; display: flex; flex-direction: column; justify-content: center;
+}
+.panel > * { width: var(--col); }
+.panel.tall { min-height: 150vh; min-height: 150svh; }
+
+h1, h2 { font-family: var(--display); margin: 0; text-wrap: balance; }
+h1 {
+  font-weight: 700; font-variation-settings: "wdth" 76;
+  font-size: clamp(3rem, min(7.6vw, 11vh), 7rem); line-height: .92; letter-spacing: -.015em;
+  width: min(13ch, 100%);
+}
+.hero { padding-top: 5.5rem; padding-bottom: 3rem; }
+.hero > * { width: min(40rem, 100%); }
+h2 {
+  font-weight: 650; font-variation-settings: "wdth" 82;
+  font-size: clamp(2.1rem, 4.4vw, 3.6rem); line-height: 1; letter-spacing: -.01em;
+  margin-bottom: 1.3rem;
+}
+p { margin: 0 0 1rem; text-wrap: pretty; }
+.lead { font-size: clamp(1.15rem, 1.6vw, 1.35rem); line-height: 1.5; margin-top: 1.8rem; max-width: 30rem; }
+.story .note { color: var(--haze); font-size: 1rem; }
+.hint { margin-top: 2.6rem; color: var(--haze); font-size: .95rem; display: flex; gap: .8rem; align-items: center; }
+.hint::before { content: ""; width: 1px; height: 2.4rem; background: linear-gradient(var(--haze), transparent); }
+
+/* главные результаты */
+.keys { list-style: none; padding: 0; margin: 2rem 0 0; display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 1.2rem 2.6rem; }
+.keys li { display: grid; align-content: start; gap: .35rem; max-width: 10rem; }
+.keys b {
+  font: 700 clamp(2.3rem, 3.6vw, 3.1rem)/1 var(--display); font-variation-settings: "wdth" 76;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.keys span { font-size: .95rem; line-height: 1.35; color: var(--haze); }
+
+.actions { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: center; margin-top: 2.2rem; }
+.btn {
+  display: inline-flex; align-items: center; min-height: 3rem; padding: .7rem 1.35rem;
+  font: 600 1rem/1.2 var(--text); text-decoration: none; border-radius: 1.5rem;
+  color: var(--tunnel); background: var(--bone);
+  transition: background .2s;
+}
+.btn:hover { background: #fff; }
+.link { font-weight: 500; text-decoration-color: rgba(216, 224, 220, .4); text-underline-offset: .25em; }
+.link:hover { text-decoration-color: var(--bone); }
+
+/* второй уровень: подробности по запросу */
+.story details { border-top: 1px solid var(--line); }
+.story details + .story details { border-top: 0; }
+.story details:last-child { border-bottom: 1px solid var(--line); }
+.card details { margin-top: 1.2rem; }
+.card details + details { margin-top: 0; }
+.story summary {
+  display: flex; align-items: center; gap: .7rem; min-height: 2.9rem; padding: .35rem 0;
+  cursor: pointer; list-style: none; color: var(--haze); font-size: .98rem;
+}
+.story summary::-webkit-details-marker { display: none; }
+.story summary::before {
+  content: ""; flex: none; width: .45rem; height: .45rem; margin: 0 .15rem;
+  border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(-45deg);
+}
+@media (prefers-reduced-motion: no-preference) { .story summary::before { transition: transform .2s; } }
+.story details[open] > summary::before { transform: rotate(45deg); }
+.story summary:hover { color: var(--bone); }
+.story .more { padding: .1rem 0 1rem 1.45rem; font-size: 1rem; line-height: 1.55; color: var(--haze); }
+.story .more p { margin-bottom: .6rem; }
+.story .more ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .6rem; }
+.story .more b { color: var(--bone); font-weight: 500; }
+
+/* решения детектора */
+.states { margin: 1.3rem 0 0; display: grid; gap: .8rem; }
+.states div { display: grid; grid-template-columns: 1.1rem 1fr; column-gap: .9rem; }
+.states dt { grid-column: 2; font: 650 1.2rem/1.2 var(--display); font-variation-settings: "wdth" 85; }
+.states dd { grid-column: 2; margin: .15rem 0 0; color: var(--haze); font-size: 1rem; line-height: 1.45; }
+.states i {
+  grid-row: 1 / span 2; width: .8rem; height: .8rem; margin-top: .28rem; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 10px var(--c);
+}
+
+/* цифры */
+.figures { margin: .3rem 0 0; }
+.figures div { display: grid; grid-template-columns: 9rem 1fr; gap: 1.4rem; align-items: baseline; padding: 1rem 0; border-top: 1px solid var(--line); }
+.figures dt {
+  font: 700 clamp(2.2rem, 3.6vw, 3rem)/1 var(--display); font-variation-settings: "wdth" 76;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.figures dd { margin: 0; font-size: 1.02rem; line-height: 1.45; }
+.figures dd span { display: block; color: var(--haze); font-size: .95rem; margin-top: .2rem; }
+.bound { margin: 1.4rem 0 0; color: var(--haze); font-size: 1rem; }
+
+pre {
+  margin: 0 0 1.2rem; padding: 1rem 1.2rem; overflow-x: auto;
+  font: 400 .9rem/1.65 var(--mono); color: var(--bone);
+  background: rgba(4, 12, 15, .75); border-left: 2px solid var(--line);
+}
+code { font-family: var(--mono); font-size: .9em; }
+
+footer {
+  position: relative; z-index: 2; padding: 3rem var(--pad) 3.5rem;
+  color: var(--haze); font-size: .95rem; border-top: 1px solid var(--line);
+  background: rgba(11, 28, 34, .9);
+}
+footer p { width: var(--col); margin: 0; }
+
+/* ---------- первое появление ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .js .hero h1, .js .hero .lead, .js .hero .keys, .js .hero .actions, .js .hero .hint, .js .finder {
+    opacity: 0; transform: translateY(.6rem);
+    transition: opacity .9s cubic-bezier(.2, .7, .2, 1), transform .9s cubic-bezier(.2, .7, .2, 1);
+  }
+  .js .finder { transform: translateY(-50%); }
+  .js .hero .lead { transition-delay: .2s; }
+  .js .hero .keys { transition-delay: .35s; }
+  .js .hero .actions { transition-delay: .5s; }
+  .js .hero .hint { transition-delay: .9s; }
+  .js .finder { transition-delay: 1.1s; }
+  .js.ready .hero h1, .js.ready .hero .lead, .js.ready .hero .keys, .js.ready .hero .actions, .js.ready .hero .hint { opacity: 1; transform: none; }
+  .js.ready .finder { opacity: 1; }
+}
+
+/* ---------- узкие экраны ---------- */
+@media (max-width: 860px) {
+  .scrim { background: linear-gradient(0deg, rgba(11, 28, 34, .95) 0, rgba(11, 28, 34, .85) 58%, rgba(11, 28, 34, .3) 78%, rgba(11, 28, 34, 0) 92%); }
+  .bar { background: rgba(11, 28, 34, .82); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding-top: 1rem; padding-bottom: 1rem; }
+  .bar nav { display: none; }
+  .panel { padding-top: 6rem; padding-bottom: 3.5rem; justify-content: flex-end; }
+  .panel:not(.hero) > * { width: 100%; }
+  .panel:not(.hero) > .card {
+    padding: 1.3rem 1.25rem .9rem; background: rgba(11, 28, 34, .86);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-top: 1px solid var(--line);
+  }
+  .hero { justify-content: flex-end; }
+  .hero .hint { display: none; }
+  .fallback { transform: translateY(-24vh); }
+  .hero h1, .hero .lead { text-shadow: 0 0 4px var(--tunnel), 0 0 22px var(--tunnel); }
+  .keys { grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.6rem; }
+  .keys b { font-size: 1.85rem; }
+  .keys span { font-size: .85rem; }
+  .panel.tall-m { min-height: 150vh; min-height: 150svh; }
+  .finder {
+    z-index: 11; top: .55rem; right: 1rem; transform: none; width: auto;
+    grid-auto-flow: column; align-items: center; gap: .7rem;
+  }
+  .js .finder { transform: none; }
+  .lamps { grid-auto-flow: column; padding: .4rem .5rem; gap: .35rem; }
+  .lamp { width: .95rem; height: .95rem; }
+  .finder-state { display: none; }
+  .finder-value { margin: 0; font-size: 1.9rem; }
+  .scale { display: none; }
+  .synth {
+    top: 4.2rem; bottom: auto; right: auto; left: .8rem; font-size: .8rem;
+  }
+  .figures div { grid-template-columns: 1fr; gap: .3rem; }
+  .tag b { font-size: .9rem; }
+  .tag i { height: 1.6rem; }
+}
+
+/* ---------- мобильная навигация и режим «под сценой отчёт» ---------- */
+.bar nav { scrollbar-width: none; }
+.bar nav::-webkit-scrollbar { display: none; }
+.bar { transition: background .3s; }
+.in-report .bar { background: rgba(11, 28, 34, .92); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.in-report .bar nav a[aria-current="true"] { color: var(--bone); }
+.finder, .tag, .synth { transition: opacity .3s, visibility .3s; }
+/* задержка появления из заставки (1,1 с) к скрытию не относится: под отчётом дальномер исчезает сразу */
+.in-report .finder, .in-report .tag, .in-report .synth { opacity: 0 !important; visibility: hidden; transition-delay: 0s !important; }
+@media (max-width: 860px) {
+  .in-report .bar nav { display: flex; gap: 1.1rem; overflow-x: auto; white-space: nowrap; min-width: 0; font-size: .9rem; }
+  .in-report .bar { align-items: center; gap: 1rem; }
+  .in-report .brand { flex: none; }
+}
+
+/* =====================================================================
+   Отчёт: графики и таблицы дашборда в токенах лендинга
+   ===================================================================== */
+.report {
+  position: relative; z-index: 3; background: var(--tunnel);
+  border-top: 1px solid var(--line);
+  --page: var(--tunnel); --surface: #0f242b; --surface-2: #14303a;
+  --ink: var(--bone); --ink-2: var(--haze); --muted: #849c9e;
+  --border: var(--line); --grid: #183740; --axis: rgba(216, 224, 220, .3);
+  --accent: var(--ice); --accent-soft: rgba(124, 196, 216, .13);
+  --stop-ink: #ff8177; --stop-soft: rgba(255, 74, 61, .14);
+  --warn-ink: #ffb22e; --warn-soft: rgba(255, 178, 46, .13);
+  --faint: #5b7880; --shadow: none;
+  --now: var(--ice); --now-ink: var(--ice); --link: var(--ice); --was: var(--faint); --track: var(--ice);
+  --alarm: var(--stop); --bad-ink: var(--stop-ink); --bad-bg: var(--stop-soft);
+  --good: #36555d; --good-ink: var(--haze); --ok-bg: var(--surface-2);
+  --warn-bg: var(--warn-soft); --info-bg: var(--accent-soft);
+  --t-hero: clamp(3rem, 5.2vw, 4.5rem); --t-big: clamp(2.2rem, 3.2vw, 2.9rem); --t-mid: 1.9rem;
+  --t-h3: 1.125rem; --t-body: 1rem; --t-sm: 1rem; --t-xs: .9375rem; --t-micro: .875rem;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --radius: var(--r-box);
+  font-size: 1rem; line-height: 1.55; font-variant-numeric: tabular-nums;
+}
+.report section { max-width: calc(84rem + 2 * var(--pad)); margin-inline: auto; padding: clamp(3.5rem, 8vw, 6rem) var(--pad) 0; scroll-margin-top: 3.5rem; }
+.report section.part { padding-top: clamp(5rem, 11vw, 9rem); }
+.report section > header { margin-bottom: var(--s6); max-width: 46rem; }
+.report h2 { margin-bottom: 1rem; }
+.report h2.sec {
+  font-size: clamp(1.7rem, 2.8vw, 2.4rem); font-weight: 650; font-variation-settings: "wdth" 84;
+  padding-top: 1.1rem; border-top: 2px solid var(--bone); display: inline-block; margin-bottom: .8rem;
+}
+.report h3 { font: 600 var(--t-h3)/1.3 var(--text); margin: 0 0 var(--s1); letter-spacing: 0; }
+.report .lede { color: var(--haze); font-size: 1.06rem; line-height: 1.55; margin: 0; max-width: 42rem; }
+.report .sub { color: var(--ink-2); font-size: var(--t-xs); line-height: 1.5; margin: 0 0 var(--s4); max-width: 72ch; }
+.report .note { color: var(--muted); font-size: var(--t-micro); line-height: 1.5; margin: var(--s3) 0 0; max-width: 80ch; }
+.report a { color: var(--ice); text-underline-offset: .2em; text-decoration-color: rgba(124, 196, 216, .45); }
+.report a:hover { text-decoration-color: currentColor; }
+.report code { font-size: .88em; color: var(--bone); overflow-wrap: anywhere; }
+.report b { font-weight: 600; }
+.report [hidden] { display: none !important; }
+
+/* ---------- результаты: плитки, графики, методика ---------- */
+/* три больших числа */
+.hero-nums { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s6) var(--s7); }
+.hero-nums li { min-width: 0; }
+.hn-value { margin: 0; font: 700 clamp(4.2rem, 9vw, 8.5rem)/.86 var(--display); font-variation-settings: "wdth" 74; color: var(--bone); letter-spacing: -.01em; white-space: nowrap; }
+.hn-value small { font: 600 .3em var(--display); font-variation-settings: "wdth" 80; color: var(--haze); margin-left: .12em; letter-spacing: 0; }
+.hn-cap { margin: 1rem 0 0; font-size: 1.2rem; line-height: 1.3; color: var(--bone); max-width: 22ch; }
+.hn-ref { margin: .5rem 0 0; font-size: .9rem; color: var(--muted); }
+.hn-ref i { font-style: normal; display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--go); margin-right: .45rem; transform: translateY(-.05rem); }
+/* дорога 0-300 м */
+.road { margin: var(--s8) 0 0; padding: 0; }
+.road h3, .objs h3 { font: 600 1.05rem/1.3 var(--text); margin: 0 0 var(--s3); color: var(--haze); }
+/* объекты организаторов */
+.objs { margin-top: var(--s8); }
+.obj-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s3); }
+.obj { border: 1px solid var(--line); border-radius: var(--r-box); padding: .9rem .8rem .8rem; display: grid; gap: .45rem; align-content: start; min-width: 0; background: rgba(15, 36, 43, .6); }
+.obj svg { width: 44px; height: 30px; display: block; }
+.obj-st { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: var(--haze); letter-spacing: .01em; }
+.obj-st i { width: .55rem; height: .55rem; border-radius: 50%; background: var(--haze); flex: none; }
+.obj[data-l="stop"] .obj-st i { background: var(--stop); box-shadow: 0 0 8px var(--stop); }
+.obj[data-l="caution"] .obj-st i { background: var(--warn); }
+.obj-d { font: 700 1.9rem/1 var(--display); font-variation-settings: "wdth" 78; color: var(--bone); }
+.obj-d small { font: 500 .8rem var(--text); color: var(--haze); margin-left: .15em; }
+.obj[data-l]:not([data-l="stop"]) .obj-d { color: var(--muted); }
+.obj-n { font-size: .8rem; line-height: 1.3; color: var(--muted); }
+.objs-note { margin: var(--s3) 0 0; font-size: .875rem; color: var(--muted); }
+/* мелкие показатели */
+.minor { list-style: none; margin: var(--s8) 0 0; padding: var(--s4) 0 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s4) var(--s6); }
+.minor b { display: block; font: 700 1.8rem/1 var(--display); font-variation-settings: "wdth" 80; color: var(--bone); }
+.minor span { display: block; margin-top: .35rem; font-size: .85rem; line-height: 1.35; color: var(--muted); }
+.safety { margin: var(--s5) 0 0; color: var(--haze); font-size: .95rem; max-width: 72ch; }
+.safety b { color: var(--bone); font-weight: 600; }
+details.more-charts { margin-top: var(--s7); border-top: 1px solid var(--line); }
+details.more-charts > summary { cursor: pointer; padding: var(--s4) 0; color: var(--haze); font-size: .95rem; list-style: none; display: flex; align-items: center; gap: .7rem; }
+details.more-charts > summary::-webkit-details-marker { display: none; }
+details.more-charts > summary::before { content: ""; width: .45rem; height: .45rem; border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(-45deg); transition: transform .2s; }
+details.more-charts[open] > summary::before { transform: rotate(45deg); }
+details.more-charts .charts { margin-top: var(--s4); }
+.charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s8); margin-top: var(--s8); }
+.chart-blk { margin: 0; border-top: 1px solid var(--line); padding-top: var(--s5); min-width: 0; }
+.chart-blk h3 { font: 600 1.15rem/1.3 var(--text); margin: 0; }
+.chart-blk .q { margin: .35rem 0 var(--s4); color: var(--haze); font-size: .95rem; max-width: 60ch; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); font-size: .875rem; color: var(--haze); margin: 0 0 var(--s3); padding: 0; list-style: none; }
+.legend li { display: inline-flex; align-items: center; gap: var(--s2); }
+.legend i { display: inline-block; flex: none; }
+.lg-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ice); }
+.lg-ring { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #5f777c; }
+.lg-bar { width: 16px; height: 8px; border-radius: 2px; background: rgba(124, 196, 216, .22); }
+.lg-col { width: 10px; height: 12px; border-radius: 2px 2px 0 0; background: var(--ice); }
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--text); }
+svg.chart text { fill: var(--muted); font-size: 13px; }
+svg.chart .ink { fill: var(--bone); }
+svg.chart .ink2 { fill: var(--haze); }
+svg.chart .b { font-weight: 600; }
+svg.chart .grid { stroke: rgba(216, 224, 220, .08); stroke-width: 1; }
+svg.chart .axis { stroke: rgba(216, 224, 220, .28); stroke-width: 1; }
+svg.chart .hit { fill: transparent; }
+svg.chart .row:hover .hl, svg.chart .row:focus .hl { fill: rgba(216, 224, 220, .05); }
+svg.chart .row:focus { outline: none; }
+.table-view { margin-top: var(--s3); }
+.table-view summary { cursor: pointer; font-size: .875rem; color: var(--muted); }
+.table-view table, .method table { border-collapse: collapse; width: 100%; font-size: .875rem; margin-top: var(--s3); font-variant-numeric: tabular-nums; }
+.table-view th, .table-view td, .method th, .method td { text-align: left; padding: .4rem .6rem .4rem 0; border-bottom: 1px solid var(--line); color: var(--haze); font-weight: 400; vertical-align: top; }
+.table-view th, .method th { color: var(--muted); }
+.table-view td.n, .table-view th.n { text-align: right; }
+.tbl-wrap { overflow-x: auto; }
+details.method { margin-top: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--haze); font-size: .9rem; line-height: 1.55; }
+details.method > summary { cursor: pointer; padding: var(--s4) 0; color: var(--haze); font-size: .95rem; list-style: none; display: flex; align-items: center; gap: .7rem; }
+details.method > summary::-webkit-details-marker { display: none; }
+details.method > summary::before { content: ""; width: .45rem; height: .45rem; border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(-45deg); transition: transform .2s; }
+details.method[open] > summary::before { transform: rotate(45deg); }
+.method-body { padding: 0 0 var(--s5); display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: var(--s3) var(--s6); margin: 0; }
+.method-body dt { color: var(--bone); }
+.method-body dd { margin: 0; max-width: 72ch; }
+.method-body ul { margin: 0; padding-left: 1.1rem; }
+.method-body li + li { margin-top: .3rem; }
+.method-body .cmd { display: block; font: .82rem/1.6 var(--mono); color: var(--bone); white-space: pre-wrap; margin: .2rem 0; }
+
+/* ---------- демо ---------- */
+.demo { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.demo-stage { position: relative; aspect-ratio: 16 / 9; min-height: 22rem; background: radial-gradient(120% 90% at 50% 40%, #12303a 0%, var(--tunnel) 70%); }
+.demo-stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.demo-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--haze); font-size: .95rem; }
+.demo-read {
+  display: grid; align-content: center; justify-items: start; gap: .8rem; padding: 1.5rem 1.4rem;
+  border-left: 1px solid var(--line); font-variant-numeric: tabular-nums; --status: var(--haze);
+}
+.demo-read[data-st="stop"] { --status: var(--stop); }
+.demo-read[data-st="caution"] { --status: var(--warn); }
+.demo-read[data-st="clear"] { --status: var(--go); }
+.demo-read .lamps { grid-auto-flow: column; padding: .45rem .55rem; gap: .4rem; }
+.demo-read .lamp { width: 1.1rem; height: 1.1rem; }
+.dr-state { margin: .4rem 0 0; font-size: .95rem; line-height: 1.25; color: var(--status); transition: color .3s; }
+.dr-value { margin: 0; font: 700 3.1rem/1 var(--display); font-variation-settings: "wdth" 76; color: var(--bone); }
+.dr-value small { font-size: .38em; font-weight: 500; color: var(--haze); margin-left: .15em; }
+.dr-sub { margin: 0; font-size: .875rem; line-height: 1.45; color: var(--muted); }
+.report .actions { margin-top: 1.6rem; }
+.report .btn { color: var(--tunnel); text-decoration: none; }
+.report .link { color: var(--bone); }
+
+/* ---------- архитектура ---------- */
+.diagram-wrap { overflow-x: auto; border-top: 1px solid var(--line); padding-top: var(--s5); }
+svg.diagram { display: block; width: 100%; min-width: 760px; height: auto; font-family: var(--text); }
+svg.diagram text { fill: var(--bone); font-size: 13px; }
+svg.diagram text.t { font-weight: 600; font-size: 14px; }
+svg.diagram text.s { fill: var(--haze); font-size: 12px; }
+svg.diagram text.m { fill: var(--muted); font-size: 12px; font-family: var(--mono); }
+svg.diagram rect.b { fill: #0f242b; stroke: rgba(216, 224, 220, .3); }
+svg.diagram rect.cpp, svg.diagram rect.py { fill: #0f242b; stroke: var(--ice); stroke-width: 1.3; }
+svg.diagram rect.ext { fill: none; stroke: rgba(216, 224, 220, .3); stroke-dasharray: 4 3; }
+svg.diagram rect.out { fill: #0f242b; stroke: var(--go); }
+svg.diagram .ar { stroke: var(--haze); stroke-width: 1.3; fill: none; }
+svg.diagram .ar.d { stroke-dasharray: 4 3; }
+svg.diagram .ah { fill: var(--haze); }
+.facts3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s5) var(--s7); margin: var(--s7) 0 0; }
+.facts3 div { border-top: 1px solid var(--line); padding-top: var(--s4); }
+.facts3 dt { font-weight: 600; margin-bottom: var(--s2); }
+.facts3 dd { margin: 0; color: var(--haze); font-size: .95rem; }
+
+/* ---------- запуск ---------- */
+.run-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s7); }
+.run-grid > div { border-top: 1px solid var(--line); padding-top: var(--s5); min-width: 0; }
+.report pre { margin: var(--s3) 0 var(--s4); }
+.report pre .c { color: var(--muted); }
+.topics { width: 100%; }
+.topics td:first-child { white-space: nowrap; color: var(--bone); }
+
+footer.page-foot { z-index: 3; margin-top: clamp(5rem, 10vw, 8rem); background: var(--tunnel); }
+footer.page-foot { padding-inline: max(var(--pad), calc((100% - 84rem) / 2)); }
+footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
+
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; max-width: 320px; padding: .5rem .75rem; border-radius: var(--r-box);
+  background: var(--bone); color: var(--tunnel); font: 400 .875rem/1.45 var(--text); opacity: 0; transition: opacity .08s;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+#tip.on { opacity: 1; }
+#tip b { font-weight: 600; }
+
+@media (max-width: 900px) {
+  .run-grid, .facts3 { grid-template-columns: minmax(0, 1fr); }
+  .hero-nums { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+  .hn-value { font-size: clamp(4rem, 19vw, 6rem); }
+  .obj-grid { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+  .minor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .method-body { grid-template-columns: minmax(0, 1fr); gap: var(--s1); }
+  .method-body dd { margin-bottom: var(--s3); }
+  .demo { grid-template-columns: minmax(0, 1fr); }
+  .demo-stage { aspect-ratio: 4 / 5; min-height: 0; max-height: 78svh; width: 100%; }
+  .demo-read { border-left: 0; border-top: 1px solid var(--line); grid-template-columns: auto 1fr; align-items: center; column-gap: 1rem; padding: 1rem 0; }
+  .demo-read .lamps { grid-row: span 2; }
+  .dr-state { margin: 0; }
+  .dr-value { font-size: 2.3rem; grid-column: 2; }
+  .dr-sub { grid-column: 1 / -1; }
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  .obj-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media print {
+  #scene, .fallback, .scrim, .tag, .synth, .finder, .bar { display: none !important; }
+  .report section { break-inside: avoid-page; }
+}
+</style>
+</head>
+<body data-status="go">
+<script>document.documentElement.classList.add("js");</script>
+<a class="skip" href="#main">К содержанию</a>
+
+<canvas id="scene" aria-hidden="true"></canvas>
+<svg class="fallback" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke="#d8e0dc" stroke-opacity=".16">
+    <ellipse cx="900" cy="500" rx="760" ry="700"/>
+    <ellipse cx="900" cy="500" rx="430" ry="400"/>
+    <ellipse cx="900" cy="500" rx="240" ry="222"/>
+    <ellipse cx="900" cy="500" rx="130" ry="120"/>
+    <ellipse cx="900" cy="500" rx="70" ry="65"/>
+  </g>
+  <g stroke="#7cc4d8" stroke-opacity=".55" stroke-width="3">
+    <path d="M 640 1000 L 890 560"/><path d="M 1160 1000 L 910 560"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="900" cy="508" r="30" fill-opacity=".12"/>
+    <circle cx="900" cy="486" r="5"/>
+    <rect x="894" y="492" width="12" height="20" rx="3"/>
+    <rect x="894" y="511" width="5" height="18" rx="2"/><rect x="901" y="511" width="5" height="18" rx="2"/>
+  </g>
+</svg>
+<div class="scrim" aria-hidden="true"></div>
+<div class="tag" aria-hidden="true"><b>Человек <span id="tag-d">205 м</span></b><i></i></div>
+<p class="synth">Синтетическая сцена, не запись</p>
+
+<header class="bar">
+  <a class="brand" href="#top">tunnel_od</a>
+  <nav aria-label="Разделы">
+    <a href="#frame">Как работает</a>
+    <a href="#demo">Демо</a>
+    <a href="#results">Результаты</a>
+    <a href="#arch">Архитектура</a>
+    <a href="#run">Запуск</a>
+  </nav>
+</header>
+
+<aside class="finder" aria-hidden="true">
+  <div class="lamps"><i class="lamp l-stop"></i><i class="lamp l-warn"></i><i class="lamp l-go on"></i></div>
+  <p class="finder-state" id="finder-state">Свободно до</p>
+  <p class="finder-value"><span id="finder-value">200</span><small>м</small></p>
+  <div class="scale">
+    <div class="scale-fill"></div>
+    <div class="scale-obj"></div>
+    <span style="bottom:100%">200</span>
+    <span style="bottom:50%">100</span>
+    <span style="bottom:0">0</span>
+  </div>
+</aside>
+
+<main id="main">
+<div class="story">
+  <section class="panel hero" id="top" data-scene="hero">
+    <h1>Что на пути поезда и&nbsp;как далеко</h1>
+    <p class="lead">Детектор препятствий для тоннелей метро. По&nbsp;облаку точек лидара он на&nbsp;каждый кадр решает: стоп, внимание или свободно&nbsp;— и&nbsp;называет дистанцию.</p>
+    <ul class="keys" id="keys" aria-label="Главные результаты"></ul>
+    <div class="actions">
+      <a class="btn" href="#frame">Посмотреть, как он решает</a>
+      <a class="link" href="#results">Результаты испытаний</a>
+    </div>
+    <p class="hint">Прокрутка&nbsp;— ход поезда. Впереди на&nbsp;пути человек.</p>
+  </section>
+
+  <section class="panel" id="frame" data-scene="frame">
+    <div class="card">
+      <h2>Кадр: 128&nbsp;колец точек</h2>
+      <p>Десять раз в&nbsp;секунду лидар присылает облако. Точки ложатся на&nbsp;пол и&nbsp;стены кольцами: густо у&nbsp;горизонта, редко внизу.</p>
+      <details>
+        <summary>Что в&nbsp;сыром кадре</summary>
+        <div class="more">
+          <p>Каналы у&nbsp;горизонта идут через 0,125°. <span id="raw-zero">Много точек пустые</span>: луч не&nbsp;вернулся. Столбцы идут парами, два отражения одного залпа, <span id="raw-pair">и&nbsp;пары почти всегда совпадают</span>. После удаления нулей и&nbsp;дублей облако меньше в&nbsp;несколько раз.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel" id="path" data-scene="path">
+    <div class="card">
+      <h2>Сначала найти свой путь</h2>
+      <p>Вблизи ось пути строится по&nbsp;рельсам, дальше&nbsp;— по&nbsp;стенам тоннеля, до&nbsp;150–200&nbsp;м.</p>
+      <details>
+        <summary>Как находятся рельсы</summary>
+        <div class="more">
+          <p>Детектор ищет пару выступов профиля высоты в&nbsp;1,45–1,75&nbsp;м друг от&nbsp;друга, с&nbsp;серединой под поездом. По&nbsp;рельсам ось идёт примерно до&nbsp;40&nbsp;м, потом рельсы тонут в&nbsp;редких точках. Если ось не&nbsp;найдена, кадр получает «путь не&nbsp;определён», а&nbsp;не&nbsp;«свободно».</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel" id="zone" data-scene="zone">
+    <div class="card">
+      <h2>Коридор, где не&nbsp;должно быть ничего</h2>
+      <p>Вдоль оси&nbsp;— зона проверки шириной <span data-z="width">2</span>&nbsp;м и&nbsp;высотой до&nbsp;<span data-z="height">3</span>&nbsp;м над рельсом. Точки внутри собираются в&nbsp;объекты.</p>
+      <details>
+        <summary>Размеры и&nbsp;фильтры</summary>
+        <div class="more">
+          <p>По&nbsp;<span data-z="half">1</span>&nbsp;м в&nbsp;каждую сторону от&nbsp;оси, от&nbsp;<span data-z="clearance">0,15</span> до&nbsp;<span data-z="height">3</span>&nbsp;м над головкой рельса. Высота полотна оценивается по&nbsp;дальности, так что зона следует за&nbsp;уклоном. Кабели, контактный рельс и&nbsp;стена в&nbsp;кривой тянутся вдоль края коридора, и&nbsp;такие продольные конструкции отсеиваются.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel tall" id="evidence" data-scene="evidence">
+    <div class="card">
+      <h2>Одна точка ещё не&nbsp;тревога</h2>
+      <p>Издалека человек&nbsp;— лишь несколько точек. Детектор ведёт объект от&nbsp;кадра к&nbsp;кадру и&nbsp;копит свидетельство; пока его мало, это кандидат и&nbsp;решение «внимание».</p>
+      <details>
+        <summary>Как отсекается то, что едет с&nbsp;поездом</summary>
+        <div class="more">
+          <p>Положение объекта предсказывается с&nbsp;учётом хода поезда. Неподвижный объект приближается на&nbsp;пройденный путь. Отражение или блик, который держит дистанцию, пока поезд едет, стоп не&nbsp;получает.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel tall-m" id="stop" data-scene="stop">
+    <div class="card">
+      <h2 id="stop-h">Стоп: объект подтверждён</h2>
+      <p>Свидетельства достаточно: объект подтверждён. Каждый кадр получает одно из&nbsp;четырёх решений:</p>
+      <dl class="states">
+        <div><i style="--c:var(--stop)"></i><dt>Стоп</dt><dd>Препятствие на&nbsp;пути и&nbsp;дистанция до&nbsp;него.</dd></div>
+        <div><i style="--c:var(--warn)"></i><dt>Внимание</dt><dd>Кандидат, который ещё не&nbsp;подтверждён.</dd></div>
+        <div><i style="--c:var(--go)"></i><dt>Свободно</dt><dd>Ничего нет, и&nbsp;сказано, докуда проверено.</dd></div>
+        <div><i style="--c:var(--haze)"></i><dt>Путь не&nbsp;определён</dt><dd>Ось не&nbsp;найдена. Это не&nbsp;«свободно».</dd></div>
+      </dl>
+      <p class="note" id="stop-note" style="margin-top:1.3rem" hidden></p>
+    </div>
+  </section>
+
+</div>
+
+<div class="report" id="report">
+  <section class="part" id="demo" aria-labelledby="demo-h">
+    <header>
+      <h2 id="demo-h">Демо на&nbsp;записи</h2>
+      <p class="lede">Настоящая запись <span id="demo-bag">doubleT_obstacle</span>: поезд стоит, у&nbsp;рельсов человек. Каждый кадр прошёл через детектор; рядом&nbsp;— его решение по&nbsp;текущему кадру и&nbsp;дистанция. Сцену можно вращать мышью, клавиши WASD двигают камеру.</p>
+    </header>
+    <div class="demo">
+      <div class="demo-stage" id="demo-stage">
+        <p class="demo-wait" id="demo-wait">Плеер загрузится, когда раздел окажется на&nbsp;экране</p>
+        <iframe id="demo-frame" title="3D-плеер: облако точек записи и решение детектора по кадрам" allow="autoplay" hidden></iframe>
+      </div>
+      <aside class="demo-read" id="hero-find" data-st="none" aria-label="Решение детектора по текущему кадру">
+        <div class="lamps" aria-hidden="true"><i class="lamp l-stop"></i><i class="lamp l-warn"></i><i class="lamp l-go"></i></div>
+        <p class="dr-state" id="hf-st">Кадр ещё не&nbsp;показан</p>
+        <p class="dr-value" id="hf-num">—</p>
+        <p class="dr-sub" id="hf-sub"></p>
+      </aside>
+    </div>
+    <div class="actions">
+      <a class="btn" href="demo.html">Открыть плеер целиком</a>
+      <span class="note" id="demo-src" style="margin:0"></span>
+    </div>
+  </section>
+
+  <section class="part" id="results" aria-labelledby="results-h">
+    <header>
+      <h2 id="results-h">Результаты испытаний</h2>
+    </header>
+    <ul class="hero-nums" id="hero-nums" aria-label="Главные результаты"></ul>
+    <figure class="road" id="road"></figure>
+    <div class="objs" id="objs"></div>
+    <ul class="minor" id="minor" aria-label="Другие показатели"></ul>
+    <p class="safety" id="safety"></p>
+    <details class="more-charts" id="more">
+      <summary>Подробнее: графики и&nbsp;таблицы</summary>
+      <div class="charts">
+        <figure class="chart-blk" id="c-objects"></figure>
+        <figure class="chart-blk" id="c-range"></figure>
+        <figure class="chart-blk" id="c-latency"></figure>
+      </div>
+    </details>
+    <details class="method" id="method">
+      <summary>Методика и&nbsp;источники</summary>
+      <dl class="method-body" id="method-body"></dl>
+    </details>
+  </section>
+
+  <section class="part" id="arch" aria-labelledby="arch-h">
+    <header>
+      <h2 id="arch-h">Архитектура в&nbsp;ROS&nbsp;2</h2>
+      <p class="lede">Ядро детекции&nbsp;— пакет Python без ROS. Вокруг него два узла: приём облака на&nbsp;C++ и&nbsp;детектор на&nbsp;Python. Всё собирается в&nbsp;один Docker-образ на&nbsp;ROS&nbsp;2 Humble.</p>
+    </header>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 1040 300" role="img" aria-labelledby="arch-t">
+        <title id="arch-t">Узлы и топики ROS 2</title>
+        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="ext" x="10" y="90" width="170" height="84" rx="6"/>
+        <text class="t" x="24" y="118">ros2 bag play</text><text class="s" x="24" y="138">или живой лидар</text><text class="m" x="24" y="160">PointCloud2</text>
+        <rect class="cpp" x="240" y="72" width="220" height="120" rx="6"/>
+        <text class="t" x="256" y="100">tunnel_od_preproc</text><text class="s" x="256" y="120">C++, rclcpp component</text>
+        <text class="s" x="256" y="144">формат, оси, дубли,</text><text class="s" x="256" y="162">обрезка по дальности,</text><text class="s" x="256" y="180">проверка потока</text>
+        <rect class="py" x="600" y="56" width="230" height="152" rx="6"/>
+        <text class="t" x="616" y="84">tunnel_od_detector</text><text class="s" x="616" y="104">Python, rclpy</text>
+        <rect class="b" x="616" y="118" width="198" height="34" rx="4"/><text class="m" x="630" y="140">ObstacleDetector</text>
+        <rect class="b" x="616" y="160" width="198" height="34" rx="4"/><text class="m" x="630" y="182">path_worker</text>
+        <rect class="out" x="870" y="40" width="160" height="70" rx="6"/>
+        <text class="m" x="884" y="66">/tunnel_od/result</text><text class="s" x="884" y="88">JSON на кадр</text>
+        <rect class="b" x="870" y="126" width="160" height="70" rx="6"/>
+        <text class="m" x="884" y="152">/tunnel_od/markers</text><text class="s" x="884" y="174">ось, коридор, объекты</text>
+        <rect class="ext" x="870" y="220" width="160" height="56" rx="6"/>
+        <text class="t" x="884" y="244">RViz2</text><text class="s" x="884" y="264">tunnel_od.rviz</text>
+        <path class="ar" d="M180 132H236" marker-end="url(#ah2)"/>
+        <path class="ar" d="M460 132H596" marker-end="url(#ah2)"/><text class="m" x="528" y="122" text-anchor="middle">/tunnel_od/cloud</text>
+        <path class="ar" d="M830 90H866" marker-end="url(#ah2)"/><path class="ar" d="M830 160H866" marker-end="url(#ah2)"/>
+        <path class="ar d" d="M950 196V216" marker-end="url(#ah2)"/>
+        <path class="ar d" d="M350 192V226" marker-end="url(#ah2)"/><text class="m" x="360" y="226">/tunnel_od/input_diagnostics</text>
+        <path class="ar d" d="M95 174V262H715V212" marker-end="url(#ah2)"/><text class="s" x="300" y="284">use_cpp_preproc:=false — детектор берёт облако напрямую</text>
+      </svg>
+    </div>
+    <dl class="facts3">
+      <div><dt>Ядро <code>core/tunnel_od</code></dt><dd>Python и&nbsp;numpy, без ROS. Тот&nbsp;же код считает метрики офлайн и&nbsp;работает в&nbsp;узле.</dd></div>
+      <div><dt>Пересчёт пути</dt><dd>Ось пути уточняется каждый кадр. В&nbsp;режиме <code>refit_mode: async</code> это делает отдельный процесс <code>path_worker</code>, и&nbsp;кадр его не&nbsp;ждёт.</dd></div>
+      <div><dt>Параметры</dt><dd>Всё в&nbsp;<code>config/detector.yaml</code>. Каталог монтируется в&nbsp;контейнер, после правки пересобирать образ не&nbsp;нужно.</dd></div>
+    </dl>
+  </section>
+
+  <section class="part" id="run" aria-labelledby="run-h">
+    <header>
+      <h2 id="run-h">Запуск</h2>
+      <p class="lede">Цепочка из&nbsp;задания: сборка образа, запуск узла, проигрывание записи, результат по&nbsp;каждому кадру. Зависимости ставятся при сборке, при запуске сеть не&nbsp;нужна.</p>
+    </header>
+    <div class="run-grid">
+      <div>
+        <h3>Docker и&nbsp;ROS&nbsp;2 Humble</h3>
+<pre><code>docker compose build
+<span class="c"># узел + ros2 bag play, итог в output/</span>
+BAG=/путь/к/записи docker compose up play
+<span class="c"># то же по кругу + RViz в браузере, порт 6080</span>
+BAG=/путь/к/записи docker compose up demo
+<span class="c"># только узлы: живой лидар или свой плеер</span>
+docker compose up detector
+<span class="c"># тесты: gtest (C++) и pytest (узел)</span>
+docker compose run --rm test</code></pre>
+        <p class="note"><code>BAG</code>&nbsp;— каталог записи ros2 bag с&nbsp;<code>metadata.yaml</code> (<code>.db3</code> или <code>.mcap</code>). Для детерминированной оценки без потери кадров: <code>REFIT_MODE=sync MAX_PENDING=100000 RATE=0.5</code>.</p>
+        <table class="topics" style="margin-top:var(--s5)">
+          <thead><tr><th>Топик</th><th>Что внутри</th></tr></thead>
+          <tbody>
+            <tr><td><code>/tunnel_od/result</code></td><td>JSON на&nbsp;кадр: <code>status</code> (stop, caution, clear, unknown), <code>distance_m</code>, <code>clear_to_m</code>, <code>objects</code>, <code>latency_ms</code></td></tr>
+            <tr><td><code>/tunnel_od/markers</code></td><td>ось пути, коридор, объекты, текст решения для RViz</td></tr>
+            <tr><td><code>/tunnel_od/input_diagnostics</code></td><td>проверка входного потока по&nbsp;контракту</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Метрики и&nbsp;эта страница без ROS</h3>
+<pre><code>pip install -e "core[eval]"
+<span class="c"># проверка окружения за пару минут;</span>
+<span class="c"># без записей в data/ -- страница из снимков</span>
+python -m evaluation all --quick
+<span class="c"># всё: метрики, эта страница, плеер</span>
+python -m evaluation all
+<span class="c"># список команд</span>
+python -m evaluation --help</code></pre>
+        <p class="note">Python 3.10+, видеокарта не&nbsp;нужна. Отчёт&nbsp;— папка <code>output/report</code>: <code>index.html</code> и&nbsp;<code>demo.html</code>, открываются двойным щелчком без сети.</p>
+        <h3 style="margin-top:var(--s6)">Ядро на&nbsp;Python</h3>
+<pre><code>from tunnel_od import ObstacleDetector, parse_pointcloud2
+
+det = ObstacleDetector()
+x, y, z = parse_pointcloud2(msg.data, msg.point_step, msg.fields)
+result = det.detect(x, y, z)
+result["status"], result["distance_m"], result["clear_to_m"]</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-foot">
+    <p>tunnel_od: геометрический детектор препятствий по&nbsp;лидару, без обучения. Сцена в&nbsp;начале страницы синтетическая: лучи 128&nbsp;каналов трассируются в&nbsp;модели тоннеля прямо в&nbsp;браузере, человек в&nbsp;ней условный. Результаты и&nbsp;демо&nbsp;— из&nbsp;настоящих записей.</p>
+    <p id="stamp"></p>
+  </footer>
+</div>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(() => {
+  "use strict";
+  const doc = document.documentElement;
+  const reduceQuery = matchMedia("(prefers-reduced-motion: reduce)");
+  let reduced = reduceQuery.matches;
+
+  // Размеры зоны и дистанция подтверждения -- из данных страницы (dashboard.py), иначе значения по умолчанию.
+  const DD = (typeof DATA === "object" && DATA) || {};
+  const ZONE = Object.assign({ half_width: 1.0, clearance: 0.15, height: 3.0 }, DD.zone || {});
+  const ZW = ZONE.half_width, ZC = ZONE.clearance, ZH = ZONE.height;
+  const person170 = ((DD.quality || {}).approach || { cells: [] }).cells.find((c) => c.shape === "человек стоит" && c.start === 170);
+  const STOP_D = Math.round(Math.min(185, Math.max(60, (person170 && person170.after.median) || 159)));
+
+  // ---------- мир ----------
+  // x — вбок, y — вверх, вперёд — это −z. Головка рельса на y = 0.
+  const OBJ_Z = -200;          // человек на пути
+  const OBJ_X = 0.05;
+  const LIDAR_Y = 1.9;
+  const SIGHT = 200;           // паспортная дальность при отражении 10 %
+
+  // Сцены по разделам. Камера и цель — в мировых координатах, d — дистанция поезда до объекта.
+  // st: 0 свободно, 1 внимание, 2 стоп. ghost — контур человека и кольцо под ним, tag — метка над ним.
+  const SCENES = {
+    hero:     { d: 205, cam: [0.0, 2.15, 6.2],    tgt: [0.0, 1.25, -55],    far: 0,  sweep: 1, rings: 0, rails: 0,  axis: 0,  zone: 0,  evid: 0,   stop: 0, dim: 1,   st: 0, ghost: 0,  tag: 1 },
+    frame:    { d: 200, cam: [0.9, 3.1, 2.0],     tgt: [-0.6, -0.2, -20],   far: 0,  sweep: 0, rings: 1, rails: 0,  axis: 0,  zone: 0,  evid: 0,   stop: 0, dim: 1,   st: 0, ghost: 0,  tag: 0 },
+    path:     { d: 196, cam: [0.0, 3.1, -1.5],    tgt: [-1.2, 0.0, -76],    far: 0,  sweep: 0, rings: 0, rails: 1,  axis: 1,  zone: 0,  evid: 0,   stop: 0, dim: 1,   st: 0, ghost: 0,  tag: 0 },
+    zone:     { d: 190, cam: [-1.2, 3.0, -14],    tgt: [-1.4, 1.0, -85],    far: 0,  sweep: 0, rings: 0, rails: .4, axis: 1,  zone: 1,  evid: 0,   stop: 0, dim: 1,   st: 0, ghost: 0,  tag: 0 },
+    evidence: { d: STOP_D + 13, cam: [-1.3, 2.3, -185],   tgt: [-2.6, 1.0, -202],   far: 1,  sweep: 0, rings: 0, rails: 0,  axis: 1,  zone: 1,  evid: .55, stop: 0, dim: 1,   st: 1, ghost: .3, tag: 1 },
+    stop:     { d: STOP_D, cam: [-0.9, 1.6, -191],   tgt: [-2.4, 0.9, -201],   far: 1,  sweep: 0, rings: 0, rails: 0,  axis: 1,  zone: 1,  evid: 1,   stop: 1, dim: 1,   st: 2, ghost: 1,  tag: 1 },
+  };
+  // ny — наклон взгляда на узком экране: текст там внизу, человек должен оказаться над ним.
+  for (const k in SCENES) SCENES[k].ny ??= 0;
+  SCENES.hero.ny = -15; SCENES.evidence.ny = -3; SCENES.stop.ny = -3.2;
+  const KEYS = ["d", "far", "sweep", "rings", "rails", "axis", "zone", "evid", "stop", "dim", "st", "ghost", "tag", "ny"];
+
+  // ---------- HUD ----------
+  const body = document.body;
+  const finder = document.querySelector(".finder");
+  const lamps = { go: finder.querySelector(".l-go"), warn: finder.querySelector(".l-warn"), stop: finder.querySelector(".l-stop") };
+  const fState = document.getElementById("finder-state");
+  const fValue = document.getElementById("finder-value");
+  const tag = document.querySelector(".tag");
+  const tagD = document.getElementById("tag-d");
+  let hudKey = "";
+  function updateHud(p) {
+    const st = p.st > 1.5 ? "stop" : p.st > 0.5 ? "warn" : "go";
+    const d = Math.round(p.d);
+    const seen = d <= SIGHT;
+    const value = st === "go" ? Math.min(d, SIGHT) : d;
+    const key = st + value;
+    if (key === hudKey) return;
+    hudKey = key;
+    body.dataset.status = st;
+    tag.dataset.st = st;
+    tagD.textContent = d + " м";
+    for (const k in lamps) lamps[k].classList.toggle("on", k === st);
+    fState.textContent = st === "stop" ? "Стоп: объект" : st === "warn" ? "Внимание: кандидат" : "Свободно до";
+    fValue.textContent = value;
+    finder.style.setProperty("--clear", Math.min(d, SIGHT) / SIGHT);
+    finder.style.setProperty("--obj", Math.min(d, SIGHT) / SIGHT);
+    finder.style.setProperty("--obj-on", seen && st !== "go" ? 1 : 0);
+  }
+
+  // ---------- WebGL ----------
+  const canvas = document.getElementById("scene");
+  const gl = canvas.getContext("webgl", { antialias: false, alpha: false, powerPreference: "high-performance" });
+  // Без сцены: статичная картинка, дальномер переключается по разделам.
+  function staticHud() {
+    doc.classList.add("no-gl");
+    const sections = [...document.querySelectorAll("[data-scene]")];
+    const onScroll = () => {
+      const c = innerHeight / 2;
+      let cur = sections[0];
+      for (const s of sections) if (s.getBoundingClientRect().top < c) cur = s;
+      updateHud(SCENES[cur.dataset.scene]);
+    };
+    addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+  if (!gl) {
+    staticHud();
+    requestAnimationFrame(() => doc.classList.add("ready"));
+    return;
+  }
+
+  const POINT_VS = `
+precision highp float;
+attribute vec4 aBeam;             // угол места, азимут (рад), номер канала, случайное число
+uniform mat4 uVP;
+uniform vec3 uLidar;
+uniform float uObjZ, uSight, uPx, uTime;
+uniform float uKeep;              // доля лучей на этом уровне качества: лучи с рангом выше гаснут плавно
+uniform float uSweep, uRings, uRails, uZone, uEvid, uStop, uDim, uFar;
+varying vec3 vCol;
+varying float vA;
+
+const float R = 2.75;             // радиус тоннеля
+const float YC = 1.35;            // центр сечения над головкой рельса
+const float BED = -0.18;          // дно лотка
+const float NONE = 1e9;
+
+float box(vec3 o, vec3 inv, vec3 lo, vec3 hi) {
+  vec3 t0 = (lo - o) * inv, t1 = (hi - o) * inv;
+  vec3 a = min(t0, t1), b = max(t0, t1);
+  float tn = max(max(a.x, a.y), a.z), tf = min(min(b.x, b.y), b.z);
+  return (tf >= max(tn, 0.0) && tn > 0.0) ? tn : NONE;
+}
+
+void main() {
+  float el = aBeam.x, az = aBeam.y;
+  vec3 d = vec3(cos(el) * sin(az), sin(el), -cos(el) * cos(az));
+  vec3 dd = d;
+  if (abs(dd.x) < 1e-6) dd.x = 1e-6;
+  if (abs(dd.y) < 1e-6) dd.y = 1e-6;
+  vec3 inv = 1.0 / dd;
+  vec3 o = uLidar;
+
+  // стенка тоннеля: дальний корень, изнутри цилиндра
+  float t = NONE; float cls = 0.0;
+  float qa = d.x * d.x + d.y * d.y;
+  if (qa > 1e-9) {
+    float oy = o.y - YC;
+    float qb = o.x * d.x + oy * d.y;
+    float qc = o.x * o.x + oy * oy - R * R;
+    t = (-qb + sqrt(qb * qb - qa * qc)) / qa;
+  }
+  // полотно
+  if (d.y < 0.0) { float tb = (BED - o.y) / d.y; if (tb < t) { t = tb; cls = 1.0; } }
+  // рельсы и контактный рельс — бесконечные вдоль пути
+  float tr = min(box(o, inv, vec3(-0.795, BED, -1e5), vec3(-0.725, 0.0, 1e5)),
+                 box(o, inv, vec3( 0.725, BED, -1e5), vec3( 0.795, 0.0, 1e5)));
+  if (tr < t) { t = tr; cls = 2.0; }
+  float tk = box(o, inv, vec3(-1.66, BED, -1e5), vec3(-1.56, 0.08, 1e5));
+  if (tk < t) { t = tk; cls = 4.0; }
+  // кабельные лотки на стенах
+  float tc = min(box(o, inv, vec3(2.45, 0.95, -1e5), vec3(2.8, 1.05, 1e5)),
+                 box(o, inv, vec3(-2.8, 1.55, -1e5), vec3(-2.4, 1.63, 1e5)));
+  if (tc < t) { t = tc; cls = 4.0; }
+  // человек: ноги, корпус, руки, голова
+  float to = min(min(box(o, inv, vec3(-0.12, 0.0, uObjZ - 0.09), vec3(0.02, 0.86, uObjZ + 0.09)),
+                     box(o, inv, vec3(0.08, 0.0, uObjZ - 0.09), vec3(0.22, 0.86, uObjZ + 0.09))),
+                 min(box(o, inv, vec3(-0.15, 0.84, uObjZ - 0.12), vec3(0.25, 1.46, uObjZ + 0.12)),
+                     box(o, inv, vec3(-0.04, 1.5, uObjZ - 0.1), vec3(0.14, 1.75, uObjZ + 0.1))));
+  to = min(to, min(box(o, inv, vec3(-0.25, 0.8, uObjZ - 0.07), vec3(-0.16, 1.42, uObjZ + 0.07)),
+                   box(o, inv, vec3(0.26, 0.8, uObjZ - 0.07), vec3(0.35, 1.42, uObjZ + 0.07))));
+  if (to < t) { t = to; cls = 3.0; }
+
+  vec3 p = o + d * t;
+  float far = smoothstep(70.0, uSight, t);
+  bool lost = t > uSight || (cls != 3.0 && aBeam.w < far * 0.55 * (1.0 - uFar));
+  if (lost) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); vA = 0.0; return; }
+
+  bool isObj = cls == 3.0;
+  float inZone = (abs(p.x) < ${ZW.toFixed(3)} && p.y > ${ZC.toFixed(3)} && p.y < ${ZH.toFixed(3)}) ? 1.0 : 0.0;
+
+  // интенсивность отражения
+  float inten;
+  if (cls == 0.0) {
+    float joint = smoothstep(0.9, 1.0, fract(-p.z));          // стыки колец обделки
+    inten = 0.5 + 0.35 * joint + 0.12 * aBeam.w;
+  } else if (cls == 1.0) {
+    float sleeper = (abs(p.x) < 1.25 && fract(-p.z / 0.55) < 0.38) ? 1.0 : 0.0;
+    inten = 0.28 + 0.3 * sleeper + 0.1 * aBeam.w;
+  } else if (cls == 2.0) inten = 1.0;
+  else inten = 0.78;
+
+  vec3 bone = vec3(0.85, 0.88, 0.86), haze = vec3(0.38, 0.52, 0.55), ice = vec3(0.49, 0.77, 0.85);
+  vec3 warn = vec3(1.0, 0.70, 0.18), stopc = vec3(1.0, 0.29, 0.24);
+
+  vec3 col = mix(haze, bone, inten);
+  // каналы: густая полоса у горизонта выделена
+  float dense = step(-0.105, el) * step(el, 0.035);
+  float odd = mod(floor(aBeam.z), 2.0);
+  col = mix(col, mix(bone * (0.55 + 0.25 * odd), ice * 1.25, dense), uRings);
+  // рельсы
+  if (cls == 2.0) col = mix(col, ice * 1.5, uRails);
+  // зона: всё вне коридора гаснет
+  float a = 0.8 * (0.3 + 0.7 * exp(-t / 70.0));
+  a = mix(a, 0.95, uFar * smoothstep(140.0, 185.0, t));
+  a *= mix(1.0, 0.28 + 0.72 * inZone, uZone * (1.0 - 0.6 * uFar) * (isObj ? 0.0 : 1.0));
+  if (isObj) {
+    vec3 oc = mix(warn, stopc, uStop);
+    col = mix(col, oc * 1.6, min(1.0, uEvid * 2.0));
+    a = mix(a, 1.0, uEvid);
+  }
+  // проход луча по дальности
+  float front = mod(uTime * 45.0, 260.0);
+  float pulse = exp(-pow((t - front) / 4.0, 2.0)) * uSweep;
+  col += ice * pulse * 1.4;
+
+  vec4 clip = uVP * vec4(p, 1.0);
+  gl_Position = clip;
+  // меньше лучей -- точки чуть крупнее, чтобы облако не редело и не тускнело на глаз
+  float size = clamp(24.0 / max(clip.w, 0.01), 0.9, 3.4) * clamp(pow(uKeep, -0.25), 1.0, 2.0);
+  if (isObj) size = max(size, 2.0 + 5.0 * uEvid);
+  gl_PointSize = size * uPx;
+  vCol = col;
+  float rank = fract(aBeam.z);
+  vA = a * uDim * (isObj ? 1.0 : smoothstep(uKeep, uKeep * 0.85, rank));
+}`;
+  const POINT_FS = `
+precision mediump float;
+varying vec3 vCol;
+varying float vA;
+void main() {
+  vec2 c = gl_PointCoord - 0.5;
+  float r = dot(c, c) * 4.0;
+  if (r > 1.0) discard;
+  gl_FragColor = vec4(vCol * vA * (1.0 - r * r), 1.0);
+}`;
+  const LINE_VS = `
+precision highp float;
+attribute vec4 aP;                // x, y, z, дальность вдоль оси
+uniform mat4 uVP;
+uniform vec3 uOff;
+varying float vF;
+void main() { vF = aP.w; gl_Position = uVP * vec4(aP.xyz + uOff, 1.0); }`;
+  const LINE_FS = `
+precision mediump float;
+varying float vF;
+uniform vec3 uCol, uFocusCol;
+uniform float uA, uFrom, uLen, uDash, uFocus, uFocusW, uFade;
+void main() {
+  if (vF > uLen || vF < uFrom) discard;
+  if (uDash > 0.5 && fract(vF / 3.0) > 0.55) discard;
+  float fade = 1.0 - uFade * smoothstep(40.0, 190.0, vF) * 0.8;
+  float focus = (1.0 - smoothstep(1.0, 9.0, abs(vF - uFocus))) * uFocusW;
+  vec3 c = mix(uCol, uFocusCol * 1.3, focus);
+  gl_FragColor = vec4(c * uA * fade * (1.0 + focus), 1.0);
+}`;
+  // контур человека: как он выглядит на самом деле, в отличие от редких точек лидара
+  const GHOST_VS = `
+precision highp float;
+attribute vec3 aG;
+uniform mat4 uVP;
+uniform float uPx;
+void main() {
+  vec4 c = uVP * vec4(aG, 1.0);
+  gl_Position = c;
+  gl_PointSize = clamp(9.0 / max(c.w, 0.01), 1.0, 2.6) * uPx;
+}`;
+  const GHOST_FS = `
+precision mediump float;
+uniform vec3 uCol;
+uniform float uA;
+void main() {
+  vec2 c = gl_PointCoord - 0.5;
+  if (dot(c, c) > 0.25) discard;
+  gl_FragColor = vec4(uCol * uA, 1.0);
+}`;
+
+  function program(vs, fs, attr) {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      gl.attachShader(p, s);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+    return { p, u, a: gl.getAttribLocation(p, attr) };
+  }
+  let pointProg, lineProg, ghostProg;
+  try {
+    pointProg = program(POINT_VS, POINT_FS, "aBeam");
+    lineProg = program(LINE_VS, LINE_FS, "aP");
+    ghostProg = program(GHOST_VS, GHOST_FS, "aG");
+  }
+  catch (e) { console.error(e); doc.classList.add("no-gl"); doc.classList.add("ready"); return; }
+
+  // Лучи: 128 каналов, как у Pandar128 — густая полоса 0,125° у горизонта, редкие каналы вниз и вверх.
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function buildBeams(light) {
+    const el = [];
+    for (let i = 0; i < 64; i++) el.push(-6 + i * 0.125);
+    for (let i = 0; i < 44; i++) { const u = i / 43; el.push(-25 + (1 - Math.pow(1 - u, 1.7)) * 18.8); }
+    for (let i = 0; i < 20; i++) el.push(2.2 + i * (12.8 / 19));
+    el.sort((a, b) => a - b);
+    const fine = light ? 0.2 : 0.1, coarse = light ? 0.6 : 0.3;
+    const az = [];
+    for (let i = -30; i <= 30; i++) az.push(i * 0.1);
+    for (let a = 3 + fine; a <= 10 + 1e-6; a += fine) az.push(a, -a);
+    for (let a = 10 + coarse; a <= 80; a += coarse) az.push(a, -a);
+    const rand = rng(1510), rank = rng(77);
+    const list = [];
+    const D = Math.PI / 180;
+    for (let c = 0; c < el.length; c++)
+      for (const a of az) list.push([el[c] * D, (a + (rand() - 0.5) * 0.02) * D, c, rand(), rank()]);
+    // Лучи лежат в буфере по случайному рангу: первые N -- равномерная выборка по всему облаку, поэтому
+    // уровень качества -- это просто drawArrays(0, N), а буфер заливается один раз. Ранг -- в дробной части канала.
+    list.sort((x, y) => x[4] - y[4]);
+    const out = new Float32Array(list.length * 4);
+    list.forEach(([e, a, c, r, q], i) => { out.set([e, a, c + Math.min(q, 0.9999), r], i * 4); });
+    return out;
+  }
+  const light = Math.min(innerWidth, innerHeight) < 600 || (navigator.hardwareConcurrency || 8) <= 4;
+  const beams = buildBeams(light);
+  const beamCount = beams.length / 4;
+  const beamBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, beamBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, beams, gl.STATIC_DRAW);
+
+  // Линии: ось, зона, рамка объекта.
+  function lineBuffer(segs) {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(segs), gl.STATIC_DRAW);
+    return { b, n: segs.length / 4 };
+  }
+  const axisSegs = [], zoneSegs = [], boxSegs = [];
+  for (let f = 0; f < 180; f += 1) axisSegs.push(0, 0.01, -f, f, 0, 0.01, -(f + 1), f + 1);
+  for (const [x, y] of [[-ZW, ZC], [ZW, ZC], [-ZW, ZH], [ZW, ZH]])
+    for (let f = 2; f < 180; f += 2) zoneSegs.push(x, y, -f, f, x, y, -(f + 2), f + 2);
+  for (let f = 10; f <= 180; f += 10) {
+    const c = [[-ZW, ZC], [ZW, ZC], [ZW, ZH], [-ZW, ZH]];
+    for (let i = 0; i < 4; i++) { const [x0, y0] = c[i], [x1, y1] = c[(i + 1) % 4]; zoneSegs.push(x0, y0, -f, f, x1, y1, -f, f); }
+  }
+  {
+    const lo = [-0.3, -0.02, OBJ_Z - 0.3], hi = [0.46, 1.95, OBJ_Z + 0.3];
+    const v = (i) => [i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2], 0];
+    for (const [a, b] of [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]])
+      boxSegs.push(...v(a), ...v(b));
+  }
+  // кольцо на полотне под человеком
+  const ringSegs = [];
+  for (let i = 0; i < 48; i++) {
+    const a0 = i / 48 * Math.PI * 2, a1 = (i + 1) / 48 * Math.PI * 2;
+    ringSegs.push(OBJ_X + Math.cos(a0) * 0.9, 0.02, OBJ_Z + Math.sin(a0) * 0.9, 0,
+                  OBJ_X + Math.cos(a1) * 0.9, 0.02, OBJ_Z + Math.sin(a1) * 0.9, 0);
+  }
+  const axisBuf = lineBuffer(axisSegs), zoneBuf = lineBuffer(zoneSegs), boxBuf = lineBuffer(boxSegs), ringBuf = lineBuffer(ringSegs);
+
+  // Те же коробки, что в шейдере, — точки по поверхности для контура.
+  const PERSON = [
+    [-0.12, 0.0, -0.09, 0.02, 0.86, 0.09], [0.08, 0.0, -0.09, 0.22, 0.86, 0.09],
+    [-0.15, 0.84, -0.12, 0.25, 1.46, 0.12], [-0.04, 1.5, -0.1, 0.14, 1.75, 0.1],
+    [-0.25, 0.8, -0.07, -0.16, 1.42, 0.07], [0.26, 0.8, -0.07, 0.35, 1.42, 0.07],
+  ];
+  const ghostPts = [];
+  {
+    const rand = rng(7);
+    for (const [x0, y0, z0, x1, y1, z1] of PERSON) {
+      const n = Math.round(((x1 - x0) * (y1 - y0) + (y1 - y0) * (z1 - z0)) * 2600);
+      for (let i = 0; i < n; i++) {
+        const y = y0 + rand() * (y1 - y0);
+        // передняя грань и боковые рёбра — так силуэт читается и сбоку
+        const side = rand() < 0.62;
+        const x = side ? x0 + rand() * (x1 - x0) : (rand() < 0.5 ? x0 : x1);
+        const z = side ? z1 : z0 + rand() * (z1 - z0);
+        ghostPts.push(x, y, OBJ_Z + z);
+      }
+    }
+  }
+  const ghostBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, ghostBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ghostPts), gl.STATIC_DRAW);
+  const ghostCount = ghostPts.length / 3;
+
+  // ---------- матрицы ----------
+  function perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+  }
+  function lookAt(e, t) {
+    let zx = e[0] - t[0], zy = e[1] - t[1], zz = e[2] - t[2];
+    let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = zz, xy = 0, xz = -zx;                          // up × z при up = (0, 1, 0)
+    l = Math.hypot(xx, xz) || 1; xx /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return [xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+      -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1];
+  }
+  function mul(a, b) {
+    const o = new Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
+      o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+    return o;
+  }
+
+  // ---------- прокрутка → сцена ----------
+  const sections = [...document.querySelectorAll("[data-scene]")];
+  let anchors = [];
+  function measure() {
+    anchors = sections.map((s) => {
+      const r = s.getBoundingClientRect();
+      return r.top + scrollY + r.height / 2;
+    });
+  }
+  const ease = (x) => x * x * (3 - 2 * x);
+  function target() {
+    const c = scrollY + innerHeight / 2;
+    let i = 0;
+    while (i < anchors.length - 1 && c > anchors[i + 1]) i++;
+    let f = i < anchors.length - 1 ? (c - anchors[i]) / (anchors[i + 1] - anchors[i]) : 0;
+    f = Math.min(1, Math.max(0, f));
+    // «Уменьшить движение» (macOS, iOS, Windows): камера всё равно идёт за прокруткой -- это движение
+    // задаёт сам зритель, -- но без инерции, без заставки и без бегущей волны лучей.
+    const A = SCENES[sections[i].dataset.scene];
+    const B = SCENES[sections[Math.min(i + 1, sections.length - 1)].dataset.scene];
+    const k = ease(f);
+    const out = { cam: [], tgt: [] };
+    for (const key of KEYS) out[key] = A[key] + (B[key] - A[key]) * k;
+    for (let j = 0; j < 3; j++) {
+      out.cam[j] = A.cam[j] + (B.cam[j] - A.cam[j]) * k;
+      out.tgt[j] = A.tgt[j] + (B.tgt[j] - A.tgt[j]) * k;
+    }
+    return out;
+  }
+
+  let cur = null;
+  let w = 0, h = 0, dpr = 1;
+
+  // ---------- качество ----------
+  // Кадр трассирует до ~85 тыс. лучей в вершинном шейдере. Без видеокарты (SwiftShader в Chrome, виртуальные
+  // машины) полный кадр стоит сотни миллисекунд. Качество ступенчатое: число лучей и разрешение буфера (холст
+  // растягивается CSS); 3D при этом не выключается никогда. Цена кадра -- без readPixels и finish: время от
+  // запроса rAF до его вызова (Chrome и Safari придерживают rAF, пока GPU не догонит). Первые WARM_FRAMES
+  // кадров и WARM_MS после загрузки -- прогрев (компиляция шейдеров, заливка буферов), не в счёт. Скользящее
+  // среднее с гистерезисом: дольше DOWN_MS -- ступень вниз, короче UP_MS долго -- ступень вверх. Лучи гаснут
+  // и появляются плавно (uKeep догоняет цель), разрешение меняется, только пока камера стоит.
+  let resLevel = 0;
+  const LEVELS = [[85000, 2], [40000, 1], [15000, 0.75], [6000, 0.5]];   // лучей, предел плотности пикселей
+  const WARM_FRAMES = 30, WARM_MS = 1500, WARM_MAX_MS = 3000, DOWN_MS = 45, UP_MS = 22, DOWN_RUN = 6, UP_RUN = 90;
+  // minLevel: выше уровня, с которого пришлось уйти, не поднимаемся -- качество не «качается»
+  let level = 0, minLevel = 0, keep = 1, keepTarget = 1, resTarget = 0, ema = 0, nFrames = 0, upRun = 0, overRun = 0, reqT = 0;
+  const loadT = performance.now();
+  const levelKeep = (l) => Math.min(1, LEVELS[l][0] / beamCount);
+  function setLevel(l) {
+    level = l; keepTarget = levelKeep(l); resTarget = l; upRun = overRun = 0;
+    console.info(`[tunnel_od] сцена: уровень качества ${l}, лучей ${LEVELS[l][0]}, плотность пикселей до ${LEVELS[l][1]}`);
+  }
+  function sampleCost(now) {
+    // одиночная пауза главного потока (загрузка плеера, сборка графиков) -- не цена кадра: выброс срезается
+    const ms = Math.min(2 * DOWN_MS, Math.max(0, now - reqT));
+    // прогрев: 30 кадров и 1,5 с; на совсем медленной машине 30 кадров ждать долго -- не дольше 3 с
+    if (++nFrames <= WARM_FRAMES && now - loadT < WARM_MAX_MS || now - loadT < WARM_MS) return;
+    if (Math.abs(keep - keepTarget) > 0.02 || resLevel !== resTarget) return;   // уровень ещё не устоялся
+    ema = ema ? ema * 0.85 + ms * 0.15 : ms;
+    if (ema > DOWN_MS && level < LEVELS.length - 1) {
+      upRun = 0;
+      if (++overRun >= DOWN_RUN) {
+        // цена кадра почти пропорциональна числу лучей: сразу ступень, которая по оценке уложится
+        let l = level + 1;
+        while (l < LEVELS.length - 1 && ema * levelKeep(l) / levelKeep(level) > DOWN_MS) l++;
+        minLevel = l; setLevel(l); ema = (DOWN_MS + UP_MS) / 2;
+      }
+    } else if (ema < UP_MS && level > minLevel) {
+      overRun = 0;
+      if (++upRun >= UP_RUN) { setLevel(level - 1); ema = (DOWN_MS + UP_MS) / 2; }
+    } else upRun = overRun = 0;
+  }
+  window.__sceneQuality = () => ({ level, rays: Math.round(keep * beamCount), dpr, frameMs: Math.round(ema) });   // для проверки
+
+  function resize() {
+    if (off) return;
+    dpr = Math.min(devicePixelRatio || 1, light ? 1.5 : 1.75, LEVELS[resLevel][1]);
+    w = canvas.clientWidth; h = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    measure();
+  }
+
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.clearColor(11 / 255, 28 / 255, 34 / 255, 1);
+
+  const start = performance.now();
+  let introT = reduced ? 1 : 0;
+  function draw(p, time) {
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const aspect = w / h;
+    const fov = (aspect < 0.8 ? 72 : 56) * Math.PI / 180;
+    // на узком экране текст внизу, поэтому сцену не смещаем вбок
+    const lat = aspect < 0.8 ? 0.25 : 1;
+    const vp = mul(perspective(fov, aspect, 0.05, 700), lookAt(p.cam, [p.tgt[0] * lat, p.tgt[1] + (aspect < 0.8 ? p.ny : 0), p.tgt[2]]));
+    const lidarZ = OBJ_Z + p.d;
+    const status = p.stop > 0.5 ? [1.0, 0.29, 0.24] : [1.0, 0.70, 0.18];
+
+    const P = pointProg;
+    gl.useProgram(P.p);
+    gl.uniformMatrix4fv(P.u.uVP, false, vp);
+    gl.uniform3f(P.u.uLidar, 0, LIDAR_Y, lidarZ);
+    gl.uniform1f(P.u.uObjZ, OBJ_Z);
+    gl.uniform1f(P.u.uSight, 4 + (SIGHT - 4) * (1 - Math.pow(1 - introT, 3)));
+    gl.uniform1f(P.u.uPx, dpr);
+    gl.uniform1f(P.u.uKeep, keep);
+    gl.uniform1f(P.u.uTime, time);
+    gl.uniform1f(P.u.uSweep, reduced ? 0 : p.sweep * 0.5);
+    gl.uniform1f(P.u.uRings, p.rings);
+    gl.uniform1f(P.u.uRails, p.rails);
+    gl.uniform1f(P.u.uZone, p.zone);
+    gl.uniform1f(P.u.uEvid, p.evid);
+    gl.uniform1f(P.u.uStop, p.stop);
+    gl.uniform1f(P.u.uDim, p.dim);
+    gl.uniform1f(P.u.uFar, p.far);
+    gl.bindBuffer(gl.ARRAY_BUFFER, beamBuf);
+    gl.enableVertexAttribArray(P.a);
+    gl.vertexAttribPointer(P.a, 4, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, Math.min(beamCount, Math.ceil(keep * beamCount)));
+
+    const L = lineProg;
+    gl.useProgram(L.p);
+    gl.uniformMatrix4fv(L.u.uVP, false, vp);
+    gl.enableVertexAttribArray(L.a);
+    const ice = [0.49, 0.77, 0.85];
+    const lines = (buf, off, col, a, len, dash, focusW, fade, from = 0) => {
+      if (a < 0.01) return;
+      gl.uniform1f(L.u.uFrom, from);
+      gl.uniform3fv(L.u.uOff, off);
+      gl.uniform3fv(L.u.uCol, col);
+      gl.uniform3fv(L.u.uFocusCol, status);
+      gl.uniform1f(L.u.uA, a);
+      gl.uniform1f(L.u.uLen, len);
+      gl.uniform1f(L.u.uDash, dash);
+      gl.uniform1f(L.u.uFocus, p.d);
+      gl.uniform1f(L.u.uFocusW, focusW);
+      gl.uniform1f(L.u.uFade, fade);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf.b);
+      gl.vertexAttribPointer(L.a, 4, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.LINES, 0, buf.n);
+    };
+    const off = [0, 0, lidarZ];
+    const axisLen = p.axis * 180;
+    // ось по рельсам (до 40 м) сплошная, дальше — по стенам, пунктиром
+    lines(axisBuf, off, ice, 0.9 * p.axis * p.dim, Math.min(axisLen, 40), 0, 0, 1);
+    if (axisLen > 40) lines(axisBuf, off, ice, 0.75 * p.axis * p.dim, axisLen, 1, 0, 1, 40);
+    lines(zoneBuf, off, ice, 0.32 * p.zone * p.dim, 180, 0, p.evid, 1 - p.far);
+    lines(boxBuf, [0, 0, 0], status, 0.85 * Math.min(1, p.evid * 1.6), 1, 0, 0, 0);
+    lines(ringBuf, [0, 0, 0], status, 1.1 * p.ghost, 1, 0, 0, 0);
+
+    if (p.ghost > 0.01) {
+      const G = ghostProg;
+      gl.useProgram(G.p);
+      gl.uniformMatrix4fv(G.u.uVP, false, vp);
+      gl.uniform1f(G.u.uPx, dpr);
+      gl.uniform3f(G.u.uCol, 0.85, 0.88, 0.86);
+      gl.uniform1f(G.u.uA, 0.42 * p.ghost);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ghostBuf);
+      gl.enableVertexAttribArray(G.a);
+      gl.vertexAttribPointer(G.a, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.POINTS, 0, ghostCount);
+    }
+    placeTag(vp, p.tag);
+  }
+
+  const overText = (x, y) => !!document.elementFromPoint(x, y)?.closest(".card, .hero > *, .bar, .finder, .synth, .report");
+  // Метка над головой человека: проекция точки в экранные координаты.
+  function placeTag(vp, a) {
+    const x = OBJ_X, y = 1.95, z = OBJ_Z;
+    const cw = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+    let on = a > 0.5 && cw > 0.5;
+    if (on) {
+      const sx = ((vp[0] * x + vp[4] * y + vp[8] * z + vp[12]) / cw + 1) / 2 * w;
+      const sy = (1 - (vp[1] * x + vp[5] * y + vp[9] * z + vp[13]) / cw) / 2 * h;
+      on = sx > 40 && sx < w - 40 && sy > 70 && sy < h - 10 && !overText(sx, sy - 12) && !overText(sx, sy - 48);
+      if (on) tag.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -100%)`;
+    }
+    tag.style.opacity = on ? 1 : 0;
+  }
+
+  let off = false;
+
+  // ---------- цикл ----------
+  let raf = 0, last = performance.now();
+  function frame(now) {
+    raf = 0;
+    const dt = Math.min(0.1, (now - last) / 1000);        // на низком FPS камера догоняет цель теми же шагами времени
+    last = now;
+    const tgt = target();
+    let moving = false;
+    if (!cur || reduced) cur = tgt;
+    else {
+      const k = 1 - Math.exp(-dt * 5.5);
+      for (const key of KEYS) { cur[key] += (tgt[key] - cur[key]) * k; if (Math.abs(tgt[key] - cur[key]) > 1e-3) moving = true; }
+      for (let j = 0; j < 3; j++) {
+        cur.cam[j] += (tgt.cam[j] - cur.cam[j]) * k;
+        cur.tgt[j] += (tgt.tgt[j] - cur.tgt[j]) * k;
+        if (Math.abs(tgt.cam[j] - cur.cam[j]) > 1e-3 || Math.abs(tgt.tgt[j] - cur.tgt[j]) > 1e-3) moving = true;
+      }
+    }
+    if (introT < 1) { introT = Math.min(1, (now - start) / 1800); moving = true; }
+    if (!reduced && cur.sweep > 0.02) moving = true;
+    // лучи уровня качества: доля догоняет цель за ~0,4 с; разрешение -- только пока камера стоит
+    if (Math.abs(keepTarget - keep) > 1e-3) { keep += (keepTarget - keep) * (1 - Math.exp(-dt * 7)); moving = true; }
+    else keep = keepTarget;
+    if (resLevel !== resTarget) {
+      if (!moving || cur.sweep > 0.5 || ema > 2 * DOWN_MS || reduced) { resLevel = resTarget; resize(); }
+      moving = true;
+    }
+    sampleCost(now);
+    draw(cur, (now - start) / 1000);
+    updateHud(cur);
+    if (moving && visible()) { reqT = performance.now(); raf = requestAnimationFrame(frame); }
+  }
+  // Кадры -- только когда сцена видна: вкладка открыта и история на экране (под отчётом сцена закрыта).
+  let storyOnScreen = true;
+  const visible = () => !off && !document.hidden && storyOnScreen && !body.classList.contains("in-report");
+  const kick = () => { if (!raf && visible()) { reqT = performance.now(); raf = requestAnimationFrame(frame); } };
+  if ("IntersectionObserver" in window)
+    new IntersectionObserver((es) => { storyOnScreen = es[0].isIntersecting; kick(); }).observe(document.querySelector(".story"));
+
+  resize();
+  addEventListener("scroll", kick, { passive: true });
+  addEventListener("resize", () => { resize(); kick(); });
+  document.addEventListener("visibilitychange", kick);
+  reduceQuery.addEventListener?.("change", (e) => { reduced = e.matches; if (reduced) introT = 1; kick(); });
+  if ("ResizeObserver" in window) new ResizeObserver(() => { measure(); kick(); }).observe(document.querySelector("main"));
+  document.fonts?.ready.then(() => { measure(); kick(); });
+  // SVG -- только когда WebGL нет или контекст потерян
+  canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); off = true; staticHud(); });
+  kick();
+  requestAnimationFrame(() => doc.classList.add("ready"));
+})();
+</script>
+<script>
+(function () {
+'use strict';
+const D = DATA || {};
+const Q = D.quality || {}, S = D.speed || {}, R = D.robust || {};
+const NS = 'http\u003a//www.w3.org/2000/svg';   // пространство имён SVG, не сетевой адрес
+const $ = (s, r = document) => r.querySelector(s);
+const nbsp = '\u00a0';
+function num(v, d = 0) {
+  if (v == null || !isFinite(v)) return '—';
+  const s = Math.abs(v).toFixed(d).split('.');
+  s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '−' : '') + s.join(',');
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+
+function s(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function t(parent, x, y, text, attrs = {}) { const e = s('text', { x, y, ...attrs }, parent); e.textContent = text; return e; }
+function svgIn(box, w, h, label) {
+  const g = s('svg', { class: 'chart', viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': label });
+  box.appendChild(g);
+  return g;
+}
+const lin = (d0, d1, r0, r1) => v => r0 + (v - d0) / (d1 - d0) * (r1 - r0);
+
+const tip = $('#tip');
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.classList.add('on');
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  tip.style.left = Math.max(8, left) + 'px'; tip.style.top = Math.max(8, top) + 'px';
+}
+const hideTip = () => tip.classList.remove('on');
+document.addEventListener('pointermove', e => {
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (el) showTip(el.getAttribute('data-tip'), e.clientX, e.clientY);
+  else if (!e.target.closest || !e.target.closest('[data-tipzone]')) hideTip();
+});
+document.addEventListener('scroll', hideTip, { passive: true });
+
+
+const BUDGET_MS = 100;                      // период кадра при 10 Гц
+const sname = v => v.replace(/куб 0[.,](\d)$/, 'куб 0,$1 м');
+const LEVEL_TXT = { stop: 'СТОП', caution: 'внимание', none: 'нет решения', clear: 'нет решения' };
+
+/* Сводка по данным страницы. Всё, что показывают плитки, графики и методика, считается здесь. */
+function facts() {
+  const F = {};
+  const ap = Q.approach;
+  const cell = (sh, st) => ap && ap.cells.find(c => c.shape === sh && c.start === st);
+  F.p170 = cell('человек стоит', 170); F.p220 = cell('человек стоит', 220);
+  const fo = D.fake_obj;
+  if (fo) {
+    const inG = fo.objects.filter(o => o.expect === 'stop'), outG = fo.objects.filter(o => o.expect !== 'stop');
+    F.fo = { inG, outG, inStop: inG.filter(o => o.level === 'stop').length, outStop: outG.filter(o => o.level === 'stop').length,
+      baseIn: inG.filter(o => o.base_level === 'stop').length, stopOutside: fo.stop_outside, frames: fo.frames ? fo.frames.length : null };
+  }
+  F.e2e = S.e2e || null;
+  if (F.e2e && F.e2e.e2e_ms && F.e2e.e2e_ms.length) {
+    const v = F.e2e.e2e_ms, over = v.filter(u => u > BUDGET_MS).length;
+    F.dl = { n: v.length, over, hit: v.length - over, hitPct: 100 * (v.length - over) / v.length };
+  }
+  F.nd = Q.nd_full || null;
+  if (F.fo) {
+    const r = F.fo.inG.filter(o => o.level === 'stop' && o.first_stop_m != null && o.sight_m > 0)
+      .map(o => Math.min(1, o.first_stop_m / o.sight_m)).sort((a, b) => a - b);
+    if (r.length) F.sightRatio = { n: r.length, min: r[0], max: r[r.length - 1],
+      median: r.length % 2 ? r[r.length >> 1] : (r[r.length / 2 - 1] + r[r.length / 2]) / 2 };
+  }
+  const st = Q.status || [];
+  const frames = st.reduce((a, r) => a + r.frames, 0);
+  if (frames) F.unknown = { pct: st.reduce((a, r) => a + r.unknown * r.frames, 0) / frames, frames, bags: st.length };
+  return F;
+}
+let F = {};
+
+/* ---------- плитки: по критериям задачи, в порядке важности ---------- */
+/* ---------- три больших числа: понятно за три секунды ---------- */
+function heroNums() {
+  const items = [];
+  const fo = F.fo, p = F.p170 && F.p170.after, e = F.e2e;
+  if (fo) items.push({ n: fo.inStop, d: 0, tail: `<small>из${nbsp}${fo.inG.length}</small>`, cap: 'препятствий организаторов остановили поезд',
+    ref: `вне габарита ложных СТОП${nbsp}— ${fo.outStop}` });
+  if (p && p.median) items.push({ n: Math.round(p.median), d: 0, tail: '<small>м</small>', cap: 'видим стоящего человека',
+    ref: p.median >= 200 ? 'выше порога жюри «очень хорошо», 200 м' : p.median >= 100 ? 'выше порога жюри «хорошо», 100 м' : 'порог жюри «хорошо»: 100 м', ok: p.median >= 100 });
+  if (e && e.e2e_ms_p95 != null) items.push({ n: Math.round(e.e2e_ms_p95), d: 0, tail: '<small>мс</small>', cap: 'решение на кадр',
+    ref: `p95; бюджет ${BUDGET_MS}${nbsp}мс` + (F.dl ? `, уложились ${num(F.dl.hitPct, 1)}${nbsp}%` : ''), ok: e.e2e_ms_p95 <= BUDGET_MS });
+  const ul = $('#hero-nums');
+  ul.innerHTML = items.map((k, i) => `<li><p class="hn-value"><span class="cu" data-n="${k.n}">${num(k.n, k.d)}</span>${k.tail}</p>` +
+    `<p class="hn-cap">${k.cap}</p><p class="hn-ref">${k.ok ? '<i aria-hidden="true"></i>' : ''}${k.ref}</p></li>`).join('');
+  countUp(ul);
+}
+// Счёт от нуля до значения, когда числа показались на экране; при «уменьшить движение» -- сразу итог.
+let counted = false;
+function countUp(root) {
+  if (counted || matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return;
+  const els = [...root.querySelectorAll('.cu')];
+  els.forEach(el => { el.textContent = '0'; });
+  const io = new IntersectionObserver(es => {
+    if (!es.some(x => x.isIntersecting)) return;
+    io.disconnect(); counted = true;
+    const t0 = performance.now(), dur = 1100;
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      els.forEach(el => { el.textContent = num(Math.round(+el.dataset.n * e)); });
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, { threshold: .4 });
+  io.observe(root);
+}
+
+/* ---------- дорога 0-300 м: где мы видим объекты и где пороги жюри ---------- */
+function road() {
+  const box = $('#road'), ap = Q.approach;
+  if (!ap) return box.remove();
+  const start = ap.starts.includes(170) ? 170 : ap.starts[ap.starts.length - 1];
+  const want = [['человек стоит', 'человек'], ['куб 0.4', 'куб 0,4 м'], ['куб 0.2', 'куб 0,2 м']];
+  const marks = want.map(([sh, lab]) => { const c = ap.cells.find(x => x.shape === sh && x.start === start); return c && c.after.median ? { lab, v: c.after.median, found: c.after.found, n: c.after.n } : null; })
+    .filter(Boolean).sort((a, b) => b.v - a.v);
+  if (!marks.length) return box.remove();
+  const far = ap.starts.includes(220) && ap.cells.find(c => c.shape === 'человек стоит' && c.start === 220);
+  if (far && far.after.median) marks.unshift({ lab: `человек, старт ${far.start} м`, v: far.after.median, found: far.after.found, n: far.after.n, hollow: true });
+  box.innerHTML = '<h3>Где детектор даёт СТОП</h3>';
+  const w = Math.max(320, box.clientWidth), narrow = w < 620, max = 300;
+  const l = narrow ? 36 : 64, r = narrow ? 14 : 24, lvlH = narrow ? 30 : 34, top = 14 + marks.length * lvlH, trackY = top + 26, h = trackY + 74;
+  const x = lin(0, max, l, w - r);
+  const g = svgIn(box, w, h, `Дистанция первого СТОП по объектам на шкале 0–300 м с порогами жюри 100, 200 и 300 м`);
+  // тоннель: полотно и рельсы сходятся вдаль
+  s('path', { d: `M${l},${trackY - 20} L${w - r},${trackY - 6} L${w - r},${trackY + 6} L${l},${trackY + 20} Z`, fill: 'rgba(124, 196, 216, .08)' }, g);
+  s('line', { x1: l, x2: w - r, y1: trackY - 11, y2: trackY - 3, stroke: 'var(--ice)', 'stroke-opacity': .7, 'stroke-width': 2 }, g);
+  s('line', { x1: l, x2: w - r, y1: trackY + 11, y2: trackY + 3, stroke: 'var(--ice)', 'stroke-opacity': .7, 'stroke-width': 2 }, g);
+  for (let v = 10; v < max; v += 10) s('line', { x1: x(v), x2: x(v), y1: trackY - 11 + 8 * v / max, y2: trackY + 11 - 8 * v / max, stroke: 'rgba(216, 224, 220, .12)', 'stroke-width': 1 }, g);
+  // поезд
+  s('rect', { x: l - (narrow ? 30 : 46), y: trackY - 13, width: narrow ? 24 : 36, height: 26, rx: 6, fill: 'var(--bone)' }, g);
+  s('rect', { x: l - (narrow ? 24 : 38), y: trackY - 7, width: narrow ? 12 : 18, height: 8, rx: 2, fill: 'var(--tunnel)' }, g);
+  // пороги жюри
+  [[100, 'хорошо'], [200, 'очень хорошо'], [300, 'отлично']].forEach(([v, lab]) => {
+    s('line', { x1: x(v), x2: x(v), y1: trackY - 22, y2: trackY + 26, stroke: 'rgba(216, 224, 220, .35)', 'stroke-width': 1 }, g);
+    t(g, x(v), trackY + 44, `${v} м`, { 'text-anchor': v === 300 ? 'end' : 'middle', class: 'ink b' });
+    t(g, x(v), trackY + 62, lab, { 'text-anchor': v === 300 ? 'end' : 'middle', 'font-size': narrow ? 11 : 13 });
+  });
+  t(g, x(0), trackY + 44, '0', { 'text-anchor': 'middle' });
+  // старт замера: объект появляется здесь, дальше этой отметки СТОП в этом замере быть не может
+  s('line', { x1: x(start), x2: x(start), y1: trackY - 14, y2: trackY + 14, stroke: 'var(--haze)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }, g);
+  if (!narrow) t(g, x(start) + 6, trackY - 20, `объект появляется на ${start} м`, { 'font-size': 11 });
+  // отметки: штырь от полотна до подписи, подписи ступенями -- не наезжают
+  marks.forEach((m, i) => {
+    const py = 14 + i * lvlH + 10, px = x(m.v);
+    const grp = s('g', { 'data-tip': `<b>${esc(m.lab)}</b>: первый СТОП на ${num(m.v, 0)} м (медиана), найден в ${m.found} из ${m.n} окон` }, g);
+    s('line', { x1: px, x2: px, y1: py + 6, y2: trackY, stroke: 'var(--ice)', 'stroke-width': 1.5, 'stroke-opacity': m.lab === 'человек' ? 1 : .55 }, grp);
+    const main = m.lab === 'человек';
+    if (main) s('circle', { cx: px, cy: trackY, r: 16, fill: 'var(--ice)', 'fill-opacity': .14 }, grp);
+    s('circle', { cx: px, cy: trackY, r: main ? 8 : 5, fill: m.hollow ? 'var(--tunnel)' : 'var(--ice)', stroke: m.hollow ? 'var(--ice)' : 'var(--tunnel)', 'stroke-width': 2 }, grp);
+    const txt = t(grp, px - 8, py + 4, '', { 'text-anchor': 'end', class: 'ink' });
+    const a = document.createElementNS(NS, 'tspan'); a.setAttribute('class', 'b'); a.setAttribute('font-size', m.lab === 'человек' ? 19 : 15); a.textContent = `${num(m.v, 0)} м `;
+    const b2 = document.createElementNS(NS, 'tspan'); b2.setAttribute('class', 'ink2'); b2.textContent = m.lab + (m.found < m.n ? `, ${m.found} из ${m.n}` : '');
+    txt.append(a, b2);
+    // подпись слева от штыря; не влезает -- справа; не влезает и там -- прижата к краю
+    const tw = txt.getComputedTextLength ? txt.getComputedTextLength() : 0;
+    let tx = px - 8 - tw;
+    if (tx < 0) { tx = px + 8 > w - tw ? Math.max(0, w - tw) : px + 8; }
+    txt.setAttribute('x', tx); txt.setAttribute('text-anchor', 'start');
+    s('rect', { x: tx - 4, y: py - 12, width: tw + 12, height: lvlH, class: 'hit' }, grp);
+  });
+}
+
+/* ---------- 7 объектов организаторов карточками ---------- */
+function glyph(name) {
+  const n = name.toLowerCase(), c = 'var(--haze)';
+  if (n.includes('стерж')) return `<svg viewBox="0 0 44 30" aria-hidden="true"><line x1="22" y1="0" x2="22" y2="22" stroke="${c}" stroke-width="2"/><line x1="4" y1="29" x2="40" y2="29" stroke="${c}" stroke-opacity=".4"/></svg>`;
+  if (n.includes('плит')) return `<svg viewBox="0 0 44 30" aria-hidden="true"><rect x="2" y="21" width="40" height="7" rx="1.5" fill="none" stroke="${c}" stroke-width="1.6"/><line x1="0" y1="29" x2="44" y2="29" stroke="${c}" stroke-opacity=".4"/></svg>`;
+  if (n.includes('предмет')) return `<svg viewBox="0 0 44 30" aria-hidden="true"><rect x="17" y="18" width="10" height="10" rx="1.5" fill="none" stroke="${c}" stroke-width="1.6"/><line x1="0" y1="29" x2="44" y2="29" stroke="${c}" stroke-opacity=".4"/></svg>`;
+  return `<svg viewBox="0 0 44 30" aria-hidden="true"><rect x="9" y="3" width="26" height="25" rx="2" fill="none" stroke="${c}" stroke-width="1.6"/><line x1="0" y1="29" x2="44" y2="29" stroke="${c}" stroke-opacity=".4"/></svg>`;
+}
+function objCards() {
+  const box = $('#objs'), fo = F.fo;
+  if (!fo) return box.remove();
+  const WORD = { stop: 'СТОП', caution: 'ВНИМАНИЕ' };
+  box.innerHTML = '<h3>Препятствия организаторов, где нужен СТОП</h3><ul class="obj-grid">' + fo.inG.map(o => {
+    const l = o.level === 'stop' ? 'stop' : o.level === 'caution' ? 'caution' : 'none';
+    const d = o.level === 'stop' && o.first_stop_m != null ? `${num(o.first_stop_m, 0)}<small>м</small>` : '—';
+    return `<li class="obj" data-l="${l}">${glyph(o.name)}<span class="obj-st"><i></i>${WORD[l] || 'нет решения'}</span>` +
+      `<span class="obj-d">${d}</span><span class="obj-n">${esc(o.name)}</span></li>`;
+  }).join('') + '</ul>' +
+    `<p class="objs-note">Ещё ${fo.outG.length} ${plural(fo.outG.length, 'объект', 'объекта', 'объектов')} вне габарита: СТОП не нужен, получили СТОП${nbsp}— ${fo.outStop}.</p>`;
+}
+
+/* ---------- мелкие показатели одной строкой ---------- */
+function minor() {
+  const it = [];
+  if (F.sightRatio) it.push([`${num(100 * F.sightRatio.median, 0)}${nbsp}%`, 'видимого пути до СТОП, медиана']);
+  if (Q.empty) it.push([`${num(Q.empty.after, 1)}${nbsp}%`, 'ложных СТОП, записи без препятствий']);
+  if (F.nd) it.push([`${num(F.nd.pct, 1)}${nbsp}%`, 'ложных СТОП, отложенная запись']);
+  if (F.unknown) it.push([`${num(F.unknown.pct, F.unknown.pct > 0 && F.unknown.pct < 1 ? 1 : 0)}${nbsp}%`, 'кадров без оси пути']);
+  $('#minor').innerHTML = it.map(([v, k]) => `<li><b>${v}</b><span>${k}</span></li>`).join('');
+  $('#safety').innerHTML = `<b>«Свободно»${nbsp}— только когда путь виден.</b> Нет оси пути${nbsp}— «путь не определён», а${nbsp}не${nbsp}«свободно».`;
+}
+
+/* Общие куски графиков: заголовок-вопрос, легенда, табличный вид (значения доступны без наведения). */
+function chartHead(box, title, q, items) {
+  box.innerHTML = '';
+  box.insertAdjacentHTML('beforeend', `<h3>${title}</h3><p class="q">${q}</p>`);
+  if (items && items.length) box.insertAdjacentHTML('beforeend', `<ul class="legend">${items.map(([cls, txt]) => `<li><i class="${cls}" aria-hidden="true"></i>${txt}</li>`).join('')}</ul>`);
+}
+function tableView(box, head, rows) {
+  const d = document.createElement('details'); d.className = 'table-view';
+  d.innerHTML = `<summary>Таблица</summary><div class="tbl-wrap"><table><thead><tr>${head.map((h, i) => `<th${i ? ' class="n"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>` +
+    rows.map(r => `<tr>${r.map((v, i) => `<td${i ? ' class="n"' : ''}>${v}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+  box.appendChild(d);
+}
+const chartW = box => Math.max(300, Math.round(box.clientWidth));
+const RING = '#5f777c';                     // исходная версия: приглушённый тон рядом с ice (проверен на различимость)
+function xAxis(g, x, y, ticks, unit, x0, x1) {
+  ticks.forEach(v => {
+    s('line', { x1: x(v), x2: x(v), y1: 0, y2: y, class: 'grid' }, g);
+    t(g, x(v), y + 18, num(v), { 'text-anchor': 'middle' });
+  });
+  s('line', { x1: x0, x2: x1, y1: y, y2: y, class: 'axis' }, g);
+  t(g, x1, y + 36, unit, { 'text-anchor': 'end' });
+}
+function rowHit(g, y, h, w, html) {
+  const r = s('g', { class: 'row', tabindex: 0, 'data-tip': html }, g);
+  s('rect', { x: 0, y, width: w, height: h, class: 'hl', fill: 'transparent' }, r);
+  return r;
+}
+
+/* ---------- 1. Эталон организаторов: дистанция первого СТОП и докуда виден путь ---------- */
+function chartObjects() {
+  const box = $('#c-objects'), fo = F.fo;
+  if (!fo) return box.remove();
+  chartHead(box, 'Объекты организаторов: на какой дистанции СТОП',
+    'Запись с 10 размеченными объектами. Для каждого: дистанция первого СТОП и докуда в этот момент детектор видел свой путь (по длине найденной оси и кривизне). Процент у точки — дистанция первого СТОП как доля видимой части пути: 100 % — СТОП дан на самом краю видимости.',
+    [['lg-dot', 'первый СТОП'], ['lg-bar', 'путь просматривается до']]);
+  const w = chartW(box), narrow = w < 620, lw = narrow ? 118 : 290, rw = narrow ? 70 : 110, rh = 30, gh = 26;
+  const groups = [['должен быть СТОП', fo.inG], ['вне габарита, СТОП не нужен', fo.outG]];
+  const max = Math.max(200, ...fo.inG.concat(fo.outG).map(o => Math.max(o.sight_m || 0, o.first_stop_m || 0)));
+  const x = lin(0, max, lw, w - rw), n = fo.inG.length + fo.outG.length;
+  const plotH = groups.length * gh + n * rh, h = plotH + 44;
+  const g = svgIn(box, w, h, `Дистанция первого СТОП по ${n} объектам записи организаторов`);
+  const ticks = []; for (let v = 0; v <= max; v += 50) ticks.push(v);
+  xAxis(g, x, plotH, ticks, 'дистанция до объекта, м', lw, w - rw);
+  let y = 0;
+  const table = [];
+  groups.forEach(([title, list]) => {
+    t(g, 0, y + 18, title, { class: 'ink2 b' });
+    y += gh;
+    list.forEach(o => {
+      const lvl = LEVEL_TXT[o.level] || o.level;
+      const cy = y + rh / 2;
+      const r = rowHit(g, y, rh, w, `<b>Объект ${o.id}</b>: ${esc(o.name)}<br>решение: ${lvl}` +
+        (o.first_stop_m != null ? `<br>первый СТОП: ${num(o.first_stop_m, 0)} м` : '') + (o.sight_m != null ? `<br>путь просматривается до ${num(o.sight_m, 0)} м` : ''));
+      const name = narrow ? `${o.id}` : `${o.id}  ${o.name}`;
+      t(r, 0, cy + 4, name.length > 42 ? name.slice(0, 41) + '…' : name, { class: 'ink' });
+      if (o.sight_m != null) s('rect', { x: x(0), y: cy - 4, width: Math.max(2, x(o.sight_m) - x(0)), height: 8, rx: 2, fill: 'rgba(124, 196, 216, .22)' }, r);
+      if (o.first_stop_m != null) s('circle', { cx: x(o.first_stop_m), cy, r: 5, fill: 'var(--ice)', stroke: 'var(--tunnel)', 'stroke-width': 2 }, r);
+      const share = o.level === 'stop' && o.first_stop_m != null && o.sight_m > 0 ? Math.min(1, o.first_stop_m / o.sight_m) : null;
+      if (share != null) t(r, x(o.first_stop_m) + 10, cy - 7, `${num(100 * share, 0)} %`, { class: 'ink2', 'font-size': 12 });
+      t(r, w, cy + 4, lvl, { 'text-anchor': 'end', class: o.level === 'stop' ? 'ink' : 'ink2' });
+      table.push([`${o.id}. ${esc(o.name)}`, o.expect === 'stop' ? 'да' : 'нет', lvl, o.first_stop_m != null ? num(o.first_stop_m, 0) : '—', o.sight_m != null ? num(o.sight_m, 0) : '—',
+        o.level === 'stop' && o.first_stop_m != null && o.sight_m > 0 ? `${num(100 * Math.min(1, o.first_stop_m / o.sight_m), 0)} %` : '—']);
+      y += rh;
+    });
+  });
+  tableView(box, ['Объект', 'Нужен СТОП', 'Решение', 'Первый СТОП, м', 'Путь виден до, м', 'Доля видимости'], table);
+}
+
+/* ---------- 2. Дальность первого СТОП при подъезде, по фигурам ---------- */
+function chartRange() {
+  const box = $('#c-range'), ap = Q.approach;
+  if (!ap) return box.remove();
+  const start = ap.starts.includes(170) ? 170 : ap.starts[ap.starts.length - 1];
+  const rows = ap.shapes.map(sh => ap.cells.find(c => c.shape === sh && c.start === start)).filter(Boolean);
+  if (!rows.length) return box.remove();
+  const nWin = Math.max(...rows.map(c => c.after.n));
+  chartHead(box, 'Дальность обнаружения по типам объектов',
+    `Синтетический объект вставлен в реальные записи на ${start}${nbsp}м, поезд едет к нему. Точка${nbsp}— одно окно движения (${nWin} ${plural(nWin, 'окно', 'окна', 'окон')}), крупная метка${nbsp}— медиана.`,
+    [['lg-dot', 'итоговая версия'], ['lg-ring', 'исходная версия, медиана']]);
+  const w = chartW(box), narrow = w < 620, lw = narrow ? 104 : 150, rw = narrow ? 64 : 120, rh = 40;
+  const max = Math.ceil((start + 10) / 50) * 50;
+  const x = lin(0, max, lw, w - rw), plotH = rows.length * rh + 22, h = plotH + 44;
+  const g = svgIn(box, w, h, `Дистанция первого СТОП при подъезде со ${start} м по типам объектов`);
+  const ticks = []; for (let v = 0; v <= max; v += 50) ticks.push(v);
+  xAxis(g, x, plotH, ticks, 'дистанция первого СТОП, м', lw, w - rw);
+  s('line', { x1: x(start), x2: x(start), y1: 4, y2: plotH, class: 'axis' }, g);
+  t(g, x(start), 12, narrow ? 'старт' : 'объект появляется', { 'text-anchor': 'end', dx: -6 });
+  const table = [];
+  rows.forEach((c, i) => {
+    const cy = 22 + i * rh + rh / 2, a = c.after, b = c.before;
+    const r = rowHit(g, cy - rh / 2, rh, w, `<b>${esc(sname(c.shape))}</b>, старт ${start} м<br>итоговая: ${a.median != null ? num(a.median, 0) + ' м' : 'не найден'}, найден в ${a.found} из ${a.n}` +
+      (b && b.median != null ? `<br>исходная: ${num(b.median, 0)} м` : ''));
+    t(r, 0, cy + 4, sname(c.shape), { class: 'ink' });
+    s('line', { x1: x(0), x2: x(start), y1: cy, y2: cy, class: 'grid' }, r);
+    (a.values || []).forEach(v => s('circle', { cx: x(v), cy, r: 3, fill: 'var(--ice)', 'fill-opacity': .45 }, r));
+    if (b && b.median != null) s('circle', { cx: x(b.median), cy, r: 5, fill: 'none', stroke: RING, 'stroke-width': 2 }, r);
+    if (a.median != null) s('circle', { cx: x(a.median), cy, r: 6, fill: 'var(--ice)', stroke: 'var(--tunnel)', 'stroke-width': 2 }, r);
+    t(r, w, cy + 4, a.median != null ? `${num(a.median, 0)} м` : 'не найден', { 'text-anchor': 'end', class: 'ink b' });
+    if (a.found < a.n) t(r, w, cy + 18, `в ${a.found} из ${a.n}`, { 'text-anchor': 'end', 'font-size': 11 });
+    table.push([esc(sname(c.shape)), a.median != null ? num(a.median, 0) : '—', `${a.found} из ${a.n}`, b && b.median != null ? num(b.median, 0) : '—']);
+  });
+  tableView(box, ['Объект', 'Медиана, м', 'Найден', 'Исходная, м'], table);
+}
+
+/* ---------- 3. Задержка кадра против бюджета ---------- */
+function chartLatency() {
+  const box = $('#c-latency'), e = F.e2e;
+  if (!e || !e.e2e_ms || !e.e2e_ms.length) return box.remove();
+  const v = e.e2e_ms, bin = 5, top = 150, nb = top / bin + 1;
+  const counts = new Array(nb).fill(0);
+  v.forEach(u => { counts[Math.min(nb - 1, Math.floor(u / bin))]++; });
+  chartHead(box, 'Задержка кадра и бюджет 100 мс',
+    `Время от публикации облака до публикации результата, ${num(v.length)} ${plural(v.length, 'кадр', 'кадра', 'кадров')} записи ${esc(e.bag)} в Docker. ` +
+    (F.dl ? `В${nbsp}бюджет уложились ${num(F.dl.hitPct, 1)}${nbsp}% кадров.` : ''));
+  const w = chartW(box), l = 44, r = 8, plotH = 180, h = plotH + 44;
+  const x = lin(0, top + bin, l, w - r), ymax = Math.max(...counts), y = lin(0, ymax, plotH, 10);
+  const g = svgIn(box, w, h, `Распределение задержки кадра, бюджет ${BUDGET_MS} мс`);
+  const yt = []; const step = ymax > 80 ? 20 : ymax > 40 ? 10 : 5; for (let c = 0; c <= ymax; c += step) yt.push(c);
+  yt.forEach(c => { s('line', { x1: l, x2: w - r, y1: y(c), y2: y(c), class: 'grid' }, g); t(g, l - 8, y(c) + 4, num(c), { 'text-anchor': 'end' }); });
+  t(g, 0, 4, 'кадров', {});
+  const bw = Math.min(24, x(bin) - x(0) - 2);
+  counts.forEach((c, i) => {
+    if (!c) return;
+    const x0 = x(i * bin) + (x(bin) - x(0) - bw) / 2, hh = plotH - y(c);
+    const lab = i === nb - 1 ? `больше ${top} мс` : `${i * bin}–${(i + 1) * bin} мс`;
+    const path = `M${x0},${plotH}V${y(c) + Math.min(4, hh)}q0,-4 4,-4h${bw - 8}q4,0 4,4V${plotH}Z`;
+    s('path', { d: path, fill: 'var(--ice)', 'data-tip': `<b>${c}</b> ${plural(c, 'кадр', 'кадра', 'кадров')}, ${lab}` }, g);
+  });
+  s('line', { x1: l, x2: w - r, y1: plotH, y2: plotH, class: 'axis' }, g);
+  [0, 25, 50, 75, 100, 125, 150].forEach(tv => t(g, x(tv), plotH + 18, tv === 150 ? '150+' : num(tv), { 'text-anchor': 'middle' }));
+  t(g, w - r, plotH + 36, 'задержка, мс', { 'text-anchor': 'end' });
+  s('line', { x1: x(BUDGET_MS), x2: x(BUDGET_MS), y1: 6, y2: plotH, stroke: 'var(--bone)', 'stroke-width': 1.5 }, g);
+  t(g, x(BUDGET_MS) + 6, 16, `бюджет ${BUDGET_MS} мс`, { class: 'ink' });
+  [['p50', e.e2e_ms_p50], ['p95', e.e2e_ms_p95]].forEach(([k, val]) => {
+    if (val == null) return;
+    s('line', { x1: x(val), x2: x(val), y1: plotH, y2: plotH + 6, class: 'axis' }, g);
+  });
+  tableView(box, ['Показатель', 'мс'], [['p50', num(e.e2e_ms_p50, 0)], ['p95', num(e.e2e_ms_p95, 0)], ['максимум', num(e.e2e_ms_max, 0)],
+    ['кадров больше 100 мс', F.dl ? `${F.dl.over} из ${num(F.dl.n)}` : '—']]);
+}
+
+/* ---------- Методика и источники: всё существенное одним спокойным блоком ---------- */
+function methodBody() {
+  const fo = F.fo, p = F.p170 && F.p170.after, e = F.e2e, big = S.e2e_big, nd = F.nd, sl = Q.selflabel, er = Q.dist_err;
+  const src = D.sources || {}, files = k => Object.keys(src).filter(f => src[f] === k).map(f => `<code>${esc(f)}</code>`).join(', ');
+  const miss = fo ? fo.inG.filter(o => o.level !== 'stop').map(o => `${o.id} (${esc(o.name)}: ${LEVEL_TXT[o.level] || o.level})`).join('; ') : '';
+  const items = [];
+  items.push(['Версии', 'Итоговая версия — параметры по умолчанию из <code>config/detector.yaml</code>. Исходная — коммит <code>ae38df6</code>, код до этой работы; обе прогнаны одними инструментами.']);
+  if (fo) items.push(['Объекты организаторов', `Запись <code>cloud_with_fake_obj</code>, ${num(fo.frames || 0)} кадров, ${fo.inG.length + fo.outG.length} объектов со списком, где нужен СТОП. Зона детектора подбиралась по этой же записи, поэтому это проверка, а не независимая валидация.${miss ? ` Без СТОП: ${miss}.` : ''} Ложный СТОП-кадр — кадр со СТОП, не совпавший по дистанции ни с одним размеченным объектом. До подбора под эту запись (<code>97f7376</code>) СТОП получали ${fo.baseIn} из ${fo.inG.length}.`]);
+  if (p) items.push(['Дальность', `Объект вставляется в реальные кадры лучами датчика, с тенью, на ось пути, найденную детектором; поезд едет к нему. Первый СТОП — первый кадр со СТОП на вставке. ${Q.approach.windows} ${plural(Q.approach.windows, 'окно', 'окна', 'окон')} движения, 10–15 м/с. Реального препятствия при движении в данных нет.${er ? ` Ошибка дистанции в момент первого СТОП: медиана ${num(er.median * 100, 0)} см, 95 % — до ${num(er.p95, 2)} м.` : ''}`]);
+  if (e) items.push(['Задержка', `От публикации облака плеером до публикации результата, ROS 2 в Docker без сети, запись <code>${esc(e.bag)}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц; принято ${e.received}, обработано ${e.processed}.${big ? ` Кадры 23 МБ (полный оборот лидара): p95 ${num(big.e2e_ms_p95, 0)} мс.` : ''} Один стенд: ${esc(D.bench || '—')}; загрузка CPU/GPU не измерялась.`]);
+  if (Q.empty) items.push(['Ложные СТОП', `Эпизод — серия кадров СТОП подряд; разрыв до двух кадров эпизод не прерывает. Эпизодов в час — число эпизодов, делённое на длительность записи (кадры при 10 Гц); на пустых записях эпизоды считаются по каждой записи отдельно. Пустые записи — ${(Q.empty.bags || []).map(b => `<code>${esc(b.bag)}</code>`).join(', ')}, ${num(Q.empty.minutes, 1)} мин; исходная версия — ${num(Q.empty.before, 1)} %.${Q.empty.episodes != null ? ` Эпизодов: ${num(Q.empty.episodes)}, ${num(Q.empty.per_hour, 0)} в час.` : ''} ${nd ? `Отложенная запись <code>new_data</code> (${num(nd.minutes, 1)} мин) при подборе параметров не использовалась: ${num(nd.pct, 1)} % кадров, ${num(nd.episodes)} ${plural(nd.episodes, 'эпизод', 'эпизода', 'эпизодов')}${nd.per_hour != null ? `, ${num(nd.per_hour, 0)} в час` : ''}.` : ''}${sl ? ` ${sl.false_proven} из ${sl.episodes} эпизодов доказанно ложные: поезд потом проехал это место.` : ''}`]);
+  if (F.sightRatio) items.push(['Доля видимости', `Для каждого объекта организаторов со СТОП: дистанция первого СТОП, делённая на дальность видимости пути в том же кадре (<code>sight_m</code>: длина найденной оси, ограниченная прямой видимостью на кривой и паспортной дальностью 200 м). 100 % — СТОП дан, как только объект оказался на видимой части пути.`]);
+  items.push(['Ось пути и «свободно»', `Статус кадра выбирается в <code>core/tunnel_od/detection/decision.py</code> (функция <code>decide</code>, строки 67–77): СТОП, затем «путь не определён» (ось не построена, габарит не проверить), затем «внимание», затем «свободно»; без оси <code>clear_to_m</code> = 0. ${F.unknown ? `Доля «путь не определён» посчитана по записям: ${(Q.status || []).map(r => `<code>${esc(r.bag)}</code>`).join(', ')}.` : ''}`]);
+  items.push(['Файлы', `Прогон на этой машине (<code>output/runs</code>): ${files('runs') || 'нет'}. Эталонные результаты с машины разработки (<code>evaluation/reference</code>): ${files('reference') || 'нет'}.`]);
+  items.push(['Воспроизведение', `<span class="cmd">python -m evaluation all</span><span class="cmd">BAG=/путь/к/записи docker compose up play</span>Страница собрана ${esc((D.generated || '').split('-').reverse().join('.'))}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}.`]);
+  $('#method-body').innerHTML = items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+/* =====================================================================
+   Страница: история (цифры героя и зоны), демо во фрейме, режим «отчёт»
+   ===================================================================== */
+function fillStory() {
+  const keys = [];
+  if (F.p170 && F.p170.after.median) keys.push([`${num(F.p170.after.median, 0)}${nbsp}м`, 'дальность стопа по человеку']);
+  if (F.fo) keys.push([`${F.fo.inStop} из ${F.fo.inG.length}`, 'объектов в габарите получили стоп']);
+  if (F.e2e && F.e2e.e2e_ms_p95 != null) keys.push([`${num(F.e2e.e2e_ms_p95, 0)}${nbsp}мс`, 'задержка кадра, p95']);
+  const ul = $('#keys');
+  ul.innerHTML = keys.map(([v, k]) => `<li><b>${v}</b><span>${k}</span></li>`).join('');
+  ul.hidden = !keys.length;
+
+  const z = D.zone;
+  if (z) {
+    const put = (k, v) => document.querySelectorAll(`[data-z="${k}"]`).forEach(e => { e.textContent = v; });
+    put('width', num(2 * z.half_width, z.half_width * 2 % 1 ? 1 : 0));
+    put('half', num(z.half_width, z.half_width % 1 ? 2 : 0));
+    put('clearance', num(z.clearance, 2));
+    put('height', num(z.height, z.height % 1 ? 1 : 0));
+  }
+  const inp = (R.input || []).filter(r => !r.bag.startsWith('contract_v1'));
+  const span = (a, d) => a.length ? (Math.round(Math.min(...a) * d) === Math.round(Math.max(...a) * d) ? num(Math.min(...a) * d, 0) : `${num(Math.min(...a) * d, 0)}–${num(Math.max(...a) * d, 0)}`) : null;
+  const zs = span(inp.map(r => r.zero_share).filter(v => v != null), 100);
+  const ps = span(inp.map(r => r.pair_share).filter(v => v != null), 100);
+  if (zs) $('#raw-zero').innerHTML = `От${nbsp}${zs}${nbsp}% точек пустые`;
+  if (ps) $('#raw-pair').innerHTML = `и${nbsp}в${nbsp}${ps}${nbsp}% пар они совпадают`;
+
+  if (F.p170 && F.p170.after.median) {
+    const m = num(F.p170.after.median, 0);
+    $('#stop-h').innerHTML = `Стоп на${nbsp}${m}${nbsp}метрах`;
+    const n = $('#stop-note');
+    n.innerHTML = `${m}${nbsp}м${nbsp}— медиана первого подтверждения стоящего человека при подъезде со${nbsp}170${nbsp}м, по${nbsp}${F.p170.after.n} окнам движения. Подробно${nbsp}— в${nbsp}разделе <a class="link" href="#results">«Результаты»</a>.`;
+    n.hidden = false;
+  }
+  const bits = [];
+  if (D.generated) bits.push(`Страница собрана ${D.generated.split('-').reverse().join('.')}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}.`);
+  const src = D.sources || {}, fromRuns = Object.values(src).filter(v => v === 'runs').length, fromRef = Object.values(src).filter(v => v === 'reference').length;
+  if (fromRuns || fromRef) bits.push(`Файлов результатов из прогона на этой машине: ${fromRuns}, из эталона <code>evaluation/reference</code>: ${fromRef} — список в разделе <a href="#method">«Методика и источники»</a>.`);
+  $('#stamp').innerHTML = bits.join(' ');
+}
+
+/* Демо: плеер demo.html во фрейме грузится, когда раздел близко; решение по кадру он присылает сам. */
+function demoSection() {
+  const frame = $('#demo-frame'), stage = $('#demo-stage'), box = $('#hero-find');
+  const numEl = $('#hf-num'), stEl = $('#hf-st'), subEl = $('#hf-sub');
+  const TXT = { stop: 'Стоп: препятствие в габарите', caution: 'Внимание: кандидат без подтверждения', clear: 'Свободно', unknown: 'Путь не определён' };
+  const LAMP = { stop: 'l-stop', caution: 'l-warn', clear: 'l-go' };
+  let visible = false;
+  const tell = () => { try { frame.contentWindow && frame.contentWindow.postMessage({ type: 'dashboard-visibility', visible }, '*'); } catch (e) { /* фрейм ещё не готов */ } };
+  const load = () => {
+    if (frame.src) return;
+    frame.hidden = false;
+    frame.addEventListener('load', () => { $('#demo-wait').hidden = true; tell(); });
+    frame.src = 'demo.html?embed=1&loop=1';
+  };
+  addEventListener('message', ev => {
+    if (ev.source !== frame.contentWindow || !ev.data) return;
+    if (ev.data.type === 'demo-info') {
+      if (ev.data.bag) $('#demo-bag').textContent = ev.data.bag;
+      $('#demo-src').textContent = ev.data.snapshot ? 'Снимок отрывка из evaluation/reference: запись не требуется.' : '';
+      return;
+    }
+    if (ev.data.type !== 'scene-frame') return;
+    const d = ev.data, o = d.main, st = d.obstacle ? 'stop' : (d.status || 'none');
+    box.dataset.st = st;
+    box.querySelectorAll('.lamp').forEach(l => l.classList.toggle('on', l.classList.contains(LAMP[st] || '-')));
+    numEl.innerHTML = d.obstacle ? `${num(d.distance_m, 1)}<small>м</small>`
+      : d.clear_to_m != null ? `${num(d.clear_to_m, 0)}<small>м</small>` : '—';
+    stEl.textContent = TXT[st] || 'Решения нет';
+    subEl.textContent = d.obstacle && o
+      ? `объект высотой ${num(o.h, 1)} м, ${o.held ? 'удержан по треку' : `${o.n} ${plural(o.n, 'точка', 'точки', 'точек')}`}; кадр ${d.frame}`
+      : d.clear_to_m != null ? `путь свободен до этой дистанции; кадр ${d.frame}` : `кадр ${d.frame}`;
+  });
+  if (!('IntersectionObserver' in window)) { visible = true; load(); return; }
+  new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) load(); }, { rootMargin: '120% 0px' }).observe(stage);
+  new IntersectionObserver(es => { visible = es.some(e => e.isIntersecting); tell(); }).observe(stage);
+}
+
+/* Под сценой -- отчёт: прячем дальномер и метку, подсвечиваем раздел в шапке. */
+function reportMode() {
+  const rep = $('#report'), body = document.body;
+  const links = [...document.querySelectorAll('.bar nav a')];
+  const targets = links.map(a => document.getElementById(a.hash.slice(1)));
+  let tick = 0;
+  const upd = () => {
+    tick = 0;
+    const on = rep.getBoundingClientRect().top < innerHeight * .55;
+    body.classList.toggle('in-report', on);
+    let cur = -1;
+    targets.forEach((t, i) => { if (t && t.getBoundingClientRect().top < innerHeight * .4) cur = i; });
+    links.forEach((a, i) => a.setAttribute('aria-current', String(i === cur)));
+  };
+  addEventListener('scroll', () => { if (!tick) tick = requestAnimationFrame(upd); }, { passive: true });
+  upd();
+}
+
+function renderCharts() {
+  F = facts();
+  const more = $('#more');
+  [heroNums, road, objCards, minor, methodBody].concat(more.open ? [chartObjects, chartRange, chartLatency] : []).forEach(fn => {
+    try { fn(); } catch (err) { console.error(fn.name, err); }
+  });
+}
+renderCharts();
+// подробные графики строятся, когда блок раскрыт: в закрытом блоке у них нет ширины
+$('#more').addEventListener('toggle', () => { if ($('#more').open) [chartObjects, chartRange, chartLatency].forEach(fn => { try { fn(); } catch (err) { console.error(fn.name, err); } }); });
+try { fillStory(); } catch (err) { console.error('fillStory', err); }
+demoSection();
+reportMode();
+let rw = innerWidth, rt;
+addEventListener('resize', () => { if (innerWidth === rw) return; rw = innerWidth; clearTimeout(rt); rt = setTimeout(renderCharts, 150); });
+})();
+</script>
+</body>
+</html>

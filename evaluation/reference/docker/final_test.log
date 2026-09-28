@@ -1,0 +1,48 @@
+# docker compose run --rm test (финальный прогон 2026-09-29): gtest 15 + pytest 21, exit 0
+ Container hakatanon_lidar-test-run-301bed46f3fc Creating 
+ Container hakatanon_lidar-test-run-301bed46f3fc Created 
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 15 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 11 tests from Canonical
+[ RUN      ] Canonical.LegacyDropsZerosAndDualReturnDuplicates
+[       OK ] Canonical.LegacyDropsZerosAndDualReturnDuplicates (1 ms)
+[ RUN      ] Canonical.DuplicateThresholdIsStrictInFloat32
+[       OK ] Canonical.DuplicateThresholdIsStrictInFloat32 (0 ms)
+[ RUN      ] Canonical.NoDedupeWhenWidthNotMultipleOf256
+[       OK ] Canonical.NoDedupeWhenWidthNotMultipleOf256 (0 ms)
+[ RUN      ] Canonical.DropsNanInfAndNegativeZero
+[       OK ] Canonical.DropsNanInfAndNegativeZero (0 ms)
+[ RUN      ] Canonical.GenericKeepsDuplicates
+[       OK ] Canonical.GenericKeepsDuplicates (0 ms)
+[ RUN      ] Canonical.ContractTransposesToColumnOrderAndRotatesAxes
+[       OK ] Canonical.ContractTransposesToColumnOrderAndRotatesAxes (0 ms)
+[ RUN      ] Canonical.ContractFlagsSecondReturnThatIsNotNaN
+[       OK ] Canonical.ContractFlagsSecondReturnThatIsNotNaN (0 ms)
+[ RUN      ] Canonical.LegacyAxesRoundTripThroughRep103
+[       OK ] Canonical.LegacyAxesRoundTripThroughRep103 (0 ms)
+[ RUN      ] Canonical.CropKeepsOnlyForwardRangeWithFloorGuard
+[       OK ] Canonical.CropKeepsOnlyForwardRangeWithFloorGuard (0 ms)
+[ RUN      ] Canonical.FormatDetection
+[       OK ] Canonical.FormatDetection (0 ms)
+[ RUN      ] Canonical.RejectsUnusableClouds
+[       OK ] Canonical.RejectsUnusableClouds (0 ms)
+[----------] 11 tests from Canonical (1 ms total)
+
+[----------] 4 tests from Monitor
+[ RUN      ] Monitor.LegacyStreamViolations
+[       OK ] Monitor.LegacyStreamViolations (0 ms)
+[ RUN      ] Monitor.ContractStreamIsClean
+[       OK ] Monitor.ContractStreamIsClean (0 ms)
+[ RUN      ] Monitor.LayoutAndFrameChangesAndAxesHeuristic
+[       OK ] Monitor.LayoutAndFrameChangesAndAxesHeuristic (0 ms)
+[ RUN      ] Monitor.RejectedFramesAndSpeed
+[       OK ] Monitor.RejectedFramesAndSpeed (0 ms)
+[----------] 4 tests from Monitor (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 15 tests from 2 test suites ran. (1 ms total)
+[  PASSED  ] 15 tests.
+.....................                                                    [100%]
+21 passed in 0.15s
+test exit 0

@@ -1,8 +1,11 @@
-"""Дашборд метрик: один HTML-файл без внешних зависимостей (открывается без сети).
+"""Страница отчёта: один HTML-файл без внешних зависимостей (открывается с file:// без сети).
 
-    python -m evaluation dashboard                   # -> output/report/metrics.html
-    python -m evaluation dashboard --no-scene        # без 3D-сцены (не нужны записи в data/)
-    python -m evaluation dashboard --scene-frame 60 --out /tmp/d.html
+    python -m evaluation dashboard                   # -> output/report/index.html (рядом -- demo.html)
+    python -m evaluation dashboard --out /tmp/index.html
+
+Страница одна (templates/index.html): как работает детектор (синтетическая сцена) -> результаты
+испытаний -> демо (demo.html во фрейме) -> архитектура и запуск. Шрифты (templates/fonts, OFL)
+встраиваются в base64, ссылок за пределы папки отчёта нет.
 
 Цифры берутся из результатов инструментов в output/runs, а не переписываются руками. Итоговая версия
 называется final (исторический прогон, копии в evaluation/reference/) или P_ev_f20 (python -m evaluation all) -- берётся более свежий файл:
@@ -20,8 +23,8 @@
 затем из evaluation/baseline.json: исходная версия A_base (её код -- ae38df6, текущим не
 воспроизводится), e2e в Docker, проверка входа и замер разбора C++. Откуда взят каждый файл, видно на странице (раздел «Методика»).
 Чего нет ни там, ни там (замер десериализации, число тестов), лежит в DOCUMENTED с источником.
-3D-сцена -- кадр doubleT_obstacle после прогона детектора с первого кадра: облако, ось пути,
-коридор, объект на 56 м.
+Функция scene() (кадр doubleT_obstacle после детектора) страницей не используется; --scene-frame N
+кладёт её в данные страницы для отладки.
 """
 import argparse
 import base64
@@ -52,10 +55,11 @@ def zone_params():
 
 
 HERE = Path(__file__).resolve().parent
-TEMPLATE = HERE / 'templates' / 'dashboard.html'
+TEMPLATE = HERE / 'templates' / 'index.html'
+FONTS = HERE / 'templates' / 'fonts'
 REFERENCE = HERE / 'reference'
 BASELINE = json.loads((HERE / 'baseline.json').read_text(encoding='utf-8'))
-OUT = ROOT / 'output' / 'report' / 'metrics.html'
+OUT = ROOT / 'output' / 'report' / 'index.html'
 BEFORE = 'A_base'
 AFTER_TAGS = ('final', 'P_ev_f20')
 FRAME_MB = {'doubleT_obstacle': 23}
@@ -69,6 +73,27 @@ DOCUMENTED = {
 
 
 SOURCES = {}
+
+LATIN = ('U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, '
+         'U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD')
+CYRILLIC = 'U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116'
+FONT_FACES = [('Tektur', '400 900', '75% 100%', 'tektur'), ('Onest', '100 900', None, 'onest')]
+
+
+def font_css():
+    """@font-face с шрифтами в base64 (сабсеты латиница и кириллица, переменные): страница не ходит в сеть.
+    Файла нет -- правило пропускается, остаётся системный шрифт из стека в CSS."""
+    out = []
+    for family, weight, stretch, stem in FONT_FACES:
+        for subset, rng in (('latin', LATIN), ('cyrillic', CYRILLIC)):
+            p = FONTS / f'{stem}-{subset}.woff2'
+            if not p.exists():
+                continue
+            src = base64.b64encode(p.read_bytes()).decode()
+            out.append(f'@font-face{{font-family:"{family}";font-style:normal;font-weight:{weight};'
+                       + (f'font-stretch:{stretch};' if stretch else '')
+                       + f'font-display:swap;src:url(data:font/woff2;base64,{src}) format("woff2");unicode-range:{rng}}}')
+    return '\n'.join(out)
 
 
 def _found(name, kind):
@@ -250,9 +275,15 @@ def quality():
         empty = [b for b in EMPTY if any(r['bag'] == b for r in after)]
         for b in empty:
             sb, sa = alarm_share([r for r in before if r['bag'] == b]), alarm_share([r for r in after if r['bag'] == b])
-            per_bag.append({'bag': b, 'frames': sa['frames'], 'before': sb['pct'], 'after': sa['pct']})
+            per_bag.append({'bag': b, 'frames': sa['frames'], 'before': sb['pct'], 'after': sa['pct'],
+                            'episodes': sa['episodes'], 'before_episodes': sb['episodes']})
         eb, ea = [r for r in before if r['bag'] in empty], [r for r in after if r['bag'] in empty]
+        # эпизоды считаются по каждой записи отдельно (серия не переходит через границу записей), час -- по числу кадров при 10 Гц
+        hours = len(ea) / 10.0 / 3600
+        eps, eps0 = sum(p['episodes'] for p in per_bag), sum(p['before_episodes'] for p in per_bag)
         q['empty'] = {'bags': per_bag, 'before': alarm_share(eb)['pct'], 'after': alarm_share(ea)['pct'],
+                      'episodes': eps, 'per_hour': eps / hours if hours else None,
+                      'before_per_hour': eps0 / (len(eb) / 10.0 / 3600) if eb else None,
                       'frames': len(ea), 'minutes': len(ea) / 600}
     if after:
         q['status'] = [status_mix(b, [r for r in after if r['bag'] == b]) for b in dict.fromkeys(r['bag'] for r in after)]
@@ -483,20 +514,25 @@ def git_rev():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', type=Path, default=OUT)
-    ap.add_argument('--no-scene', action='store_true', help='без 3D-сцены (записи в data/ не нужны)')
-    ap.add_argument('--scene-frame', type=int, default=101, help='кадр doubleT_obstacle для 3D-сцены')
+    ap.add_argument('--no-scene', action='store_true', help='(по умолчанию) без 3D-кадра в данных страницы')
+    ap.add_argument('--scene-frame', type=int, help='положить в данные кадр doubleT_obstacle после детектора (нужны записи)')
     args = ap.parse_args()
 
     data = {'generated': date.today().isoformat(), 'commit': git_rev(), 'bench': DOCUMENTED['bench'],
             'host': host(), 'quality': quality(), 'speed': speed(), 'robust': robustness(),
             'fake_obj': fake_obj(), 'experiments': experiments(), 'work': work()}
+    try:
+        data['zone'] = zone_params()
+    except Exception as e:
+        print(f'размеры зоны не прочитаны ({e}): на странице -- из текста шаблона', file=sys.stderr)
     data['sources'] = dict(sorted(SOURCES.items()))
-    if not args.no_scene:
+    if args.scene_frame is not None and not args.no_scene:
         try:
             data['scene'] = scene(args.scene_frame)
         except Exception as e:
             print(f'3D-сцена пропущена: {e}', file=sys.stderr)
-    html = TEMPLATE.read_text(encoding='utf-8').replace('/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+    html = TEMPLATE.read_text(encoding='utf-8').replace('/*__FONTS__*/', font_css()).replace(
+        '/*__DATA__*/null', json.dumps(data, ensure_ascii=False, separators=(',', ':')))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html, encoding='utf-8')
     ref = [k for k, v in SOURCES.items() if v == 'baseline']

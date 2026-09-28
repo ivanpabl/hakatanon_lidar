@@ -1,0 +1,72 @@
+{
+  "doubleT_obstacle": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.6840960034805211,
+    "parse_ms_python": 23.020203433164472,
+    "parse_ms_cpp": 7.982601500043529,
+    "parse_ms_contract": 10.049449233095705
+  },
+  "doubleT_platform": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9918762895639058,
+    "parse_ms_python": 7.703448166648741,
+    "parse_ms_cpp": 3.0637557167210616,
+    "parse_ms_contract": 3.56161073371671
+  },
+  "roundT_doubleT": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9878111157884465,
+    "parse_ms_python": 7.357172833265698,
+    "parse_ms_cpp": 3.022744183363102,
+    "parse_ms_contract": 3.6066657329987115
+  },
+  "roundT_pressureGate_roundT": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9810186537727292,
+    "parse_ms_python": 7.180649833389907,
+    "parse_ms_cpp": 2.8974620834560483,
+    "parse_ms_contract": 3.3854857669211924
+  },
+  "roundT_squareT_pressureGate_squareT": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9869184649284811,
+    "parse_ms_python": 7.278421900628018,
+    "parse_ms_cpp": 2.8475569666018905,
+    "parse_ms_contract": 3.368170799634148
+  },
+  "squareT_platform_squareT_switch": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9619746973929932,
+    "parse_ms_python": 7.688474333675306,
+    "parse_ms_cpp": 2.9446998164227502,
+    "parse_ms_contract": 3.6403676994571774
+  },
+  "new_data": {
+    "frames": 30,
+    "parse_bitwise": 30,
+    "result_identical": 30,
+    "first_bad_frame": null,
+    "kept_after_crop": 0.9625629067791449,
+    "parse_ms_python": 8.331683966389392,
+    "parse_ms_cpp": 3.2044455333865094,
+    "parse_ms_contract": 3.436916300294494
+  }
+}

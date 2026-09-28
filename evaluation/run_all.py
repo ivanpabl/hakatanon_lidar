@@ -3,15 +3,17 @@
 
     python -m evaluation all                         # всё: ~20-60 мин, результат в output/report
     python -m evaluation all --quick                 # проверка окружения: пара минут, output/report_quick
+                                                     # (нет записей -- страница из снимков evaluation/reference)
     python -m evaluation all --data D:/lidar/data    # данные не в ./data
     python -m evaluation all --skip-full             # без прогона всей new_data (самый долгий шаг)
 
-Результат:
-    output/report/index.html     сайт: главная с разделами (site)
-    output/report/metrics.html   дашборд метрик (dashboard)
-    output/report/demo.html      плеер: детектор по кадрам записей в 3D (demo)
-    output/report/landing.html   стартовая страница о решении (templates/landing.html, копируется как есть)
+Результат (папка открывается с file:// без сети, ссылок наружу нет):
+    output/report/index.html     страница отчёта: как работает, результаты, демо, архитектура и запуск (dashboard)
+    output/report/demo.html      плеер: детектор по кадрам записей в 3D, встроен в index.html (demo)
     output/runs/                 csv/json каждого шага, output/runs/logs/<шаг>.log -- их вывод
+
+--quick без записей в data/ не падает: метрики не считаются, страница собирается из evaluation/reference
+и baseline.json, плеер -- из снимка evaluation/reference/demo_snapshot.json.gz.
 
 Шаги метрик идут параллельно, число процессов подбирается по числу ядер (--jobs). Каждый процесс
 считает numpy в один поток. Прогоны качества -- текущая версия детектора (config по умолчанию);
@@ -111,6 +113,8 @@ def main():
     ap.add_argument('--skip-full', action='store_true', help='не прогонять всю new_data (~11 тыс. кадров)')
     ap.add_argument('--skip-new-data', action='store_true', help='без new_data совсем (84 ГБ): только 6 записей')
     ap.add_argument('--skip-tests', action='store_true')
+    ap.add_argument('--start-at', type=int, default=1, choices=(1, 2, 3, 4),
+                    help='начать с шага N (после прерванного прогона: готовые шаги не повторяются, их результаты -- в --runs)')
     args = ap.parse_args()
 
     data = data_dir(args)
@@ -128,6 +132,8 @@ def main():
     found, missing = check_data(data, args.quick, not args.skip_new_data)
     for b, p in found.items():
         print(f'  запись {b:<38} {p}')
+    if args.quick and not found:
+        return snapshot_report(args, logs, env, T0)
     if missing:
         print(f'\nНЕТ ЗАПИСЕЙ: {", ".join(missing)}\nОжидается data/Датасет/archive/for_hackathon/<запись>/metadata.yaml '
               f'и data/new_data/metadata.yaml (или --data <каталог>; без new_data -- --skip-new-data).', file=sys.stderr)
@@ -136,13 +142,13 @@ def main():
     print(f'компилятор C++ для библиотеки разбора: {"есть" if compiler else "нет -- проверка входа и замер разбора C++ из baseline.json"}')
 
     failed = []
-    if not args.skip_tests:
+    if not args.skip_tests and args.start_at <= 1:
         print('\n[1/4] тесты ядра (синтетический тоннель)')
         t = Step('pytest', ['-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'tests'], logs)
         if not run_parallel([t], env):
             failed.append(t.name)
 
-    print('\n[2/4] метрики качества')
+    print('\n[2/4] метрики качества' + ('' if args.start_at <= 2 else ': пропущено (--start-at), результаты из ' + str(runs)))
     six = QUICK if args.quick else FOR_HACKATHON
     only_six = ['--bags', *six] if args.quick or args.skip_new_data else []
     j = args.jobs
@@ -161,10 +167,14 @@ def main():
                                                  '--workers', '1'], logs))
     if compiler:
         steps.append(Step('input_report', ['evaluation/input_report.py', *only_six], logs))
-    if not run_parallel(steps, env):
+    if args.start_at > 2:
+        steps = []
+    if steps and not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
 
-    if compiler:
+    if args.start_at > 3:
+        print('\n[3/4] разбор C++: пропущено (--start-at)')
+    elif compiler:
         print('\n[3/4] разбор C++ против Python: побитное совпадение и время')
         s = Step('check_preproc', ['evaluation/check_preproc.py', *only_six], logs)
         if not run_parallel([s], env):
@@ -172,42 +182,58 @@ def main():
     else:
         print('\n[3/4] разбор C++: нет компилятора, пропущено')
 
-    print('\n[4/4] дашборд и демонстрация')
-    metrics, demo = args.out / 'metrics.html', args.out / 'demo.html'
-    steps = [Step('dashboard', ['evaluation/dashboard.py', '--out', str(metrics)], logs),
+    print('\n[4/4] страница отчёта и демонстрация')
+    page, demo = report_paths(args.out)
+    steps = [Step('dashboard', ['evaluation/dashboard.py', '--out', str(page)], logs),
              Step('demo', ['evaluation/demo.py', '--out', str(demo), '--workers', '2',
-                           *(['--clip', 'doubleT_obstacle:90:30', '--clip', 'roundT_doubleT:0:30',
+                           *(['--clip', 'doubleT_obstacle:0:72', '--clip', 'roundT_doubleT:0:30',
                               '--approach', f'{QUICK_APPROACH}:32:person:60'] if args.quick else [])],
                   logs)]
     if not run_parallel(steps, env):
         failed += [s.name for s in steps if not s.ok]
-    if metrics.exists() and demo.exists():
-        s = Step('site', ['evaluation/site.py', '--out', str(args.out)], logs)
-        if not run_parallel([s], env):
-            failed.append(s.name)
+    finish(args, logs, T0, failed)
 
-    landing = Path(__file__).resolve().parent / 'templates' / 'landing.html'
-    if landing.exists() and metrics.exists():
-        shutil.copyfile(landing, args.out / 'landing.html')
-        (args.out / 'dashboard.html').write_text(
-            '<!doctype html><meta charset="utf-8"><title>Дашборд</title>'
-            '<meta http-equiv="refresh" content="0; url=metrics.html">'
-            '<a href="metrics.html">Дашборд метрик</a>', encoding='utf-8')
 
+def report_paths(out):
+    """index.html и demo.html в папке отчёта. Файлы прежней раскладки (metrics.html, landing.html,
+    dashboard.html-перенаправление, site) удаляются, чтобы в папке не осталось устаревших страниц."""
+    for old in ('metrics.html', 'landing.html', 'dashboard.html'):
+        (out / old).unlink(missing_ok=True)
+    return out / 'index.html', out / 'demo.html'
+
+
+def finish(args, logs, T0, failed):
+    page, demo = args.out / 'index.html', args.out / 'demo.html'
     print(f'\nвсего {(time.time() - T0) / 60:.1f} мин')
-    for p in (metrics, demo):
+    for p in (page, demo):
         if p.exists():
             print(f'  {p}  {p.stat().st_size / 1e6:.1f} МБ')
-    ref = [line for line in (logs / 'dashboard.log').read_text(encoding='utf-8').splitlines() if 'baseline' in line] \
-        if (logs / 'dashboard.log').exists() else []
-    for line in ref:
-        print(' ', line.strip())
     if failed:
         print(f'\nС ОШИБКАМИ: {", ".join(failed)} -- логи в {logs}', file=sys.stderr)
         sys.exit(1)
-    print('\nГотово. Файлы открываются в браузере двойным щелчком, сеть не нужна.')
+    print(f'\nГотово: {page}. Открывается в браузере двойным щелчком, сеть не нужна.')
     if shutil.which('explorer') and sys.platform == 'win32':
         subprocess.run(['explorer', str(args.out)])
+
+
+def snapshot_report(args, logs, env, T0):
+    """--quick без записей: метрики не считаются, страница -- из evaluation/reference и baseline.json,
+    плеер -- из снимка evaluation/reference/demo_snapshot.json.gz. Тесты ядра записей не требуют."""
+    print('\nЗаписей нет: метрики пропущены, страница собирается из снимков evaluation/reference '
+          f'(данные -- {data_dir(args)}, или --data <каталог>).')
+    failed = []
+    if not args.skip_tests:
+        print('\n[1/2] тесты ядра (синтетический тоннель)')
+        t = Step('pytest', ['-m', 'pytest', '-q', '-p', 'no:cacheprovider', 'tests'], logs)
+        if not run_parallel([t], env):
+            failed.append(t.name)
+    print('\n[2/2] страница отчёта и демонстрация из снимков')
+    page, demo = report_paths(args.out)
+    steps = [Step('dashboard', ['evaluation/dashboard.py', '--out', str(page)], logs),
+             Step('demo', ['evaluation/demo.py', '--out', str(demo), '--from-snapshot'], logs)]
+    if not run_parallel(steps, env):
+        failed += [s.name for s in steps if not s.ok]
+    finish(args, logs, T0, failed)
 
 
 if __name__ == '__main__':

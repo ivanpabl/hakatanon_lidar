@@ -3,90 +3,103 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Детектор в тоннеле</title>
+<title>Плеер записей: детектор в тоннеле</title>
+<meta name="theme-color" content="#0b1c22">
+<link rel="icon" href="data:,">
 <style>
+/*__FONTS__*/
+</style>
+<style>
+/* токены -- те же, что на главной (index.html): тоннель без света, ось и зона -- ice, решения -- go / warn / stop */
 :root {
   color-scheme: dark;
-  --page: #070a0f; --surface: #10161e; --surface-2: #18202a;
-  --ink: #eef2f6; --ink-2: #aab5c0; --muted: #7d8894;
-  --grid: #222b35; --axis: #34404c; --border: rgba(255, 255, 255, .08);
-  --truth: #e8eef5; --now: #3987e5; --track: #199e70; --alarm: #ff4d6d; --cand: #fab219; --clear: #9fe0a8;
+  --tunnel: #0b1c22; --bone: #d8e0dc; --haze: #9fb3b4; --line: rgba(216, 224, 220, .14);
+  --ice: #7cc4d8; --go: #4fd18b; --warn: #ffb22e; --stop: #ff4a3d;
+  --page: var(--tunnel); --surface: #0f242b; --surface-2: #14303a;
+  --ink: var(--bone); --ink-2: var(--haze); --muted: #849c9e;
+  --grid: #183740; --axis: rgba(216, 224, 220, .32); --border: var(--line);
+  --truth: var(--bone); --now: var(--ice); --track: var(--ice); --alarm: var(--stop); --cand: var(--warn); --clear: var(--go);
   --font: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --display: "Tektur", "Arial Narrow", system-ui, sans-serif;
+  --r-pill: 1.5rem; --r-box: 6px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--page); color: var(--ink); overflow: hidden;
   font: 400 15px/1.45 var(--font); -webkit-font-smoothing: antialiased;
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
 }
-:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; border-radius: 4px; }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
 
 header.top {
   display: flex; align-items: center; gap: 20px; padding: 10px 16px; border-bottom: 1px solid var(--border);
   background: var(--surface); min-width: 0;
 }
-.brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.brand { font: 600 17px/1.1 var(--display); font-variation-settings: "wdth" 80; white-space: nowrap; color: inherit; text-decoration: none; }
 .brand small { font-weight: 400; color: var(--muted); margin-left: 8px; }
 #clips { display: flex; gap: 6px; overflow-x: auto; min-width: 0; }
 #clips button {
   font: inherit; font-size: 14px; color: var(--ink-2); background: none; border: 1px solid var(--border);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; text-align: left;
+  border-radius: var(--r-box); padding: 6px 12px; cursor: pointer; white-space: nowrap; text-align: left;
 }
 #clips button:hover { color: var(--ink); background: var(--surface-2); }
-#clips button[aria-pressed="true"] { color: var(--ink); border-color: var(--now); background: rgba(57, 135, 229, .16); }
+#clips button[aria-pressed="true"] { color: var(--ink); border-color: var(--now); background: rgba(124, 196, 216, .13); }
 #clips button small { display: block; font-size: 12px; color: var(--muted); }
 #clips button small b { color: var(--alarm); font-weight: 500; }
 .meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
-#stage { position: relative; min-height: 0; background: radial-gradient(120% 90% at 50% 38%, #111a26 0%, #070a0f 70%); }
+#stage { position: relative; min-height: 0; background: radial-gradient(120% 90% at 50% 38%, #12303a 0%, #0b1c22 70%); }
 #gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 #gl:active { cursor: grabbing; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 12px; color: rgba(232, 238, 245, .72); text-shadow: 0 1px 2px #000; }
-.lbl.obj { font-size: 14px; color: #fff; font-weight: 600; padding: 4px 9px; background: rgba(208, 40, 80, .92); border-radius: 6px; text-shadow: none; transform: translate(-50%, calc(-100% - 10px)); box-shadow: 0 0 18px rgba(255, 46, 97, .55); }
-.lbl.obj::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: rgba(208, 40, 80, .92); }
+.lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 12px; color: rgba(216, 224, 220, .72); text-shadow: 0 1px 2px #000; }
+/* плашка объекта -- как метка человека на главной: контур цвета решения, узкий шрифт */
+.lbl.obj { font: 600 15px/1.1 var(--display); font-variation-settings: "wdth" 85; font-variant-numeric: tabular-nums; color: var(--stop); padding: 5px 12px 6px; background: rgba(11, 28, 34, .9); border: 1.5px solid currentColor; border-radius: 1.2rem; text-shadow: none; transform: translate(-50%, calc(-100% - 10px)); box-shadow: 0 0 18px rgba(255, 74, 61, .35); }
+.lbl.obj::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -.75px; width: 1.5px; height: 7px; background: currentColor; }
 .lbl.cand { color: var(--cand); }
 .lbl.truth { color: var(--truth); font-size: 12px; }
 .hud {
-  position: absolute; background: rgba(10, 14, 20, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, .08); border-radius: 10px; padding: 14px 16px;
+  position: absolute; background: rgba(11, 28, 34, .84); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: var(--r-box); padding: 14px 16px;
 }
 .hud.main { top: 16px; left: 16px; width: 340px; }
 .status { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; }
-.status.alarm { color: #ff8a8a; }
+.status.alarm { color: var(--stop); }
 .status.clear { color: var(--clear); }
 .status.nopath { color: var(--cand); }
 .status.caution { color: var(--cand); }
-.hud .big { font-size: 46px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
-.hud .big small { font-size: 22px; font-weight: 500; color: rgba(232, 238, 245, .7); margin-left: 4px; }
-.hud .big.dim { color: rgba(232, 238, 245, .28); }
-.hud .what { color: rgba(232, 238, 245, .75); font-size: 14px; margin: 0 0 10px; }
+.hud .big { font: 700 52px/1 var(--display); font-variation-settings: "wdth" 76; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.hud .big small { font: 500 20px var(--font); color: var(--haze); margin-left: 4px; }
+.hud .big.dim { color: rgba(216, 224, 220, .28); }
+.hud .what { color: rgba(216, 224, 220, .78); font-size: 14px; margin: 0 0 10px; }
 .hud dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
-.hud dt { color: rgba(232, 238, 245, .55); }
+.hud dt { color: rgba(216, 224, 220, .55); }
 .hud dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud.legend { left: 16px; bottom: 16px; padding: 10px 14px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 16px; max-width: calc(100% - 32px - 330px); }
-.sw { display: inline-flex; align-items: center; gap: 7px; color: rgba(232, 238, 245, .82); }
+.sw { display: inline-flex; align-items: center; gap: 7px; color: rgba(216, 224, 220, .82); }
 .sw i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .sw i.ln { width: 16px; height: 3px; border-radius: 2px; }
 .sw i.neon { width: 11px; height: 11px; border-radius: 2px; background: rgba(var(--c), .35); border: 1px solid rgb(var(--c)); box-shadow: 0 0 8px rgba(var(--c), .8); }
 .hud.views { right: 16px; bottom: 16px; padding: 6px; display: flex; gap: 4px; }
-.hud.views button { font: inherit; font-size: 13px; color: rgba(232, 238, 245, .82); background: none; border: 0; border-radius: 6px; padding: 7px 11px; cursor: pointer; }
-.hud.views button:hover { background: rgba(255, 255, 255, .08); color: #fff; }
-.hud.views button[aria-pressed="true"] { background: rgba(57, 135, 229, .28); color: #fff; }
-.hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(232, 238, 245, .5); text-align: right; }
-.nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(232, 238, 245, .7); }
+.hud.views { border-radius: var(--r-pill); }
+.hud.views button { font: inherit; font-size: 13px; color: rgba(216, 224, 220, .82); background: none; border: 0; border-radius: var(--r-pill); padding: 7px 12px; cursor: pointer; }
+.hud.views button:hover { background: rgba(216, 224, 220, .08); color: var(--bone); }
+.hud.views button[aria-pressed="true"] { background: var(--bone); color: var(--tunnel); }
+.hint { position: absolute; top: 16px; right: 16px; font-size: 12px; color: rgba(216, 224, 220, .5); text-align: right; }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: rgba(216, 224, 220, .7); }
 
 footer.transport { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 16px 12px; }
 .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .controls button {
   font: inherit; font-size: 13px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 6px; height: 32px; min-width: 32px; padding: 0 10px; cursor: pointer; display: inline-grid; place-items: center;
+  border-radius: var(--r-pill); height: 32px; min-width: 32px; padding: 0 12px; cursor: pointer; display: inline-grid; place-items: center;
 }
 .controls button:hover { color: var(--ink); }
-.controls button[aria-pressed="true"] { color: #fff; border-color: var(--now); background: rgba(57, 135, 229, .28); }
-#play { min-width: 44px; color: var(--ink); }
+.controls button[aria-pressed="true"] { color: var(--tunnel); border-color: var(--bone); background: var(--bone); }
+#play { min-width: 44px; color: var(--tunnel); background: var(--bone); border-color: var(--bone); }
 .speed { display: inline-flex; gap: 4px; margin-left: 8px; }
 #clock { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 13px; margin-left: 8px; }
 .tl-legend { margin-left: auto; display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
@@ -97,12 +110,13 @@ footer.transport { background: var(--surface); border-top: 1px solid var(--borde
 #timeline text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
 #tip {
   position: fixed; z-index: 50; pointer-events: none; padding: 7px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4;
-  background: var(--ink); color: var(--page); opacity: 0; transition: opacity .08s; white-space: nowrap;
+  background: var(--bone); color: var(--tunnel); opacity: 0; transition: opacity .08s; white-space: nowrap;
 }
 #tip.on { opacity: 1; }
 
 @media (max-width: 900px) {
   header.top { flex-wrap: wrap; gap: 8px 12px; }
+  .hud .big { font-size: 34px; }
   .meta { display: none; }
   .hud.main { width: auto; max-width: calc(100% - 32px); padding: 10px 12px; }
   .hud .big { font-size: 32px; }
@@ -112,26 +126,29 @@ footer.transport { background: var(--surface); border-top: 1px solid var(--borde
 }
 
 .embed-controls { display:none; }
-body.embedded { display:block; background:#070a0f; }
+body.embedded { display:block; background:var(--tunnel); }
 .embedded #stage { position:fixed; inset:0; border:0; border-radius:0; }
 .embedded .top,.embedded .transport,.embedded .hud,.embedded .hint { display:none; }
 /* во встроенном виде из подписей остаётся только плашка подтверждённого объекта */
 .embedded .lbl:not(.obj) { display:none !important; }
-.embedded .embed-controls { position:fixed; bottom:28px; right:30px; display:flex; align-items:center; flex-wrap:wrap; gap:9px; color:#aab5c0; font:12px system-ui,sans-serif; }
-.embed-controls button { padding:9px 13px; border:1px solid #ffffff2a; border-radius:6px; background:#131920d9; color:#eef2f6; cursor:pointer; font:inherit; }
-.embed-controls button:focus-visible { outline:2px solid #3987e5; outline-offset:3px; }
+.embedded .embed-controls { position:fixed; bottom:20px; right:20px; display:flex; align-items:center; flex-wrap:wrap; gap:9px; color:var(--haze); font:12px var(--font); }
+.embed-controls button { padding:8px 14px; border:1px solid var(--line); border-radius:var(--r-pill); background:rgba(11, 28, 34, .85); color:var(--bone); cursor:pointer; font:inherit; }
+.embed-controls button:hover { border-color: rgba(216, 224, 220, .4); }
+.embed-controls button:focus-visible { outline:2px solid var(--bone); outline-offset:3px; }
 #embed-hint { max-width:min(52ch,100%); }
 @media(max-width:640px) { .embedded .embed-controls { bottom:16px; right:16px; left:16px; justify-content:flex-end; font-size:10px; } #embed-hint { display:none; } }
 
 /* сцена принимает клавиатуру: WASD работает, только когда фокус внутри неё */
 #gl:focus { outline:none; }
-#gl:focus-visible { outline:2px solid rgba(57,135,229,.55); outline-offset:-2px; }
+/* во фрейме главной вертикальный свайп листает страницу, горизонтальный -- вращает сцену */
+.embedded #gl { touch-action: pan-y; }
+#gl:focus-visible { outline:2px solid rgba(124, 196, 216, .55); outline-offset:-2px; }
 </style>
 </head>
 <body>
 <script>if (new URLSearchParams(location.search).get("embed") === "1") document.body.classList.add("embedded");</script>
 <header class="top">
-  <div class="brand">Препятствия в тоннеле<small>демонстрация на записях</small></div>
+  <a class="brand" href="index.html">tunnel_od<small>плеер записей</small></a>
   <div id="clips" role="group" aria-label="Отрывки записей"></div>
   <div class="meta" id="meta"></div>
 </header>
@@ -141,14 +158,14 @@ body.embedded { display:block; background:#070a0f; }
   <div id="labels"></div>
   <div class="hud main" id="hud" aria-live="polite"></div>
   <div class="hud legend">
-    <span class="sw"><i style="background:#5598e7"></i>облако (цвет — высота)</span>
-    <span class="sw"><i style="background:#eef4ff"></i>точки в коридоре</span>
-    <span class="sw"><i class="ln" style="background:#1baf7a"></i>ось по рельсам</span>
-    <span class="sw"><i class="ln" style="background:#80d6b5"></i>ось по стенам</span>
-    <span class="sw"><i class="ln" style="background:#3887e5"></i>коридор проверки</span>
-    <span class="sw"><i class="neon" style="--c:255,46,97"></i>тревога</span>
-    <span class="sw"><i class="neon" style="--c:255,176,33"></i>кандидат</span>
-    <span class="sw" id="lg-truth" hidden><i class="ln" style="background:#e8eef5"></i>вставленный объект (истина)</span>
+    <span class="sw"><i style="background:linear-gradient(90deg,#2c5560,#d8e0dc)"></i>облако (светлее — выше)</span>
+    <span class="sw"><i style="background:#f2f6f4"></i>точки в коридоре</span>
+    <span class="sw"><i class="ln" style="background:#7cc4d8"></i>ось по рельсам</span>
+    <span class="sw"><i class="ln" style="background:rgba(124,196,216,.5)"></i>ось по стенам</span>
+    <span class="sw"><i class="ln" style="background:rgba(124,196,216,.3)"></i>коридор проверки</span>
+    <span class="sw"><i class="neon" style="--c:255,74,61"></i>тревога</span>
+    <span class="sw"><i class="neon" style="--c:255,178,46"></i>кандидат</span>
+    <span class="sw" id="lg-truth" hidden><i class="ln" style="background:#d8e0dc"></i>вставленный объект (истина)</span>
   </div>
   <div class="hud views" role="group" aria-label="Вид">
     <button type="button" data-view="cab">Кабина</button>
@@ -180,7 +197,7 @@ body.embedded { display:block; background:#070a0f; }
   </div>
   <div id="timeline" role="slider" tabindex="0" aria-label="Кадр"></div>
 </footer>
-<div id="tip" role="tooltip"></div><div class="embed-controls"><span id="embed-hint">кликните сцену — WASD двигает камеру</span><button id="embed-reset" type="button">Сброс камеры</button><button id="embed-pause" type="button">Пауза</button></div>
+<div id="tip" role="tooltip"></div><div class="embed-controls"><span id="embed-hint">кликните сцену: колесо — масштаб, WASD — камера</span><button id="embed-reset" type="button">Сброс камеры</button><button id="embed-pause" type="button">Пауза</button></div>
 
 <script>
 const DATA = /*__DATA__*/null;
@@ -194,7 +211,7 @@ const options = new URLSearchParams(location.search);
 const embedded = options.get('embed') === '1';
 const looping = embedded || options.get('loop') === '1';
 if (embedded) document.body.classList.add('embedded');
-const NS = 'http://www.w3.org/2000/svg';
+const NS = 'http\u003a//www.w3.org/2000/svg';
 function num(v, d = 0) {
   if (v == null || !isFinite(v)) return '—';
   const s = Math.abs(v).toFixed(d).split('.');
@@ -209,13 +226,20 @@ function plural(n, one, few, many) {
 const ALARM_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.8 12H1.2z" fill="currentColor"/><path d="M8 6v3.4M8 11.4v.1" stroke="#1a0b0b" stroke-width="1.7" stroke-linecap="round"/></svg>';
 function b64(s) { const bin = atob(s), n = bin.length, out = new Uint8Array(n); for (let i = 0; i < n; i++) out[i] = bin.charCodeAt(i); return out; }
 
-$('#meta').textContent = D.generated ? `собрано ${D.generated.split('-').reverse().join('.')}${D.commit ? ' · ' + D.commit : ''}` : '';
+$('#meta').textContent = (D.generated ? `собрано ${D.generated.split('-').reverse().join('.')}${D.commit ? ', ' + D.commit : ''}` : '') + (D.snapshot ? '; снимок из evaluation/reference' : '');
 if (!D.clips.length) { $('#stage').insertAdjacentHTML('beforeend', '<div class="nogl">Нет данных. Запустите <code>python -m evaluation demo</code>.</div>'); return; }
 
 // --- отрывки: точки декодируются один раз
-const requestedClip = options.get('clip');
-const available = embedded ? D.clips.filter(c => c.bag === requestedClip && !c.approach) : D.clips;
-if (!available.length) { $('#stage').insertAdjacentHTML('beforeend','<div class="nogl">Запись doubleT_obstacle отсутствует в плеере.</div>'); return; }
+// встроенный режим (главная): отрывок и диапазон кадров -- из D.embed, их считает demo.py по фактическим кадрам;
+// параметры clip, start, end в адресе их перекрывают
+const E = D.embed || {};
+const requestedClip = options.get('clip') || E.clip;
+const plain = D.clips.filter(c => !c.approach);
+let available = embedded ? plain.filter(c => c.bag === requestedClip) : D.clips;
+if (embedded && !available.length) available = plain.slice(0, 1);
+if (!available.length) { $('#stage').insertAdjacentHTML('beforeend','<div class="nogl">В плеере нет отрывков без подъезда.</div>'); return; }
+const sameClip = available[0].bag === E.clip;
+if (embedded && parent !== window) parent.postMessage({ type: 'demo-info', bag: available[0].bag, snapshot: !!D.snapshot }, '*');
 const clips = available.map(c => ({ ...c, q: new Int16Array(b64(c.points).buffer), tg: b64(c.tags) }));
 clips.forEach(c => { delete c.points; delete c.tags; });
 const Z0 = D.zone;
@@ -263,9 +287,9 @@ function upload(gp, pos, col, size) {
   gp.n = n;
 }
 
-const ramp = [[0x1c, 0x5c, 0xab], [0x2a, 0x78, 0xd6], [0x55, 0x98, 0xe7], [0x86, 0xb6, 0xef], [0xcd, 0xe2, 0xfb]];
+const ramp = [[0x1f, 0x44, 0x4d], [0x2f, 0x5f, 0x69], [0x55, 0x82, 0x89], [0x8f, 0xab, 0xad], [0xd8, 0xe0, 0xdc]];
 const rampAt = u => { u = Math.max(0, Math.min(1, u)) * (ramp.length - 1); const i = Math.min(ramp.length - 2, Math.floor(u)), f = u - i; return ramp[i].map((c, k) => (c + (ramp[i + 1][k] - c) * f) / 255); };
-const NEON = { alarm: [1, .18, .38], cand: [1, .69, .13] };
+const NEON = { alarm: [1, .29, .24], cand: [1, .70, .18] };
 
 let axis = [[0, 0, 2]], axF0 = 2, axStep = 1;
 const axIdx = f => Math.max(0, Math.min(axis.length - 1, Math.round((f - axF0) / axStep)));
@@ -312,11 +336,11 @@ function buildFrame() {
     const lat = q[3 * i] / 100, z = q[3 * i + 1] / 100, f = q[3 * i + 2] / 100, t = tg[i];
     if (t >= 2) {
       hp[3 * h] = lat; hp[3 * h + 1] = z; hp[3 * h + 2] = -f;
-      if (t === 2) hc.set([1, .45, .6, 1], 4 * h); else hc.set([1, .78, .3, 1], 4 * h);
+      if (t === 2) hc.set([1, .5, .44, 1], 4 * h); else hc.set([1, .78, .36, 1], 4 * h);
       hs[h++] = t === 2 ? .22 : .14;
       continue;
     }
-    let c = t === 1 ? [.93, .96, 1] : rampAt((z - railAt(Math.max(2, f)) + 0.4) / 5.5);
+    let c = t === 1 ? [.95, .97, .96] : rampAt((z - railAt(Math.max(2, f)) + 0.4) / 5.5);
     const fade = t === 1 ? 0 : Math.min(.55, Math.max(0, (f - 30) / 360));
     bp[3 * b] = lat; bp[3 * b + 1] = z; bp[3 * b + 2] = -f;
     bc[4 * b] = c[0] * (1 - fade) + .04 * fade; bc[4 * b + 1] = c[1] * (1 - fade) + .04 * fade; bc[4 * b + 2] = c[2] * (1 - fade) + .04 * fade; bc[4 * b + 3] = 1;
@@ -330,11 +354,11 @@ function buildFrame() {
   const railEnd = fr.rails_to_m || 0;
   const P = (i, dl, dz) => [axis[i][0] + dl, axis[i][1] + dz, -axis[i][2]];
   if (fr.path_range_m) for (let i = 0; i + 1 < axis.length; i++) {
-    seg(P(i, 0, 0.02), P(i + 1, 0, 0.02), axis[i][2] <= railEnd ? [.106, .686, .478, 1] : [.5, .84, .71, .9]);
-    const cc = [.22, .53, .9, .55];
+    seg(P(i, 0, 0.02), P(i + 1, 0, 0.02), axis[i][2] <= railEnd ? [.49, .77, .85, 1] : [.49, .77, .85, .5]);
+    const cc = [.49, .77, .85, .42];
     for (const dl of [-Z0.half_width, Z0.half_width]) for (const dz of [Z0.clearance, Z0.height]) seg(P(i, dl, dz), P(i + 1, dl, dz), cc);
     if (Math.round(axis[i][2]) % 10 === 0) {
-      const rc = [.22, .53, .9, .28];
+      const rc = [.49, .77, .85, .2];
       seg(P(i, -Z0.half_width, Z0.clearance), P(i, Z0.half_width, Z0.clearance), rc);
       seg(P(i, -Z0.half_width, Z0.height), P(i, Z0.half_width, Z0.height), rc);
       seg(P(i, -Z0.half_width, Z0.clearance), P(i, -Z0.half_width, Z0.height), rc);
@@ -342,7 +366,7 @@ function buildFrame() {
     }
   }
   if (fr.truth_box) {
-    const [x0, x1, z0, z1, f0, f1] = fr.truth_box, tc = [.91, .93, .96, .8];
+    const [x0, x1, z0, z1, f0, f1] = fr.truth_box, tc = [.85, .88, .86, .8];
     const v = [[x0, z0, -f0], [x1, z0, -f0], [x1, z1, -f0], [x0, z1, -f0], [x0, z0, -f1], [x1, z0, -f1], [x1, z1, -f1], [x0, z1, -f1]];
     [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([a0, b0]) => seg(v[a0], v[b0], tc));
     if (!fr.obstacle) addLabel([(x0 + x1) / 2, z1 + .6, -(f0 + f1) / 2], `объект ${num(fr.truth_m, 0)} м`, 'truth');
@@ -523,7 +547,9 @@ canvas.addEventListener('pointermove', e => {
 });
 const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-canvas.addEventListener('wheel', e => { e.preventDefault(); anim = null; userCam = true; cam.dist = Math.max(2, Math.min(500, cam.dist * Math.exp(e.deltaY * .0012))); dirty = true; }, { passive: false });
+// На главной плеер стоит посреди длинной страницы: колесо над ним листает страницу, пока сцену не выбрали
+// щелчком (тогда колесо -- масштаб). Иначе прокрутка страницы застревает на фрейме.
+canvas.addEventListener('wheel', e => { if (embedded && document.activeElement !== canvas) return; e.preventDefault(); anim = null; userCam = true; cam.dist = Math.max(2, Math.min(500, cam.dist * Math.exp(e.deltaY * .0012))); dirty = true; }, { passive: false });
 
 /* --- клавиатура сцены: WASD перемещает камеру
    Слушатели висят на самом canvas, а не на документе: клавиши работают, только когда фокус
@@ -665,8 +691,8 @@ tl.addEventListener('pointerleave', () => tip.classList.remove('on'));
 
 let playing = false, rate = 1, acc = 0, lastT = 0;
 const frameOption = (key,fallback) => {const n=Number(options.get(key)); return options.has(key) && Number.isFinite(n) ? Math.max(0,Math.min(clip.frames.length-1,Math.floor(n))) : fallback;};
-const loopStart = embedded ? frameOption('start',0) : 0;
-let loopEnd = embedded ? Math.max(loopStart,frameOption('end',clip.frames.length-1)) : clip.frames.length-1;
+const loopStart = embedded ? frameOption('start', sameClip && E.start != null ? E.start : 0) : 0;
+let loopEnd = embedded ? Math.max(loopStart,frameOption('end', sameClip && E.end != null ? E.end : clip.frames.length-1)) : clip.frames.length-1;
 let suspended = false, resumePlaying = false;
 const playBtn = $('#play');
 function setPlaying(p) { playing = p; document.body.dataset.playing = String(p); if (embedded) $('#embed-pause').textContent = p ? 'Пауза' : 'Продолжить'; playBtn.textContent = p ? '❚❚' : '▶'; playBtn.setAttribute('aria-label', p ? 'Пауза' : 'Пуск'); lastT = performance.now(); acc = 0; }
