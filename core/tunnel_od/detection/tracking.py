@@ -87,10 +87,10 @@ class EvidenceTracker:
     кадров: подтверждённый трек за концом оси тревоги не поднимал, и его прогноз не должен поднять
     её, когда ось в следующем кадре длиннее; ложная вспышка на 1-3 кадра не должна удлиняться."""
 
-    def __init__(self, threshold=2.2, decay=0.8, min_hits=3, far_min_hits=None, gate_fwd=1.0, gate_rel=0.02,
+    def __init__(self, threshold=2.2, decay=0.8, min_hits=3, gate_fwd=1.0, gate_rel=0.02,
                  gate_lat=0.6, max_miss=10, hold=0, hold_min=5, ego_check=False, ego_min_travel=4.0,
                  ego_max_slope=-0.35, persist_hits=0, persist_slope=(-1.25, -0.75), persist_max_d=None, persist_max_lat=None,
-                 persist_min_top=0.0):
+                 persist_min_top=0.0, far_min_hits=None):
         self.persist_max_lat = persist_max_lat
         self.persist_min_top = persist_min_top  # persist не подтверждает объект с верхом ниже (0 -- выкл)
         self.persist_hits = persist_hits

@@ -253,7 +253,7 @@ class ObstacleDetector:
 
         objects = cluster_points(fwd[m], lat[m], z_rel[m], keep_idx=self.features)
         for o in objects:
-            o['too_small'] = o['n_points'] < min_points_at(o['distance_m'], self.min_points_k, self.min_points_floor)
+            o['too_small'] = o['n_points'] < self._expected_points(o['distance_m'])
         rails_end = self._rail_prof[0][-1] if self._rail_prof is not None else 0.0
         far_start = max(rails_end, 20.0) + self.far_from
         if self.edge_lines:
@@ -359,8 +359,8 @@ class ObstacleDetector:
         return np.where(u, x - np.clip(x, np.minimum(c, 0.0), np.maximum(c, 0.0)), lat)
 
     def _unknown_frame(self, path_ok, stamp):
-        """Результат той же структуры для пустого/крошечного кадра: габарит не проверить."""
-        self._prev_stop_ids = set()
+        """Результат той же структуры для пустого/крошечного кадра: габарит не проверить.
+        Память R3 (_prev_stop_ids) не сбрасывается: треки в трекере тоже живут через такой кадр."""
         return {
             'status': 'unknown',
             'obstacle': False,

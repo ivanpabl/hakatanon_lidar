@@ -2,9 +2,11 @@
 по умолчанию выключены -- поведение базы не меняется."""
 import warnings
 
+import numpy as np
 import pytest
 
 from tunnel_od import ObstacleDetector
+from tunnel_od.detection.clustering import min_points_at
 from tunnel_od.detection.decision import decide, object_level
 from tunnel_od.detection.tracking import EvidenceTracker
 from tunnel_od.sim.lidar_sim import simulate_frame
@@ -90,3 +92,71 @@ def test_detector_accepts_rules_and_still_stops_on_real_obstacle(kwargs):
     stop = [o for o in res['objects'] if o['level'] == 'stop']
     assert stop and all(o['reason'] == 'in_gauge' for o in stop)
     assert det._prev_stop_ids == {o['track_id'] for o in stop}
+
+
+def test_r3_memory_survives_tiny_frame():
+    det = ObstacleDetector(stop_confirm_far_m=30.0)
+    _run(det, [{}] * 3)
+    res = _run(det, [{'obstacle_forward': 34.0, 'obstacle_radius': 0.35}] * 5)
+    assert res['status'] == 'stop' and res['distance_m'] >= 30.0
+    ids = det._prev_stop_ids
+    assert det.check_frame(np.zeros(3), np.zeros(3), np.zeros(3))['status'] == 'unknown'
+    assert det._prev_stop_ids == ids
+    res = _run(det, [{'obstacle_forward': 34.0, 'obstacle_radius': 0.35}])
+    assert res['status'] == 'stop' and all(o['reason'] != 'far_unconfirmed' for o in res['objects'])
+
+
+# --- exp4: накопление evidence вдали (far_acc_*), по умолчанию выключено
+
+def test_expected_points_far_acc():
+    det = ObstacleDetector()
+    for d in (50.0, 150.0):
+        assert det._expected_points(d) == min_points_at(d, det.min_points_k, det.min_points_floor)
+    det = ObstacleDetector(far_acc_from=100.0, far_acc_floor=1.5)
+    assert det._expected_points(50.0) == min_points_at(50.0, det.min_points_k, det.min_points_floor)
+    assert det._expected_points(150.0) == 1.5
+
+
+def test_far_min_hits_in_evidence_tracker():
+    def run(n, **kw):
+        tr = EvidenceTracker(threshold=2.2, decay=1.0, min_hits=3, **kw)
+        for _ in range(n):
+            ob = {'distance_m': 150.0, 'lateral_m': 0.0, 'n_points': 20}
+            tr.update([ob], displacement=0.0, expected=lambda d: 5.0)
+        return ob['confirmed']
+    assert run(3)
+    assert not run(3, far_min_hits=(100.0, 5)) and run(5, far_min_hits=(100.0, 5))
+    assert run(3, far_min_hits=(200.0, 5))  # ближе порога -- как раньше
+    tr = EvidenceTracker(2.2, 0.8, 3, 1.0)   # позиционный вызов: 4-й аргумент -- gate_fwd, не far_min_hits
+    assert tr.gate_fwd == 1.0 and tr.far_min_hits is None
+
+
+@pytest.mark.parametrize('floor', [1.5, 1.0])
+def test_too_small_follows_expected_points(floor):
+    """too_small считается тем же _expected_points, что и evidence: с far_acc_floor=1.0 объект из
+    1 точки вдали не too_small, с 1.5 -- too_small (1 < 1.5), но evidence он всё равно копит."""
+    det = ObstacleDetector(far_acc_from=100.0, far_acc_floor=floor)
+    _run(det, [{}] * 2)
+    res = _run(det, [{'obstacle_forward': 150.0, 'obstacle_radius': 0.35}] * 6)
+    far = [o for o in res['objects'] if not o.get('held') and o['n_points'] and o['distance_m'] > 100.0]
+    assert far and all(o['too_small'] == (o['n_points'] < det._expected_points(o['distance_m'])) for o in far)
+    assert any(o['level'] == 'stop' for o in far)
+    assert all(o['too_small'] == (o['n_points'] < floor) for o in far)
+
+
+OFF = {'persist_min_top_m': 0.0, 'front_lift_caution_m': None, 'front_lift_max_low_m': 2.0,
+       'stop_confirm_far_m': None, 'far_acc_from': None, 'far_acc_floor': 1.5, 'far_acc_min_hits': 4,
+       'range_hold': 0}
+
+
+def test_defaults_identical_to_explicit_off_full_result():
+    """Байт-в-байт: детектор с {} и с явно выключенными правилами дают одинаковый результат
+    (весь dict, включая objects) на пустом, крошечном и препятственном кадрах."""
+    a, b = ObstacleDetector(), ObstacleDetector(**OFF)
+    frames = [{}] * 3 + [{'obstacle_forward': 40.0, 'obstacle_radius': 0.35}] * 5 + [{}]
+    for kw in frames:
+        x, y, z, *_ = simulate_frame(**kw)
+        ra, rb = a.detect(x, y, z, refit_path=True), b.detect(x, y, z, refit_path=True)
+        assert ra == rb
+    tiny = np.zeros(3)
+    assert a.check_frame(tiny, tiny, tiny) == b.check_frame(tiny, tiny, tiny)
