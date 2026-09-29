@@ -1,5 +1,5 @@
-"""Правила против ложных СТОП (R1-R3, разбор fp_autopsy): переключаемые параметры ObstacleDetector,
-по умолчанию выключены -- поведение базы не меняется."""
+"""Правила против ложных СТОП (R1-R3, разбор fp_autopsy): переключаемые параметры ObstacleDetector.
+R1 (с гейтом по lat) и R2 включены по умолчанию, R3 выключен; OFF -- поведение базы a61fe29."""
 import warnings
 
 import numpy as np
@@ -158,10 +158,21 @@ OFF = {'persist_min_top_m': 0.0, 'front_lift_caution_m': None, 'front_lift_max_l
        'range_hold': 0}
 
 
-def test_defaults_identical_to_explicit_off_full_result():
-    """Байт-в-байт: детектор с {} и с явно выключенными правилами дают одинаковый результат
-    (весь dict, включая objects) на пустом, крошечном и препятственном кадрах."""
-    a, b = ObstacleDetector(), ObstacleDetector(**OFF)
+ON = {'persist_min_top_m': 0.5, 'persist_min_top_lat_m': 0.55, 'front_lift_caution_m': 0.1,
+      'front_lift_max_low_m': 2.0, 'stop_confirm_far_m': None}
+
+
+def test_defaults_are_r1_lat_gated_plus_r2():
+    d = ObstacleDetector()
+    assert (d._tracker.persist_min_top, d._tracker.persist_min_top_lat) == (0.5, 0.55)
+    assert d.front_lift_caution_m == 0.1 and d.stop_confirm_far_m is None
+
+
+def test_defaults_identical_to_explicit_on_full_result():
+    """Байт-в-байт: детектор с {} и с явно заданными значениями по умолчанию дают одинаковый результат
+    (весь dict, включая objects) на пустом, крошечном и препятственном кадрах; OFF на настоящем
+    препятствии тоже СТОП."""
+    a, b = ObstacleDetector(), ObstacleDetector(**ON)
     frames = [{}] * 3 + [{'obstacle_forward': 40.0, 'obstacle_radius': 0.35}] * 5 + [{}]
     for kw in frames:
         x, y, z, *_ = simulate_frame(**kw)
@@ -169,3 +180,8 @@ def test_defaults_identical_to_explicit_off_full_result():
         assert ra == rb
     tiny = np.zeros(3)
     assert a.check_frame(tiny, tiny, tiny) == b.check_frame(tiny, tiny, tiny)
+    off = ObstacleDetector(**OFF)
+    for kw in frames[:-1]:
+        x, y, z, *_ = simulate_frame(**kw)
+        res = off.detect(x, y, z, refit_path=True)
+    assert res['status'] == 'stop'

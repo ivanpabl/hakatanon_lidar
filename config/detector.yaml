@@ -59,12 +59,13 @@ tunnel_od_detector:
       min_sight_m: 30.0  # путь виден ближе 30 м (ось оборвалась у лидара) -- unknown, не clear; ~тормозной путь с 25 км/ч; scratchpad exp6 a
       sensor_axis_union_m: 40.0  # организаторы ставят объекты от оси лидара, рельсы повёрнуты на −0,27°; 7/8→8/8, объект 4 СТОП с 33 м, ложные 5/1510, пустые 2,01 %; scratchpad/exp7 V1
       sensor_axis_max_dev: 0.25
-      # Правила против ложных СТОП (эксперимент exp/fp-range, разбор _exp_handoff/materials/fp_autopsy). По умолчанию ВЫКЛ:
-      # persist_min_top_m: 0.5       # R1: persist не подтверждает объект с верхом < 0,5 м (0 -- выкл)
-      # persist_min_top_lat_m: 0.55  # R1: только для объектов с |lateral_m| >= 0,55 м (у головки рельса); null -- для всех
-      # front_lift_caution_m: 0.1    # R2: front_maxh >= low_m + 0,1 и low_m < front_lift_max_low_m -> caution/front_lift (null -- выкл)
-      # front_lift_max_low_m: 2.0    # R2: ограничение по низу объекта
-      # stop_confirm_far_m: 30.0     # R3: СТОП на d >= 30 м только если был СТОП и в прошлом кадре, иначе caution/far_unconfirmed (null -- выкл)
+      # Правила против ложных СТОП (ветка exp/fp-range, разбор _exp_handoff/materials/fp_autopsy; цифры -- EXP_LOG/REPORT):
+      persist_min_top_m: 0.5       # R1: persist не подтверждает объект с верхом < 0,5 м (0 -- выкл)
+      persist_min_top_lat_m: 0.55  # R1: только при |lateral_m| >= 0,55 м (одиночные точки у головки рельса); null -- для всех (терялся куб 0,2 м на оси)
+      front_lift_caution_m: 0.1    # R2: front_maxh >= low_m + 0,1 и low_m < front_lift_max_low_m -> caution/front_lift (null -- выкл)
+      front_lift_max_low_m: 2.0    # R2: ограничение по низу объекта
+      # R1+R2: пустые записи 2,01 -> 0,39 % СТОП-кадров (21 -> 8 эпизодов), бэг 8/8, ложных 5 -> 4/1510, approach не хуже, new_data 5,50 -> 5,19 %
+      # stop_confirm_far_m: 30.0   # R3 ОТКЛОНЁН: 0 ложных, но approach теряет 25-40 м дальности (СТОП вдали мерцает по кадрам)
 
 tunnel_od_preproc:
   ros__parameters:

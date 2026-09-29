@@ -50,17 +50,20 @@ class ObstacleDetector:
                  persist_hits=6, persist_slope=(-1.25, -0.75), persist_edge_margin=0.25, min_sight_m=30.0,
                  sensor_axis_union_m=40.0, sensor_axis_max_dev=0.25,
                  far_acc_from=None, far_acc_floor=1.5, far_acc_min_hits=4, range_hold=0,
-                 persist_min_top_m=0.0, front_lift_caution_m=None, front_lift_max_low_m=2.0,
-                 stop_confirm_far_m=None, persist_min_top_lat_m=None):
-        """Правила против ложных СТОП (fp_autopsy R1-R3), по умолчанию ВЫКЛЮЧЕНЫ:
+                 persist_min_top_m=0.5, front_lift_caution_m=0.1, front_lift_max_low_m=2.0,
+                 stop_confirm_far_m=None, persist_min_top_lat_m=0.55):
+        """Правила против ложных СТОП (fp_autopsy R1-R3). R1 (с гейтом по lat) и R2 ВКЛЮЧЕНЫ по умолчанию
+        (exp/fp-range: пустые записи 2,01 → 0,39 % СТОП-кадров, бэг организаторов 5 → 4/1510, 8/8, approach не хуже);
+        R3 выключен (approach: дальность −25…40 м). База = {'persist_min_top_m': 0, 'front_lift_caution_m': None}:
         persist_min_top_m    R1: подтверждение по устойчивому треку (persist) только при верхе объекта
-                             (height_m) >= этого; 0 -- выкл. Рекомендуется 0.5.
+                             (height_m) >= этого; 0 -- выкл.
         persist_min_top_lat_m R1: правило по верху действует только при |lateral_m| >= этого (точки у головки
-                             рельса); None -- для всех объектов. Рекомендуется 0.55 (куб 0,2 м на оси не теряется).
+                             рельса); None -- для всех объектов (без гейта терялся куб 0,2 м на оси в approach).
         front_lift_caution_m R2: front_maxh >= low_m + это и low_m < front_lift_max_low_m -> caution
-                             (reason front_lift) вместо stop; None -- выкл. Рекомендуется 0.1.
+                             (reason front_lift) вместо stop; None -- выкл.
         stop_confirm_far_m   R3: СТОП на d >= этого только если трек был СТОП и в прошлом кадре,
-                             иначе caution (reason far_unconfirmed); None -- выкл. Рекомендуется 30."""
+                             иначе caution (reason far_unconfirmed); None -- выкл. Отклонено: 30 даёт 0 ложных, но
+                             approach теряет 25-40 м дальности (СТОП вдали мерцает по кадрам)."""
         self.min_sight_m = min_sight_m
         self.front_lift_caution_m = front_lift_caution_m
         self.front_lift_max_low_m = front_lift_max_low_m
