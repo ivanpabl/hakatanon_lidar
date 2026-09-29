@@ -51,7 +51,7 @@ ls output/                                     # 3. результат: <зап�
 | §5 README: описание, сборка, запуск, bag, параметры | ✅ | этот README, [`config/detector.yaml`](config/detector.yaml), [architecture.md](docs/architecture.md#параметры) | — |
 | §5 Архитектура, алгоритм, эксперименты, сложные случаи | ✅ | [architecture.md](docs/architecture.md), [algorithm.md](docs/algorithm.md), [experiments.md](docs/experiments.md), [hard_cases.md](docs/hard_cases.md) | — |
 | §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](docs/img/demo.gif); запись экрана — [ссылка будет добавлена] | — |
-| §8.5 Тесты | ✅ | gtest (`tunnel_od_preproc`), pytest (`tests/`, узел); `docker compose run --rm test` | — |
+| §8.5 Тесты | ✅ | `docker compose run --rm test`: gtest (`tunnel_od_preproc`, 15) + pytest пакетов ROS 2 (`ros2_ws`, 21 случай); ядро — pytest `tests/` (64 функции, 79 случаев с параметризацией) в CI и локально | — |
 | §8.6 docker build → docker run → ros2 bag play → результат | ✅ | запуск в 3 команды выше; вариант голым `docker run` — в разделе «Без Compose» | — |
 | §8.7 Подход команды | ✅ | [«Подход команды»](docs/experiments.md#подход-команды), [эксперименты 28–29.09](docs/experiments.md#эксперименты-282909-финальная-доводка) | — |
 | Q&A 4.6 Работа офлайн, без внешних API | ✅ | сеть нужна только при сборке; отчёт открывается без сети | — |
@@ -84,7 +84,7 @@ ls output/                                     # 3. результат: <зап�
 | Реальный предмет на рельсе, 56 м (`doubleT_obstacle`) | СТОП в **191 из 201** кадра | 49 |
 | Разбор кадра C++ / Python | **8,0 / 23,0 мс** на тяжёлом кадре, ~3 / 7,5 мс на остальных; побитовое совпадение на 210 из 210 кадров ([JSON](evaluation/reference/check_preproc_final.json)) | — |
 | Ошибка дистанции | медиана 3 см, 95 % — до 1 м | — |
-| Docker | `build`, `test` (gtest 15, pytest 21 — все прошли), `play` без ошибок ([test](evaluation/reference/docker/final_test.log), [play](evaluation/reference/docker/final_play.log)); у всех объектов есть `size_m`, `confidence`, `position_m` | — |
+| Docker | `build`, `test` (gtest 15 + pytest 21 случай пакетов `ros2_ws` — все прошли; ядро `tests/`, 79 случаев, проверяется в CI, не в Docker), `play` без ошибок ([test](evaluation/reference/docker/final_test.log), [play](evaluation/reference/docker/final_play.log)); у всех объектов есть `size_m`, `confidence`, `position_m` | — |
 
 «Было» — исходная версия детектора (`ae38df6`); для бэга организаторов — версия 27.09 с зоной 2,5 м (`evaluation/reference/fake_obj_fo_base.csv`).
 

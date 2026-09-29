@@ -32,7 +32,7 @@
 | вся `new_data` (11 271 кадр, 18,8 мин) | — | СТОП **3,3 %**, ВНИМАНИЕ 31,5 %, `unknown` 0,9 %; 79 эпизодов (252 в час), медиана дистанции 45 м |
 | `doubleT_obstacle`: СТОП у предмета на 56 м | 49 из 201 | **191 из 201** |
 | разбор кадра C++ / Python | — | 8,0 / 23,0 мс на тяжёлом кадре, ~3 / 7,5 мс на остальных; побитово совпадает на 210 из 210 кадров ([JSON](../evaluation/reference/check_preproc_final.json)) |
-| Docker | — | `build`, `test` (gtest 15, pytest 21 — все прошли), `play`: код выхода 0, ошибок 0, чистая остановка ([test](../evaluation/reference/docker/final_test.log), [play](../evaluation/reference/docker/final_play.log)); у всех объектов есть `size_m`, `confidence`, `position_m` |
+| Docker | — | `build`, `test` (gtest 15 + pytest 21 случай пакетов `ros2_ws` — все прошли; ядро `tests/`, 79 случаев, проверяется в CI, не в Docker), `play`: код выхода 0, ошибок 0, чистая остановка ([test](../evaluation/reference/docker/final_test.log), [play](../evaluation/reference/docker/final_play.log)); у всех объектов есть `size_m`, `confidence`, `position_m` |
 
 Источники: `evaluation/reference/fake_obj_fo_final.csv` и `fake_obj_fo_base.csv` (бэг организаторов), `alarms_final.csv` (пустые записи), `alarms_final_nd_full.csv` (вся `new_data`), `approach_final.csv` (подъезд). `unknown` — только кадры, где путь виден ближе 30 м (`min_sight_m`); кадров без оси — 0.
 

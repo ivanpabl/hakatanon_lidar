@@ -12,7 +12,7 @@
   alarms_A_base.csv / alarms_<итог>.csv        тревоги исходной и итоговой версии на 6 записях
   alarms_final_nd_full.csv                     вся new_data, итоговая версия
   approach_A_base.csv / approach_<итог>.csv    дальность при подъезде (eval_approach.py)
-  fake_obj_fo_{base,final}.csv, alarms_fo_final.csv, fake_obj_truth.csv
+  fake_obj_fo_{base,final}.csv, alarms_fo_final.csv, fake_obj_truth.csv, alarms_fo_final_objects.jsonl
                                                бэг организаторов с 10 объектами (eval_fake_obj.py)
   selflabel_nd_final.csv                       эпизоды СТОП на new_data, проверенные проездом (selflabel.py)
   compare_table.md                             варианты параметров, одна строка -- один прогон подбора параметров
@@ -227,9 +227,34 @@ def fake_obj():
                  1 if cdist is not None and abs(cdist - d) < 5 else 0
             tracks.setdefault(o, []).append([i, round(d, 1), s_])
         out['tracks'] = tracks
-        out['stop_outside'] = sum(1 for i, fr in enumerate(out['frames']) if fr[0] == 2 and not any(
-            p[0] == i and p[2] == 2 for t in tracks.values() for p in t))
+        out['stop_outside'] = false_stop_frames(frames)
     return out
+
+
+def false_stop_frames(frames):
+    """Ложные СТОП-кадры по определению eval_fake_obj.evaluate: кадр со status=stop, в котором есть объект
+    уровня stop с X = travel_m + distance_m вне окна +-HALF_WINDOW всех объектов эталона objects.yaml.
+    Объекты кадра -- из alarms_fo_final_objects.jsonl (output/runs), без него -- ведущий объект кадра
+    из alarms_fo_final.csv (на итоговом прогоне даёт те же 5 кадров: 718, 782, 1307, 1321, 1490)."""
+    from eval_fake_obj import HALF_WINDOW, REF_PATHS, load_ref
+    try:
+        ref_x = [float(r['x_m']) for r in load_ref()]
+    except ImportError:  # нет ruamel.yaml: только x_m из objects.yaml
+        text = next(p for p in REF_PATHS if p.exists()).read_text(encoding='utf-8')
+        ref_x = [float(m) for m in re.findall(r'^\s+x_m:\s*([\d.]+)', text, re.M)]
+    inside = lambda x: any(abs(x - r) <= HALF_WINDOW for r in ref_x)
+    objs = {o['frame']: o['objects'] for o in read_jsonl('alarms_fo_final_objects.jsonl') or []
+            if o.get('bag', 'cloud_with_fake_obj') == 'cloud_with_fake_obj'}
+    n = 0
+    for r in frames:
+        if r['status'] != 'stop':
+            continue
+        travel = float(r['travel_m'])
+        if objs:
+            n += any(o.get('level') == 'stop' and not inside(travel + o['distance_m']) for o in objs.get(int(r['frame']), []))
+        elif r['distance_m'] not in ('', None):
+            n += not inside(travel + float(r['distance_m']))
+    return n
 
 
 def experiments():
