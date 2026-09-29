@@ -142,6 +142,7 @@ jq -c 'select(.obstacle) | {frame, distance_m}' output/doubleT_obstacle_result.j
 | `input_format` | `auto` | `auto` \| `legacy_hesai` \| `contract_v1` \| `generic` ([input_format.md](input_format.md)) |
 | `input_axes` | `auto` | `legacy` (x вбок, вперёд −y) \| `rep103`; `auto` — по формату |
 | `dedupe_dual_return` | `true` | удалять второе отражение, совпадающее с первым |
+| `dedupe_rounded` | `true` | удалять точки, совпадающие по сетке 1 см (облако не из пар столбцов): раньше это делал узел детектора в Python (21–35 мс на кадр), теперь C++ (~2 мс); в meta облака ставится флаг, и узел свой дедуп пропускает. Результат детектора побитово тот же (A/B на 1261 кадрах) |
 | `crop_enabled`, `crop_fwd_min`, `crop_fwd_max` | `true`, 2, 250 м | обрезка по дальности вперёд — только то, что ядро отбрасывает само; launch проверяет это по `detector.*` и выключает обрезку, если она небезопасна |
 | `apply_mount_tf`, `base_frame` | `false`, `base_link` | поворот облака по `/tf_static`; меняет вход ядра — включать только после прогона `python -m evaluation alarms` и `approach` |
 | `speed_topic`, `speed_type` | `""`, `auto` | скорость поезда из `TwistStamped` / `Odometry` — только запись в результат |
