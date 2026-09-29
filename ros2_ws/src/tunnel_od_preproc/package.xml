@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>Приём облака лидара на C++: любой поддерживаемый формат -> каноническое облако ядра tunnel_od, проверка входного потока на контракт v1</description>
   <maintainer email="noreply@example.com">tunnel_od</maintainer>
-  <license>MIT</license>
+  <license>Proprietary</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>

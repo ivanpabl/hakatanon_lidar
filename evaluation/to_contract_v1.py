@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Кадр записи (legacy Hesai) -> облако в контракте v1 (docs/input_format.md) и короткая
 запись ros2 bag в контракте v1 для e2e-прогона.
 

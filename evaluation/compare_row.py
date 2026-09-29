@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Строка сводной таблицы вариантов детектора по результатам прогона:
     python -m evaluation compare-row <tag> '<json kwargs>'  -> печать + строка в output/runs/compare_table.md
 Колонки: объекты организаторов (N из 7, СТОП на 5/7/8, ложные кадры), % кадров СТОП/ВНИМ./unknown

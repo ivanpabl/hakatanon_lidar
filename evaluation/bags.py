@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Где лежат записи и как читать из них облака (офлайн-инструменты, rosbags).
 
 Данные -- в data/ (не в git): data/Датасет/archive/for_hackathon/<запись> и data/new_data.

@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Правила против ложных СТОП (R1-R3, разбор fp_autopsy): переключаемые параметры ObstacleDetector.
 R1 (с гейтом по lat) и R2 включены по умолчанию, R3 выключен; OFF -- поведение базы a61fe29."""
 import warnings

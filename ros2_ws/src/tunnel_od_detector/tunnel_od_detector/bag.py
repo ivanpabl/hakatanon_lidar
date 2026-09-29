@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Что внутри записи ros2 bag: топик облака, frame_id, длительность, QoS записи. Нужно launch-файлам
 play и demo (RViz должен знать frame_id облака, плеер -- когда запись кончится)."""
 from pathlib import Path

@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Тесты чистых функций офлайн-инструментов (evaluation/), без записей."""
 import sys
 from pathlib import Path

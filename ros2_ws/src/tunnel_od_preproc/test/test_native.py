@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Библиотека tunnel_od_preproc из Python (ctypes) против parse_pointcloud2 -- в образе.
 На реальных записях то же проверяют tests/test_preproc.py и python -m evaluation preproc."""
 import numpy as np

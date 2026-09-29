@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>ROS 2-узел обнаружения препятствий в тоннеле метро по облаку 3D-лидара (обёртка над ядром tunnel_od)</description>
   <maintainer email="noreply@example.com">tunnel_od</maintainer>
-  <license>MIT</license>
+  <license>Proprietary</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

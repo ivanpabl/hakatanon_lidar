@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Сборка libtunnel_od_canonical на машине разработчика без ROS 2 (для pytest и evaluation/).
 В образе Docker библиотеку собирает colcon, это не нужно.
 

@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Проверка входного потока записей на контракт v1 (docs/input_format.md) без ROS 2.
 
 Тот же код, что в C++-узле tunnel_od_preproc (InputMonitor через ctypes): каждое облако

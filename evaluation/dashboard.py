@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Страница отчёта: один HTML-файл без внешних зависимостей (открывается с file:// без сети).
 
     python -m evaluation dashboard                   # -> output/report/index.html (рядом -- demo.html)

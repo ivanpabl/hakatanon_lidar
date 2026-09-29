@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Проверка качества детектора офлайн: без ROS 2 и Docker, на записях из data/ (или --data / TUNNEL_OD_DATA).
 
     python -m evaluation all [--quick]         всё сразу: метрики, отчёт -> output/report/index.html

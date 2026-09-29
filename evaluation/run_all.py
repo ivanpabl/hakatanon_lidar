@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Полный прогон на датасете одной командой: тесты, метрики, дашборд и демонстрация.
 Работает на Windows, Linux и macOS без ROS 2 и Docker (на Windows запускается из run_all.bat).
 

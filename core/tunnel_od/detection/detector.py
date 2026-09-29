@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """ObstacleDetector -- связывает шаги обработки кадра: путь -> полотно -> зона ->
 объекты -> подтверждение -> решение о тревоге -- решение -- detection/decision.py
 (status: stop | unknown | caution | clear). Ничего не знает про ROS 2: на вход

@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Показ в браузере: запись по кругу + детектор + RViz2 на виртуальном экране, экран -- через noVNC.
 
     ros2 launch tunnel_od_detector demo.launch.py bag:=/bag     # затем http://localhost:6080

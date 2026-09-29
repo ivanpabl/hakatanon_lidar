@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Сырой PointCloud2 лидара: разбор в x, y, z и геометрия лучей датчика.
 
 Layout в записях: x,y,z,intensity (float32), ring (uint16), timestamp (float64)
