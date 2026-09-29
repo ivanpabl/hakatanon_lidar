@@ -6,7 +6,7 @@
 |---|---|---|---|
 | §3.2 Ubuntu 22.04, ROS 2 Humble, Docker | ✅ | `Dockerfile` (`ros:humble-ros-base-jammy`), `docker-compose.yml` | — |
 | §3.3 Запуск в Docker → ROS 2 → чтение bag → обработка потока → вывод результата | ✅ | `docker compose up play` (`play.launch.py`): `ros2 bag play` + узлы | — |
-| §3.3, §7.2 Зависимости ставятся при сборке, без ручных шагов | ✅ | `Dockerfile`; без Docker Hub — `--build-arg BASE_IMAGE`; для стенда без интернета — готовый образ `tunnel_od_image_2026-09-29.tar.gz` | сборка из исходников требует доступа к apt и pip |
+| §3.3, §7.2 Зависимости ставятся при сборке, без ручных шагов | ✅ | `Dockerfile`; без Docker Hub — `--build-arg BASE_IMAGE`; для стенда без интернета — готовый образ `tunnel_od_image_2026-09-29b.tar.gz` ([материалы на Яндекс Диске](https://disk.360.yandex.ru/d/TxBEQiQmvuSAPQ)) | сборка из исходников требует доступа к apt и pip |
 | §2 Выход: есть препятствие / нет, расстояние до ближайшего | ✅ | `/tunnel_od/result`: `status`, `distance_m` на каждый кадр | — |
 | §2 Дополнительно: положение, размеры, уверенность, тип | ◐ | `objects[]`: `position_m`, `size_m`, `confidence`; `tests/test_robustness.py::test_object_output_has_size_confidence_position` | тип объекта не определяется |
 | Q&A 4.1 Габарит 2,1 × 3 м | ◐ | зона 0,15–3,0 м над головкой рельса, ±1,0 м от оси пути ∪ ±1,0 м от оси лидара ближе 40 м на прямой ([algorithm.md](algorithm.md#зона-объекты-подтверждение-detection)) | ширина 2,0 м: ошибка оси 5–30 см; в дальней зоне верх 1,5 м |
@@ -22,7 +22,7 @@
 | §4 Демонстрация: облако → детекция → расстояние, RViz2 | ✅ | `docker compose up demo`: RViz2 в браузере через noVNC; маркеры `/tunnel_od/markers`; офлайн-плеер `demo.html` | — |
 | §5 README: описание, сборка, запуск, bag, параметры | ✅ | [README](../README.md), [`config/detector.yaml`](../config/detector.yaml), [architecture.md](architecture.md#параметры) | — |
 | §5 Архитектура, алгоритм, эксперименты, сложные случаи | ✅ | [architecture.md](architecture.md), [algorithm.md](algorithm.md), [experiments.md](experiments.md), [hard_cases.md](hard_cases.md) | — |
-| §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](../report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](img/demo.gif); запись экрана — [ссылка будет добавлена] | — |
+| §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](../report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](img/demo.gif); запись экрана — [видео на Яндекс Диске](https://disk.360.yandex.ru/d/TxBEQiQmvuSAPQ) | — |
 | §8.5 Тесты | ✅ | `docker compose run --rm test`: gtest (C++-узел приёма облака, 18) + pytest пакетов ROS 2 (`ros2_ws`, 22 случая); ядро — pytest `tests/` (91 функция, 108 случаев с параметризацией) в CI и локально | — |
 | §8.6 docker build → docker run → ros2 bag play → результат | ✅ | [запуск в 3 команды](../README.md); вариант голым `docker run` — в [README](../README.md#без-compose) | — |
 | §8.7 Подход команды | ✅ | [«Подход команды»](experiments.md#подход-команды), [эксперименты 28–29.09](experiments.md#эксперименты-282909-финальная-доводка) | — |
