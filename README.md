@@ -1,5 +1,7 @@
 # Обнаружение препятствий в тоннеле метро по 3D-лидару
 
+[![CI](https://github.com/ivanpabl/hakatanon_lidar/actions/workflows/ci.yml/badge.svg)](https://github.com/ivanpabl/hakatanon_lidar/actions/workflows/ci.yml)
+
 ROS 2-узел в каждом кадре 128-канального лидара решает, есть ли что-то на пути поезда и на каком расстоянии: СТОП / ВНИМАНИЕ / СВОБОДНО.
 
 ![Плеер отчёта: СТОП на реальном объекте в 55,7 м, запись doubleT_obstacle](docs/img/demo_stop.png)
