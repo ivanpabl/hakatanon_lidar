@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Демонстрация: HTML-плеер (один файл, без сети) -- детектор по кадрам реальных записей в 3D.
 
     python -m evaluation demo                                        # -> output/report/demo.html

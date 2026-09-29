@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 from glob import glob
 
 from setuptools import setup
@@ -18,7 +19,7 @@ setup(
     maintainer='tunnel_od',
     maintainer_email='noreply@example.com',
     description='ROS 2-узел обнаружения препятствий в тоннеле метро (обёртка над tunnel_od)',
-    license='MIT',
+    license='Proprietary',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

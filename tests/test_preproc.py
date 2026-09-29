@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """C++-приём облака (ros2_ws/src/tunnel_od_preproc) против parse_pointcloud2 и контракта v1.
 
 Библиотека собирается на месте (tunnel_od_preproc/build_host.py); нет компилятора -- тесты

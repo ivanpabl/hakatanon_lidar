@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Фоновый пересчёт оси пути в отдельном процессе (refit_mode: async).
 
 Пересчёт пути (ObstacleDetector.update_path) стоит ~80 мс -- вместе с разбором и

@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Защита по входу узла детектора (ros2_ws/.../tunnel_od_detector/input_guard.py), без ROS 2:
 watchdog «нет данных от лидара», прогрев, догон очереди, аргументы ros2 bag play.
 

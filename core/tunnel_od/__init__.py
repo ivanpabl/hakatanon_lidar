@@ -1,3 +1,4 @@
+# © 2026 команда «Голуби», github.com/ivanpabl/hakatanon_lidar. Все права защищены, условия — в файле LICENSE. GLB-K5-4660c47a8c6c
 """Ядро обнаружения препятствий в тоннеле метро по облаку 3D-лидара. Без ROS 2.
 
     from tunnel_od import ObstacleDetector, parse_pointcloud2
