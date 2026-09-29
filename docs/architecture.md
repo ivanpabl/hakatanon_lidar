@@ -9,7 +9,7 @@ ros2 bag play / лидар
         │  sensor_msgs/PointCloud2 (8–23 МБ, 10 Гц)
         ▼
 ┌─────────────────────────┐   /tunnel_od/cloud    ┌──────────────────────────────┐
-│ tunnel_od_preproc (C++) │ ───────────────────▶  │ tunnel_od_detector (Python)  │
+│ приём облака (C++)      │ ───────────────────▶  │ детектор (Python + ядро)     │
 │ формат, оси, dual return│   x, y, z float32     │   ObstacleDetector (ядро)    │
 │ обрезка 2–250 м         │                       │   path_worker (процесс)      │
 │ проверка потока         │                       └──────────────┬───────────────┘
@@ -22,7 +22,7 @@ ros2 bag play / лидар
 
 | Часть | Где | Что делает |
 |---|---|---|
-| Ядро `tunnel_od` | `core/` | алгоритм: пакет Python + numpy, без ROS. Тот же код работает в узле и в офлайн-оценке |
+| Ядро | `core/` | алгоритм: пакет Python + numpy, без ROS. Тот же код работает в узле и в офлайн-оценке |
 | Приём облака | `ros2_ws/src/tunnel_od_preproc` | C++-компонент rclcpp: разбирает облако любого поддерживаемого формата ([input_format.md](input_format.md)), удаляет дубли dual return, обрезает по дальности, проверяет поток и публикует каноническое облако |
 | Узел детектора | `ros2_ws/src/tunnel_od_detector` | rclpy: вызывает ядро на каждом кадре, публикует результат и маркеры, пишет итог прогона |
 | Запуск | `ros2_ws/src/tunnel_od_detector/launch` | `detector.launch.py` — узлы; `play.launch.py` — узлы + проигрывание записи; `demo.launch.py` — то же + RViz в браузере |
@@ -63,14 +63,14 @@ docker compose run --rm test                   # gtest + pytest внутри о�
 
 `demo` поднимает в контейнере виртуальный экран (Xvfb), RViz2 с программным OpenGL и noVNC, запись идёт по кругу. Порт 6080 открыт только для этой машины; для показа по сети — `"6080:6080"` в `docker-compose.yml`.
 
-## Узел `tunnel_od_detector`
+## Узел детектора
 
 | Топик | Тип | Что внутри |
 |---|---|---|
-| вход: `/tunnel_od/cloud` | `sensor_msgs/PointCloud2` | каноническое облако от `tunnel_od_preproc` (x, y, z float32) |
+| вход: `/tunnel_od/cloud` | `sensor_msgs/PointCloud2` | каноническое облако от узла приёма (x, y, z float32) |
 | `/tunnel_od/result` | `std_msgs/String` | JSON на каждый обработанный кадр |
 | `/tunnel_od/markers` | `visualization_msgs/MarkerArray` | ось пути, коридор, объекты, текст с решением |
-| `/tunnel_od/input_diagnostics` | `diagnostic_msgs/DiagnosticArray` | проверка входного потока (от `tunnel_od_preproc`) |
+| `/tunnel_od/input_diagnostics` | `diagnostic_msgs/DiagnosticArray` | проверка входного потока (от узла приёма облака) |
 
 Топик лидара задаётся параметром `topic`. Если он пустой, берётся первый топик `PointCloud2`, у которого есть издатель (`/lidar_points`, `/sensing/lidar/hesai128/pointcloud`). QoS — `RELIABLE`, как у `ros2 bag play`. Без C++-узла (`use_cpp_preproc:=false`) детектор подписывается на облако лидара сам.
 
@@ -90,6 +90,42 @@ docker compose run --rm test                   # gtest + pytest внутри о�
 | `repeated` | кадр — побитовый повтор предыдущего облака: результат прошлого кадра, детектор не вызывался (`skip_repeated`) |
 | `dropped_total` | сколько кадров отброшено к этому моменту: очередь была полна (`dropped_stale` в итоге) плюс догон (`dropped_catchup`) |
 | `node_state`, `reason` | защита по входу: `ok` \| `warmup` (первые `warmup_frames` кадров — `status: unknown`, `clear_to_m: 0`, `stop` не гасится) \| `fault` (нет облаков дольше `watchdog_timeout_s` — снимок `reason: no_lidar_data`, `since_last_cloud_s`, `fault: true`, публикуется по таймеру в топик, пока данные не возобновятся; в `<запись>_result.jsonl` снимки не пишутся, `frame`/`stamp` в них `null`). При `unknown` от детектора `reason` — `no_path` / `short_sight`. `status` остаётся в множестве `stop` / `caution` / `clear` / `unknown` |
+
+Пример результата кадра со СТОП (сокращённо; запись организаторов, куб на пути в 97 м):
+
+```json
+{"frame": 11, "stamp": 946685788.03, "status": "stop", "obstacle": true, "distance_m": 97.1,
+ "caution_distance_m": null, "sight_m": 113.5, "clear_to_m": 97.1,
+ "path_available": true, "path_range_m": 152.7, "path_age_frames": 1, "alarm_range_m": 125.1,
+ "speed_mps": 1.6, "n_points_cloud": 86541, "node_state": "ok", "reason": null,
+ "latency_ms": 40.6, "parse_ms": 0.1, "detect_ms": 39.9, "queue_ms": 0.5, "path_fit_ms": 52.8, "e2e_ms": 62.2,
+ "objects": [{"distance_m": 97.1, "lateral_m": 0.55, "height_m": 2.8, "low_m": 1.31, "n_points": 32,
+              "confirmed": true, "evidence": 5.04, "hits": 5, "level": "stop", "reason": "in_gauge",
+              "confidence": 1.0, "size_m": {"length": 0.0, "width": 0.76, "height": 1.48},
+              "position_m": {"x": -0.38, "y": -97.15, "z": -0.53}}]}
+```
+
+Итог прогона `<запись>_stats.json` (он же — строка `ИТОГ {...}` в логе):
+
+| Поле | Значение |
+|---|---|
+| `received`, `processed` | сколько кадров узел принял и сколько обработал |
+| `dropped_stale`, `dropped_catchup`, `dropped_total` | отброшено: очередь была полна; догон самого свежего кадра; всего |
+| `fault_episodes`, `fault_snapshots` | сколько раз пропадал входной поток и сколько снимков «нет данных» опубликовано |
+| `warmup_frames`, `stamp_gaps`, `errors` | кадров прогрева, разрывов времени во входе, ошибок обработки |
+| `alarm_frames`, `min_alarm_distance_m` | кадров со СТОП и наименьшая дистанция СТОП |
+| `latency_ms_p50` / `_p95` / `_max`, `proc_ms_p50` / `_p95` | задержка узла (очередь + обработка) и чистое время обработки |
+| `e2e_ms_p50` / `_p95` / `_max` | от публикации облака плеером до публикации решения |
+| `path_fits_async`, `refit_mode`, `max_pending`, `catch_up` | число фоновых пересчётов пути и режимы, с которыми шёл прогон |
+| `preproc`, `input` | итог узла приёма облака и проверка входного потока по пунктам ([input_format.md](input_format.md)) |
+
+Состояния узла (`node_state`) и как на них реагировать:
+
+| `node_state` | `status` | Когда | Что это значит для поезда |
+|---|---|---|---|
+| `warmup` | `unknown` | первые `warmup_frames` кадров после старта или после провала входа | решения ещё нет; «свободно» не выдаётся |
+| `ok` | `stop` / `caution` / `clear` / `unknown` | обычная работа | решение по кадру; `unknown` — путь не найден или виден ближе 30 м |
+| `fault` | `unknown` | облака не приходят дольше `watchdog_timeout_s` | данных нет; снимок публикуется по таймеру, пока поток не вернётся |
 
 ```bash
 docker compose run --rm play bash                               # оболочка с настроенным ROS

@@ -573,7 +573,7 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
 <p class="synth">Синтетическая сцена, не запись</p>
 
 <header class="bar">
-  <a class="brand" href="#top">tunnel_od</a>
+  <a class="brand" href="#top">Голуби</a>
   <nav aria-label="Разделы">
     <a href="#frame">Как работает</a>
     <a href="#demo">Демо</a>
@@ -600,7 +600,7 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
 <div class="story">
   <section class="panel hero" id="top" data-scene="hero">
     <h1>Что на пути поезда и&nbsp;как далеко</h1>
-    <p class="lead">Детектор препятствий для тоннелей метро. По&nbsp;облаку точек лидара он на&nbsp;каждый кадр решает: стоп, внимание или свободно&nbsp;— и&nbsp;называет дистанцию.</p>
+    <p class="lead">Детектор препятствий для тоннелей метро. По&nbsp;облаку точек на&nbsp;каждом кадре он решает: стоп, внимание или свободно&nbsp;— и&nbsp;отображает расстояние.</p>
     <ul class="keys" id="keys" aria-label="Главные результаты"></ul>
     <div class="actions">
       <a class="btn" href="#frame">Посмотреть, как он решает</a>
@@ -612,11 +612,11 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="panel" id="frame" data-scene="frame">
     <div class="card">
       <h2>Кадр: 128&nbsp;колец точек</h2>
-      <p>Десять раз в&nbsp;секунду лидар присылает облако. Точки ложатся на&nbsp;пол и&nbsp;стены кольцами: густо у&nbsp;горизонта, редко внизу.</p>
+      <p>Десять раз за&nbsp;секунду лидар присылает облако точек. Точки ложатся кольцами на&nbsp;пол и&nbsp;стены: редко у&nbsp;полотна и&nbsp;сгущаясь у&nbsp;горизонта.</p>
       <details>
         <summary>Что в&nbsp;сыром кадре</summary>
         <div class="more">
-          <p>Каналы у&nbsp;горизонта идут через 0,125°. <span id="raw-zero">Много точек пустые</span>: луч не&nbsp;вернулся. Столбцы идут парами, два отражения одного залпа, <span id="raw-pair">и&nbsp;пары почти всегда совпадают</span>. После удаления нулей и&nbsp;дублей облако меньше в&nbsp;несколько раз.</p>
+          <p>Строки точек у&nbsp;горизонта идут с&nbsp;шагом 0,125°. <span id="raw-zero">Многие точки пустые</span>: луч не&nbsp;возвращается. Столбцы идут парами (два отражения одного залпа), <span id="raw-pair">и&nbsp;почти всегда они совпадают</span>. В&nbsp;конце, после удаления нулей и&nbsp;дублей, облако уменьшается в&nbsp;несколько раз.</p>
         </div>
       </details>
     </div>
@@ -625,11 +625,11 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="panel" id="path" data-scene="path">
     <div class="card">
       <h2>Сначала найти свой путь</h2>
-      <p>Вблизи ось пути строится по&nbsp;рельсам, дальше&nbsp;— по&nbsp;стенам тоннеля, до&nbsp;150–200&nbsp;м.</p>
+      <p>Вблизи ось пути строится по&nbsp;рельсам, дальше&nbsp;— по&nbsp;стенам тоннеля вплоть до&nbsp;150–200&nbsp;м.</p>
       <details>
         <summary>Как находятся рельсы</summary>
         <div class="more">
-          <p>Детектор ищет пару выступов профиля высоты в&nbsp;1,45–1,75&nbsp;м друг от&nbsp;друга, с&nbsp;серединой под поездом. По&nbsp;рельсам ось идёт примерно до&nbsp;40&nbsp;м, потом рельсы тонут в&nbsp;редких точках. Если ось не&nbsp;найдена, кадр получает «путь не&nbsp;определён», а&nbsp;не&nbsp;«свободно».</p>
+          <p>Детектор ищет пару выступов по&nbsp;высоте, расположенных в&nbsp;1,45–1,75&nbsp;м друг от&nbsp;друга, с&nbsp;серединой прямо под поездом. По&nbsp;рельсам ось строится примерно до&nbsp;40&nbsp;м, дальше рельсы теряются среди редких точек. Если ось не&nbsp;найдена, кадр получает метку «путь не&nbsp;определён», а&nbsp;не&nbsp;«свободно».</p>
         </div>
       </details>
     </div>
@@ -638,11 +638,11 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="panel" id="zone" data-scene="zone">
     <div class="card">
       <h2>Коридор, где не&nbsp;должно быть ничего</h2>
-      <p>Вдоль оси&nbsp;— зона проверки шириной <span data-z="width">2</span>&nbsp;м и&nbsp;высотой до&nbsp;<span data-z="height">3</span>&nbsp;м над рельсом. Точки внутри собираются в&nbsp;объекты.</p>
+      <p>Вдоль оси&nbsp;— зона проверки шириной <span data-z="width">2</span>&nbsp;м и&nbsp;высотой до&nbsp;<span data-z="height">3</span>&nbsp;м над рельсом. Точки, попавшие внутрь, собираются в&nbsp;объекты.</p>
       <details>
         <summary>Размеры и&nbsp;фильтры</summary>
         <div class="more">
-          <p>По&nbsp;<span data-z="half">1</span>&nbsp;м в&nbsp;каждую сторону от&nbsp;оси, от&nbsp;<span data-z="clearance">0,15</span> до&nbsp;<span data-z="height">3</span>&nbsp;м над головкой рельса. Высота полотна оценивается по&nbsp;дальности, так что зона следует за&nbsp;уклоном. Кабели, контактный рельс и&nbsp;стена в&nbsp;кривой тянутся вдоль края коридора, и&nbsp;такие продольные конструкции отсеиваются.</p>
+          <p>По&nbsp;<span data-z="half">1</span>&nbsp;м в&nbsp;каждую сторону от&nbsp;оси, от&nbsp;<span data-z="clearance">0,15</span> до&nbsp;<span data-z="height">3</span>&nbsp;м над головкой рельса. Высота полотна оценивается по&nbsp;дальности, так что зона следует за&nbsp;уклоном. Кабели, контактный рельс и&nbsp;стена в&nbsp;кривой тянутся вдоль края коридора, в&nbsp;результате такие продольные конструкции отсеиваются.</p>
         </div>
       </details>
     </div>
@@ -651,11 +651,11 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="panel tall" id="evidence" data-scene="evidence">
     <div class="card">
       <h2>Одна точка ещё не&nbsp;тревога</h2>
-      <p>Издалека человек&nbsp;— лишь несколько точек. Детектор ведёт объект от&nbsp;кадра к&nbsp;кадру и&nbsp;копит свидетельство; пока его мало, это кандидат и&nbsp;решение «внимание».</p>
+      <p>Издалека человек&nbsp;— лишь несколько точек. Детектор ведёт объект от&nbsp;кадра к&nbsp;кадру и&nbsp;копит свидетельства; пока их мало, объект остаётся кандидатом, а&nbsp;решение&nbsp;— «внимание».</p>
       <details>
         <summary>Как отсекается то, что едет с&nbsp;поездом</summary>
         <div class="more">
-          <p>Положение объекта предсказывается с&nbsp;учётом хода поезда. Неподвижный объект приближается на&nbsp;пройденный путь. Отражение или блик, который держит дистанцию, пока поезд едет, стоп не&nbsp;получает.</p>
+          <p>Положение объекта предсказывается с&nbsp;учётом хода поезда: неподвижный объект приближается на&nbsp;пройденный путь. Отражение или блик, который держит дистанцию, пока поезд едет, стоп не&nbsp;получает.</p>
         </div>
       </details>
     </div>
@@ -664,12 +664,12 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="panel tall-m" id="stop" data-scene="stop">
     <div class="card">
       <h2 id="stop-h">Стоп: объект подтверждён</h2>
-      <p>Свидетельства достаточно: объект подтверждён. Каждый кадр получает одно из&nbsp;четырёх решений:</p>
+      <p>Свидетельств набралось достаточно&nbsp;— объект подтверждён. Всего решений четыре, и&nbsp;каждый кадр получает одно из&nbsp;них:</p>
       <dl class="states">
         <div><i style="--c:var(--stop)"></i><dt>Стоп</dt><dd>Препятствие на&nbsp;пути и&nbsp;дистанция до&nbsp;него.</dd></div>
         <div><i style="--c:var(--warn)"></i><dt>Внимание</dt><dd>Кандидат, который ещё не&nbsp;подтверждён.</dd></div>
-        <div><i style="--c:var(--go)"></i><dt>Свободно</dt><dd>Ничего нет, и&nbsp;сказано, докуда проверено.</dd></div>
-        <div><i style="--c:var(--haze)"></i><dt>Путь не&nbsp;определён</dt><dd>Ось не&nbsp;найдена. Это не&nbsp;«свободно».</dd></div>
+        <div><i style="--c:var(--go)"></i><dt>Свободно</dt><dd>Путь чист; указано, докуда он проверен.</dd></div>
+        <div><i style="--c:var(--haze)"></i><dt>Путь не&nbsp;определён</dt><dd>Ось пути не&nbsp;найдена, и&nbsp;это не&nbsp;«свободно».</dd></div>
       </dl>
       <p class="note" id="stop-note" style="margin-top:1.3rem" hidden></p>
     </div>
@@ -681,7 +681,7 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
   <section class="part" id="demo" aria-labelledby="demo-h">
     <header>
       <h2 id="demo-h">Демо на&nbsp;записи</h2>
-      <p class="lede">Настоящая запись <span id="demo-bag">doubleT_obstacle</span>: поезд стоит, у&nbsp;рельсов человек. Каждый кадр прошёл через детектор; рядом&nbsp;— его решение по&nbsp;текущему кадру и&nbsp;дистанция. Сцену можно вращать мышью, клавиши WASD двигают камеру.</p>
+      <p class="lede">Настоящая запись <span id="demo-bag">doubleT_obstacle</span>: поезд стоит, у&nbsp;рельсов человек. Каждый кадр прошёл через детектор, рядом&nbsp;— его решение по&nbsp;текущему кадру и&nbsp;дистанция. Сцену можно вращать мышью, а&nbsp;камеру двигать клавишами WASD.</p>
     </header>
     <div class="demo">
       <div class="demo-stage" id="demo-stage">
@@ -736,10 +736,10 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
         <rect class="ext" x="10" y="90" width="170" height="84" rx="6"/>
         <text class="t" x="24" y="118">ros2 bag play</text><text class="s" x="24" y="138">или живой лидар</text><text class="m" x="24" y="160">PointCloud2</text>
         <rect class="cpp" x="240" y="72" width="220" height="120" rx="6"/>
-        <text class="t" x="256" y="100">tunnel_od_preproc</text><text class="s" x="256" y="120">C++, rclcpp component</text>
+        <text class="t" x="256" y="100">приём облака</text><text class="s" x="256" y="120">C++, rclcpp component</text>
         <text class="s" x="256" y="144">формат, оси, дубли,</text><text class="s" x="256" y="162">обрезка по дальности,</text><text class="s" x="256" y="180">проверка потока</text>
         <rect class="py" x="600" y="56" width="230" height="152" rx="6"/>
-        <text class="t" x="616" y="84">tunnel_od_detector</text><text class="s" x="616" y="104">Python, rclpy</text>
+        <text class="t" x="616" y="84">узел детектора</text><text class="s" x="616" y="104">Python, rclpy</text>
         <rect class="b" x="616" y="118" width="198" height="34" rx="4"/><text class="m" x="630" y="140">ObstacleDetector</text>
         <rect class="b" x="616" y="160" width="198" height="34" rx="4"/><text class="m" x="630" y="182">path_worker</text>
         <rect class="out" x="870" y="40" width="160" height="70" rx="6"/>
@@ -747,7 +747,7 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
         <rect class="b" x="870" y="126" width="160" height="70" rx="6"/>
         <text class="m" x="884" y="152">/tunnel_od/markers</text><text class="s" x="884" y="174">ось, коридор, объекты</text>
         <rect class="ext" x="870" y="220" width="160" height="56" rx="6"/>
-        <text class="t" x="884" y="244">RViz2</text><text class="s" x="884" y="264">tunnel_od.rviz</text>
+        <text class="t" x="884" y="244">RViz2</text><text class="s" x="884" y="264">ось, коридор, объекты</text>
         <path class="ar" d="M180 132H236" marker-end="url(#ah2)"/>
         <path class="ar" d="M460 132H596" marker-end="url(#ah2)"/><text class="m" x="528" y="122" text-anchor="middle">/tunnel_od/cloud</text>
         <path class="ar" d="M830 90H866" marker-end="url(#ah2)"/><path class="ar" d="M830 160H866" marker-end="url(#ah2)"/>
@@ -758,15 +758,15 @@ footer.page-foot p { width: auto; max-width: 46rem; margin: 0 0 .6rem; }
     </div>
     <dl class="facts3">
       <div><dt>Ядро <code>core/tunnel_od</code></dt><dd>Python и&nbsp;numpy, без ROS. Тот&nbsp;же код считает метрики офлайн и&nbsp;работает в&nbsp;узле.</dd></div>
-      <div><dt>Пересчёт пути</dt><dd>Ось пути уточняется каждый кадр. В&nbsp;режиме <code>refit_mode: async</code> это делает отдельный процесс <code>path_worker</code>, и&nbsp;кадр его не&nbsp;ждёт.</dd></div>
-      <div><dt>Параметры</dt><dd>Всё в&nbsp;<code>config/detector.yaml</code>. Каталог монтируется в&nbsp;контейнер, после правки пересобирать образ не&nbsp;нужно.</dd></div>
+      <div><dt>Пересчёт пути</dt><dd>Ось пути уточняется на&nbsp;каждом кадре. В&nbsp;режиме <code>refit_mode: async</code> это делает отдельный процесс <code>path_worker</code>, и&nbsp;кадр его не&nbsp;ждёт.</dd></div>
+      <div><dt>Параметры</dt><dd>Все параметры&nbsp;— в&nbsp;<code>config/detector.yaml</code>. Каталог монтируется в&nbsp;контейнер, так что после правки пересобирать образ не&nbsp;нужно.</dd></div>
     </dl>
   </section>
 
   <section class="part" id="run" aria-labelledby="run-h">
     <header>
       <h2 id="run-h">Запуск</h2>
-      <p class="lede">Цепочка из&nbsp;задания: сборка образа, запуск узла, проигрывание записи, результат по&nbsp;каждому кадру. Зависимости ставятся при сборке, при запуске сеть не&nbsp;нужна.</p>
+      <p class="lede">Цепочка из&nbsp;задания: сборка образа, запуск узла, проигрывание записи, результат по&nbsp;каждому кадру. Зависимости ставятся при сборке, так что для запуска сеть не&nbsp;нужна.</p>
     </header>
     <div class="run-grid">
       <div>
@@ -794,13 +794,13 @@ docker compose run --rm test</code></pre>
         <h3>Метрики и&nbsp;эта страница без ROS</h3>
 <pre><code>pip install -e "core[eval]"
 <span class="c"># проверка окружения за пару минут;</span>
-<span class="c"># без записей в data/ -- страница из снимков</span>
+<span class="c"># без записей в data/ страница собирается из снимков</span>
 python -m evaluation all --quick
 <span class="c"># всё: метрики, эта страница, плеер</span>
 python -m evaluation all
 <span class="c"># список команд</span>
 python -m evaluation --help</code></pre>
-        <p class="note">Python 3.10+, видеокарта не&nbsp;нужна. Отчёт&nbsp;— папка <code>output/report</code>: <code>index.html</code> и&nbsp;<code>demo.html</code>, открываются двойным щелчком без сети.</p>
+        <p class="note">Python 3.10+, видеокарта не&nbsp;нужна. Отчёт&nbsp;— папка <code>output/report</code> с&nbsp;файлами <code>index.html</code> и&nbsp;<code>demo.html</code>; они открываются двойным щелчком, сеть не&nbsp;нужна.</p>
         <h3 style="margin-top:var(--s6)">Ядро на&nbsp;Python</h3>
 <pre><code>from tunnel_od import ObstacleDetector, parse_pointcloud2
 
@@ -813,7 +813,8 @@ result["status"], result["distance_m"], result["clear_to_m"]</code></pre>
   </section>
 
   <footer class="page-foot">
-    <p>tunnel_od: геометрический детектор препятствий по&nbsp;лидару, без обучения. Сцена в&nbsp;начале страницы синтетическая: лучи 128&nbsp;каналов трассируются в&nbsp;модели тоннеля прямо в&nbsp;браузере, человек в&nbsp;ней условный. Результаты и&nbsp;демо&nbsp;— из&nbsp;настоящих записей.</p>
+    <p>Геометрический детектор препятствий по&nbsp;лидару, без обучения. Сцена в&nbsp;начале страницы синтетическая: лучи 128&nbsp;каналов трассируются в&nbsp;модели тоннеля прямо в&nbsp;браузере, человек в&nbsp;ней условный. Результаты и&nbsp;демо&nbsp;— из&nbsp;настоящих записей.</p>
+    <p>Команда «Голуби».</p>
     <p id="stamp"></p>
   </footer>
 </div>
@@ -1257,7 +1258,7 @@ void main() {
   const levelKeep = (l) => Math.min(1, LEVELS[l][0] / beamCount);
   function setLevel(l) {
     level = l; keepTarget = levelKeep(l); resTarget = l; upRun = overRun = 0;
-    console.info(`[tunnel_od] сцена: уровень качества ${l}, лучей ${LEVELS[l][0]}, плотность пикселей до ${LEVELS[l][1]}`);
+    console.info(`[сцена] уровень качества ${l}, лучей ${LEVELS[l][0]}, плотность пикселей до ${LEVELS[l][1]}`);
   }
   function sampleCost(now) {
     // одиночная пауза главного потока (загрузка плеера, сборка графиков) -- не цена кадра: выброс срезается
@@ -1536,11 +1537,11 @@ function heroNums() {
   const items = [];
   const fo = F.fo, p = F.p170 && F.p170.after, e = F.e2e;
   if (fo) items.push({ n: fo.inStop, d: 0, tail: `<small>из${nbsp}${fo.inG.length}</small>`, cap: 'препятствий организаторов остановили поезд',
-    ref: `вне габарита ложных СТОП${nbsp}— ${fo.outStop}` });
+    ref: `ложных СТОП вне габарита${nbsp}— ${fo.outStop}` });
   if (p && p.median) items.push({ n: Math.round(p.median), d: 0, tail: '<small>м</small>', cap: 'видим стоящего человека',
     ref: p.median >= 200 ? 'выше порога жюри «очень хорошо», 200 м' : p.median >= 100 ? 'выше порога жюри «хорошо», 100 м' : 'порог жюри «хорошо»: 100 м', ok: p.median >= 100 });
   if (e && e.e2e_ms_p95 != null) items.push({ n: Math.round(e.e2e_ms_p95), d: 0, tail: '<small>мс</small>', cap: 'решение на кадр',
-    ref: `p95; бюджет ${BUDGET_MS}${nbsp}мс` + (F.dl ? `, уложились ${num(F.dl.hitPct, 1)}${nbsp}%` : ''), ok: e.e2e_ms_p95 <= BUDGET_MS });
+    ref: `p95; бюджет ${BUDGET_MS}${nbsp}мс` + (F.dl ? `, в${nbsp}него уложились ${num(F.dl.hitPct, 1)}${nbsp}% кадров` : ''), ok: e.e2e_ms_p95 <= BUDGET_MS });
   const ul = $('#hero-nums');
   ul.innerHTML = items.map((k, i) => `<li><p class="hn-value"><span class="cu" data-n="${k.n}">${num(k.n, k.d)}</span>${k.tail}</p>` +
     `<p class="hn-cap">${k.cap}</p><p class="hn-ref">${k.ok ? '<i aria-hidden="true"></i>' : ''}${k.ref}</p></li>`).join('');
@@ -1639,18 +1640,18 @@ function objCards() {
     return `<li class="obj" data-l="${l}">${glyph(o.name)}<span class="obj-st"><i></i>${WORD[l] || 'нет решения'}</span>` +
       `<span class="obj-d">${d}</span><span class="obj-n">${esc(o.name)}</span></li>`;
   }).join('') + '</ul>' +
-    `<p class="objs-note">Ещё ${fo.outG.length} ${plural(fo.outG.length, 'объект', 'объекта', 'объектов')} вне габарита: СТОП не нужен, получили СТОП${nbsp}— ${fo.outStop}.</p>`;
+    `<p class="objs-note">Ещё ${fo.outG.length} ${plural(fo.outG.length, 'объект', 'объекта', 'объектов')} вне габарита: СТОП для них не${nbsp}нужен, получили СТОП${nbsp}— ${fo.outStop}.</p>`;
 }
 
 /* ---------- мелкие показатели одной строкой ---------- */
 function minor() {
   const it = [];
-  if (F.sightRatio) it.push([`${num(100 * F.sightRatio.median, 0)}${nbsp}%`, 'видимого пути до СТОП, медиана']);
-  if (Q.empty) it.push([`${num(Q.empty.after, 1)}${nbsp}%`, 'ложных СТОП, записи без препятствий']);
-  if (F.nd) it.push([`${num(F.nd.pct, 1)}${nbsp}%`, 'ложных СТОП, отложенная запись']);
+  if (F.sightRatio) it.push([`${num(100 * F.sightRatio.median, 0)}${nbsp}%`, 'доля видимого пути при первом СТОП, медиана']);
+  if (Q.empty) it.push([`${num(Q.empty.after, 1)}${nbsp}%`, `ложных СТОП на${nbsp}записях без препятствий`]);
+  if (F.nd) it.push([`${num(F.nd.pct, 1)}${nbsp}%`, `ложных СТОП на${nbsp}отложенной записи`]);
   if (F.unknown) it.push([`${num(F.unknown.pct, F.unknown.pct > 0 && F.unknown.pct < 1 ? 1 : 0)}${nbsp}%`, 'кадров без оси пути']);
   $('#minor').innerHTML = it.map(([v, k]) => `<li><b>${v}</b><span>${k}</span></li>`).join('');
-  $('#safety').innerHTML = `<b>«Свободно»${nbsp}— только когда путь виден.</b> Нет оси пути${nbsp}— «путь не определён», а${nbsp}не${nbsp}«свободно».`;
+  $('#safety').innerHTML = `<b>«Свободно»${nbsp}— только когда путь виден.</b> Если оси пути нет, кадр получает «путь не${nbsp}определён», а${nbsp}не${nbsp}«свободно».`;
 }
 
 /* Общие куски графиков: заголовок-вопрос, легенда, табличный вид (значения доступны без наведения). */
@@ -1686,7 +1687,7 @@ function chartObjects() {
   const box = $('#c-objects'), fo = F.fo;
   if (!fo) return box.remove();
   chartHead(box, 'Объекты организаторов: на какой дистанции СТОП',
-    'Запись с 10 размеченными объектами. Для каждого: дистанция первого СТОП и докуда в этот момент детектор видел свой путь (по длине найденной оси и кривизне). Процент у точки — дистанция первого СТОП как доля видимой части пути: 100 % — СТОП дан на самом краю видимости.',
+    'Запись с 10 размеченными объектами. Для каждого показаны дистанция первого СТОП и то, докуда детектор в этот момент видел свой путь (по длине найденной оси и кривизне). Процент у точки — дистанция первого СТОП как доля видимой части пути: 100\u00a0% означает, что СТОП дан на самом краю видимости.',
     [['lg-dot', 'первый СТОП'], ['lg-bar', 'путь просматривается до']]);
   const w = chartW(box), narrow = w < 620, lw = narrow ? 118 : 290, rw = narrow ? 70 : 110, rh = 30, gh = 26;
   const groups = [['должен быть СТОП', fo.inG], ['вне габарита, СТОП не нужен', fo.outG]];
@@ -1800,13 +1801,13 @@ function methodBody() {
   const src = D.sources || {}, files = k => Object.keys(src).filter(f => src[f] === k).map(f => `<code>${esc(f)}</code>`).join(', ');
   const miss = fo ? fo.inG.filter(o => o.level !== 'stop').map(o => `${o.id} (${esc(o.name)}: ${LEVEL_TXT[o.level] || o.level})`).join('; ') : '';
   const items = [];
-  items.push(['Версии', 'Итоговая версия — параметры по умолчанию из <code>config/detector.yaml</code>. Исходная — коммит <code>ae38df6</code>, код до этой работы; обе прогнаны одними инструментами.']);
-  if (fo) items.push(['Объекты организаторов', `Запись <code>cloud_with_fake_obj</code>, ${num(fo.frames || 0)} кадров, ${fo.inG.length + fo.outG.length} объектов со списком, где нужен СТОП. Зона детектора подбиралась по этой же записи, поэтому это проверка, а не независимая валидация.${miss ? ` Без СТОП: ${miss}.` : ''} Ложный СТОП-кадр — кадр со СТОП, в котором объект уровня СТОП лежит по пройденному пути вне окна ±5${nbsp}м всех объектов эталона (то же определение, что в <code>eval_fake_obj.py</code>). До подбора под эту запись (<code>97f7376</code>) СТОП получали ${fo.baseIn} из ${fo.inG.length}.`]);
-  if (p) items.push(['Дальность', `Объект вставляется в реальные кадры лучами датчика, с тенью, на ось пути, найденную детектором; поезд едет к нему. Первый СТОП — первый кадр со СТОП на вставке. ${Q.approach.windows} ${plural(Q.approach.windows, 'окно', 'окна', 'окон')} движения, 10–15 м/с. Реального препятствия при движении в данных нет.${er ? ` Ошибка дистанции в момент первого СТОП: медиана ${num(er.median * 100, 0)} см, 95 % — до ${num(er.p95, 2)} м.` : ''}`]);
+  items.push(['Версии', 'Итоговая версия — параметры по умолчанию из <code>config/detector.yaml</code>. Исходная — коммит <code>ae38df6</code>, код до начала этой работы; обе версии прогнаны одними и теми же инструментами.']);
+  if (fo) items.push(['Объекты организаторов', `Запись <code>cloud_with_fake_obj</code>, ${num(fo.frames || 0)} кадров, ${fo.inG.length + fo.outG.length} объектов и эталонный список тех, где нужен СТОП. Зона детектора подбиралась по этой же записи, поэтому это проверка, а не независимая валидация.${miss ? ` Без СТОП: ${miss}.` : ''} Ложный СТОП-кадр — кадр со СТОП, в котором объект уровня СТОП лежит (по пройденному пути) дальше ±5${nbsp}м от всех объектов эталона (то же определение, что в <code>eval_fake_obj.py</code>). До подбора под эту запись (<code>97f7376</code>) СТОП получали ${fo.baseIn} из ${fo.inG.length}.`]);
+  if (p) items.push(['Дальность', `Объект встраивается в реальные кадры по лучам датчика, вместе с тенью, на ось пути, найденную детектором; поезд едет к нему. Первый СТОП — первый кадр со СТОП на вставке. ${Q.approach.windows} ${plural(Q.approach.windows, 'окно', 'окна', 'окон')} движения, 10–15 м/с. Записей с реальным препятствием на ходу поезда в данных нет.${er ? ` Ошибка дистанции в момент первого СТОП: медиана ${num(er.median * 100, 0)}${nbsp}см, в 95${nbsp}% случаев — до ${num(er.p95, 2)}${nbsp}м.` : ''}`]);
   if (e) items.push(['Задержка', `От публикации облака плеером до публикации результата, ROS 2 в Docker без сети, запись <code>${esc(e.bag)}</code>, кадр ${e.mb} МБ, ${e.rate_hz} Гц; принято ${e.received}, обработано ${e.processed}.${big ? ` Кадры 23 МБ (полный оборот лидара): p95 ${num(big.e2e_ms_p95, 0)} мс.` : ''} Один стенд: ${esc(D.bench || '—')}; загрузка CPU/GPU не измерялась.`]);
-  if (Q.empty) items.push(['Ложные СТОП', `Эпизод — серия кадров СТОП подряд; разрыв до двух кадров эпизод не прерывает. Эпизодов в час — число эпизодов, делённое на длительность записи (кадры при 10 Гц); на пустых записях эпизоды считаются по каждой записи отдельно. Пустые записи — ${(Q.empty.bags || []).map(b => `<code>${esc(b.bag)}</code>`).join(', ')}, ${num(Q.empty.minutes, 1)} мин; исходная версия — ${num(Q.empty.before, 1)} %.${Q.empty.episodes != null ? ` Эпизодов: ${num(Q.empty.episodes)}, ${num(Q.empty.per_hour, 0)} в час.` : ''} ${nd ? `Отложенная запись <code>new_data</code> (${num(nd.minutes, 1)} мин) при подборе параметров не использовалась: ${num(nd.pct, 1)} % кадров, ${num(nd.episodes)} ${plural(nd.episodes, 'эпизод', 'эпизода', 'эпизодов')}${nd.per_hour != null ? `, ${num(nd.per_hour, 0)} в час` : ''}.` : ''}${sl ? ` ${sl.false_proven} из ${sl.episodes} эпизодов доказанно ложные: поезд потом проехал это место.` : ''}`]);
-  if (F.sightRatio) items.push(['Доля видимости', `Для каждого объекта организаторов со СТОП: дистанция первого СТОП, делённая на дальность видимости пути в том же кадре (<code>sight_m</code>: длина найденной оси, ограниченная прямой видимостью на кривой и паспортной дальностью 200 м). 100 % — СТОП дан, как только объект оказался на видимой части пути.`]);
-  items.push(['Ось пути и «свободно»', `Статус кадра выбирается в <code>core/tunnel_od/detection/decision.py</code> (функция <code>decide</code>, строки 67–77): СТОП, затем «путь не определён» (ось не построена, габарит не проверить), затем «внимание», затем «свободно»; без оси <code>clear_to_m</code> = 0. ${F.unknown ? `Доля «путь не определён» посчитана по записям: ${(Q.status || []).map(r => `<code>${esc(r.bag)}</code>`).join(', ')}.` : ''}`]);
+  if (Q.empty) items.push(['Ложные СТОП', `Эпизод — серия кадров СТОП подряд; разрыв до двух кадров эпизод не прерывает. Эпизодов в час — число эпизодов, делённое на длительность записи (кадры при 10 Гц); на пустых записях эпизоды считаются по каждой записи отдельно. Записи без препятствий: ${(Q.empty.bags || []).map(b => `<code>${esc(b.bag)}</code>`).join(', ')}, всего ${num(Q.empty.minutes, 1)}${nbsp}мин; у исходной версии на них ${num(Q.empty.before, 1)}${nbsp}% ложных СТОП.${Q.empty.episodes != null ? ` Эпизодов: ${num(Q.empty.episodes)}, ${num(Q.empty.per_hour, 0)} в час.` : ''} ${nd ? `Отложенная запись <code>new_data</code> (${num(nd.minutes, 1)} мин) при подборе параметров не использовалась; на ней ложных СТОП ${num(nd.pct, 1)}${nbsp}% кадров, ${num(nd.episodes)} ${plural(nd.episodes, 'эпизод', 'эпизода', 'эпизодов')}${nd.per_hour != null ? `, ${num(nd.per_hour, 0)} в час` : ''}.` : ''}${sl ? ` ${sl.false_proven} из ${sl.episodes} эпизодов доказанно ложные: поезд потом проехал это место.` : ''}`]);
+  if (F.sightRatio) items.push(['Доля видимости', `Для каждого объекта организаторов со СТОП: дистанция первого СТОП, делённая на дальность видимости пути в том же кадре (<code>sight_m</code>: длина найденной оси, ограниченная прямой видимостью на кривой и паспортной дальностью 200 м). 100${nbsp}% — СТОП дан, как только объект оказался на видимой части пути.`]);
+  items.push(['Ось пути и «свободно»', `Статус кадра выбирается в <code>core/tunnel_od/detection/decision.py</code> (функция <code>decide</code>, строки 67–77) по приоритету: СТОП, затем «путь не определён» (ось не построена, габарит не проверить), затем «внимание», затем «свободно»; без оси <code>clear_to_m</code> = 0. ${F.unknown ? `Доля «путь не определён» посчитана по записям: ${(Q.status || []).map(r => `<code>${esc(r.bag)}</code>`).join(', ')}.` : ''}`]);
   items.push(['Файлы', `Прогон на этой машине (<code>output/runs</code>): ${files('runs') || 'нет'}. Эталонные результаты с машины разработки (<code>evaluation/reference</code>): ${files('reference') || 'нет'}.`]);
   items.push(['Воспроизведение', `<span class="cmd">python -m evaluation all</span><span class="cmd">BAG=/путь/к/записи docker compose up play</span>Страница собрана ${esc((D.generated || '').split('-').reverse().join('.'))}${D.commit ? `, коммит <code>${esc(D.commit)}</code>` : ''}.`]);
   $('#method-body').innerHTML = items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
@@ -1817,7 +1818,7 @@ function methodBody() {
    ===================================================================== */
 function fillStory() {
   const keys = [];
-  if (F.p170 && F.p170.after.median) keys.push([`${num(F.p170.after.median, 0)}${nbsp}м`, 'дальность стопа по человеку']);
+  if (F.p170 && F.p170.after.median) keys.push([`${num(F.p170.after.median, 0)}${nbsp}м`, 'дальность стопа перед человеком']);
   if (F.fo) keys.push([`${F.fo.inStop} из ${F.fo.inG.length}`, 'объектов в габарите получили стоп']);
   if (F.e2e && F.e2e.e2e_ms_p95 != null) keys.push([`${num(F.e2e.e2e_ms_p95, 0)}${nbsp}мс`, 'задержка кадра, p95']);
   const ul = $('#keys');
@@ -1836,14 +1837,14 @@ function fillStory() {
   const span = (a, d) => a.length ? (Math.round(Math.min(...a) * d) === Math.round(Math.max(...a) * d) ? num(Math.min(...a) * d, 0) : `${num(Math.min(...a) * d, 0)}–${num(Math.max(...a) * d, 0)}`) : null;
   const zs = span(inp.map(r => r.zero_share).filter(v => v != null), 100);
   const ps = span(inp.map(r => r.pair_share).filter(v => v != null), 100);
-  if (zs) $('#raw-zero').innerHTML = `От${nbsp}${zs}${nbsp}% точек пустые`;
+  if (zs) $('#raw-zero').innerHTML = `${zs}${nbsp}% точек пустые`;
   if (ps) $('#raw-pair').innerHTML = `и${nbsp}в${nbsp}${ps}${nbsp}% пар они совпадают`;
 
   if (F.p170 && F.p170.after.median) {
     const m = num(F.p170.after.median, 0);
     $('#stop-h').innerHTML = `Стоп на${nbsp}${m}${nbsp}метрах`;
     const n = $('#stop-note');
-    n.innerHTML = `${m}${nbsp}м${nbsp}— медиана первого подтверждения стоящего человека при подъезде со${nbsp}170${nbsp}м, по${nbsp}${F.p170.after.n} окнам движения. Подробно${nbsp}— в${nbsp}разделе <a class="link" href="#results">«Результаты»</a>.`;
+    n.innerHTML = `${m}${nbsp}м${nbsp}— медианная дистанция первого подтверждения стоящего человека при подъезде со${nbsp}170${nbsp}м по${nbsp}${F.p170.after.n} окнам движения. Подробнее${nbsp}— в${nbsp}разделе <a class="link" href="#results">«Результаты»</a>.`;
     n.hidden = false;
   }
   const bits = [];

@@ -1,5 +1,7 @@
 # Обнаружение препятствий в тоннеле метро по 3D-лидару
 
+Команда «Голуби», ЛЦТ 2026, кейс 5.
+
 [![CI](https://github.com/ivanpabl/hakatanon_lidar/actions/workflows/ci.yml/badge.svg)](https://github.com/ivanpabl/hakatanon_lidar/actions/workflows/ci.yml)
 
 ROS 2-узел в каждом кадре 128-канального лидара решает, есть ли что-то на пути поезда и на каком расстоянии: СТОП / ВНИМАНИЕ / СВОБОДНО.
@@ -52,7 +54,7 @@ ls output/                                     # 3. результат: <зап�
 | §5 README: описание, сборка, запуск, bag, параметры | ✅ | этот README, [`config/detector.yaml`](config/detector.yaml), [architecture.md](docs/architecture.md#параметры) | — |
 | §5 Архитектура, алгоритм, эксперименты, сложные случаи | ✅ | [architecture.md](docs/architecture.md), [algorithm.md](docs/algorithm.md), [experiments.md](docs/experiments.md), [hard_cases.md](docs/hard_cases.md) | — |
 | §5 Видео работы | ✅ | офлайн-плеер [report/demo.html](report/demo.html) (запись с лидара → детекция → расстояние, открывается в браузере без установки) + анимация [docs/img/demo.gif](docs/img/demo.gif); запись экрана — [ссылка будет добавлена] | — |
-| §8.5 Тесты | ✅ | `docker compose run --rm test`: gtest (`tunnel_od_preproc`, 18) + pytest пакетов ROS 2 (`ros2_ws`, 22 случая); ядро — pytest `tests/` (91 функция, 108 случаев с параметризацией) в CI и локально | — |
+| §8.5 Тесты | ✅ | `docker compose run --rm test`: gtest (C++-узел приёма облака, 18) + pytest пакетов ROS 2 (`ros2_ws`, 22 случая); ядро — pytest `tests/` (91 функция, 108 случаев с параметризацией) в CI и локально | — |
 | §8.6 docker build → docker run → ros2 bag play → результат | ✅ | запуск в 3 команды выше; вариант голым `docker run` — в разделе «Без Compose» | — |
 | §8.7 Подход команды | ✅ | [«Подход команды»](docs/experiments.md#подход-команды), [эксперименты 28–29.09](docs/experiments.md#эксперименты-282909-финальная-доводка) | — |
 | Q&A 4.6 Работа офлайн, без внешних API | ✅ | сеть нужна только при сборке; отчёт открывается без сети | — |
@@ -105,15 +107,72 @@ ls output/                                     # 3. результат: <зап�
 
 ## Запуск
 
-Нужны Docker и Docker Compose. Все зависимости ставятся при сборке, при запуске сеть не нужна.
+### Что нужно
+
+- Docker 24+ и Docker Compose v2 (проверка: `docker compose version`). Linux, macOS или Windows с WSL 2.
+- От 4 ядер CPU и 4 ГБ памяти под контейнер (пик по замеру — 2 ГБ). GPU не нужен.
+- Запись ros2 bag: каталог, в котором лежит `metadata.yaml` (`.db3` или `.mcap`).
+- Сеть нужна только при сборке образа. На стенде без интернета — [готовый образ](#готовый-образ-без-сборки).
+
+### Пошагово
 
 ```bash
+# 1. Исходники
+git clone https://github.com/ivanpabl/hakatanon_lidar.git && cd hakatanon_lidar
+
+# 2. Сборка образа: все зависимости ставятся здесь, ручных шагов нет
 docker compose build
-BAG=/путь/к/записи docker compose up play     # узел + ros2 bag play; итог в output/
-BAG=/путь/к/записи docker compose up demo     # то же по кругу + RViz в браузере: http://localhost:6080
+
+# 3. Самопроверка образа (по желанию, меньше минуты): gtest C++ и pytest узла
+docker compose run --rm test           # ждём «[  PASSED  ] 18 tests.» и «22 passed»
+
+# 4. Прогон на записи: узлы + ros2 bag play, запись проигрывается один раз
+BAG=/путь/к/записи docker compose up play
+
+# 5. Результат
+ls output/                             # <запись>_result.jsonl, _stats.json, _stats_preproc.json, _e2e.json
 ```
 
-- `BAG` — каталог записи ros2 bag, в котором лежит `metadata.yaml`. Поддерживаются `.db3` и `.mcap`. Без `BAG` берётся `./data/cloud_with_fake_obj`; если такого каталога нет, `BAG` обязателен (compose остановится с ошибкой, а не смонтирует пустой каталог).
+Показ в RViz2 прямо в браузере, запись идёт по кругу:
+
+```bash
+BAG=/путь/к/записи docker compose up demo     # открыть http://localhost:6080
+```
+
+### Что должно получиться
+
+Пока идёт `play`, узел пишет в лог строку `СТОП кадр …` на каждый кадр со СТОП, раз в 5 с — сводку, в конце — `ИТОГ {...}`. После завершения в `output/`:
+
+| Файл | Что внутри |
+|---|---|
+| `<запись>_result.jsonl` | решение по каждому кадру, по строке JSON на кадр — то же, что публикуется в `/tunnel_od/result` |
+| `<запись>_stats.json` | итог прогона: принято / обработано / отброшено кадров, задержка p50 / p95, кадров со СТОП |
+| `<запись>_stats_preproc.json` | приём облака: время разбора, проверка входного потока |
+| `<запись>_e2e.json` | задержка от публикации облака плеером до публикации решения |
+
+Строка результата (сокращённо; реальный кадр записи организаторов, куб на пути):
+
+```json
+{"frame": 11, "status": "stop", "distance_m": 97.1, "sight_m": 113.5, "clear_to_m": 97.1,
+ "path_available": true, "path_range_m": 152.7, "speed_mps": 1.6, "latency_ms": 40.6, "node_state": "ok",
+ "objects": [{"distance_m": 97.1, "lateral_m": 0.55, "height_m": 2.8, "n_points": 32,
+              "level": "stop", "reason": "in_gauge", "confidence": 1.0,
+              "size_m": {"length": 0.0, "width": 0.76, "height": 1.48},
+              "position_m": {"x": -0.38, "y": -97.15, "z": -0.53}}]}
+```
+
+Быстрый взгляд на итог без ROS:
+
+```bash
+jq -c 'select(.status == "stop") | {frame, distance_m}' output/<запись>_result.jsonl | head   # кадры со СТОП
+jq '{received, processed, dropped_total, alarm_frames, latency_ms_p50, latency_ms_p95}' output/<запись>_stats.json
+```
+
+Все поля результата описаны в [docs/architecture.md](docs/architecture.md#узел-детектора), смысл статусов — в [docs/algorithm.md](docs/algorithm.md#решение-по-кадру-detectiondecisionpy).
+
+### Настройка запуска
+
+- `BAG` — каталог записи. Без `BAG` берётся `./data/cloud_with_fake_obj`; если такого каталога нет, `BAG` обязателен (compose остановится с ошибкой, а не смонтирует пустой каталог).
 - Топик облака определяется сам: берётся единственный `PointCloud2` в записи, с любым именем, а если облаков несколько — `/lidar_points`. Другой топик: `TOPIC=/имя docker compose up play` (в launch — `topic:=`). Запись с QoS best_effort проигрывается как reliable, живой лидар с best_effort подхватывается автоматически.
 - Оси облака без полей контракта считаются как в записях организаторов. Для облака с осью X вперёд (REP-103) — `input_axes:=rep103` (`detector.launch.py`) или `input_axes: rep103` в `config/detector.yaml`.
 - Только CPU, GPU не нужен; загрузка CPU и памяти — в [docs/experiments.md](docs/experiments.md#скорость).
@@ -129,13 +188,25 @@ BAG=/путь/к/записи docker compose up demo     # то же по кру
 | `TOPIC` | автопоиск | топик `PointCloud2` в записи или у лидара |
 | `CPUS` | без ограничения | лимит ядер для `demo` |
 
+### Если что-то пошло не так
+
+| Что видно | Причина | Что делать |
+|---|---|---|
+| сборка падает на `FROM ros:humble-ros-base-jammy` (403, timeout) | Docker Hub недоступен | взять базовый образ с зеркала — [ниже](#если-docker-hub-недоступен-403--timeout) |
+| `compose` сразу пишет, что путь для `/bag` не существует | `BAG` не задан или указывает не на каталог записи | передать каталог, где лежит `metadata.yaml`: `BAG=/путь/к/записи` |
+| узлы стартовали, но кадров нет и `processed` = 0 | в записи несколько облаков или нестандартный топик | `ros2 bag info /путь/к/записи`, затем `TOPIC=/имя_топика docker compose up play` |
+| первые 3 кадра — `unknown`, `node_state: warmup` | прогрев узла | это штатно; число кадров — `warmup_frames` в `config/detector.yaml` |
+| `node_state: fault`, в RViz `NO LIDAR DATA` | облака не приходят дольше 0,5 с | посреди записи — проверить источник облаков; сразу после конца записи — штатно, плеер закончил |
+| в `ИТОГ` `dropped_total` больше нуля | CPU не успевает за 10 Гц, узел берёт самый свежий кадр | для оценки качества — детерминированный режим ниже; для работы в реальном времени это штатное поведение |
+| два прогона дают немного разные кадры со СТОП | путь пересчитывается в фоне, кадры могут отбрасываться | детерминированный режим ниже: результат повторяется до знака |
+| http://localhost:6080 не открывается с другой машины | порт `demo` открыт только для локальной машины | заменить `127.0.0.1:6080:6080` на `6080:6080` в `docker-compose.yml` |
+| файлы в `output/` принадлежат root | каталог создан Docker при запуске без Compose | создать `output/` заранее: `mkdir -p output` |
+
 Детерминированная оценка, без потери кадров:
 
 ```bash
 REFIT_MODE=sync MAX_PENDING=100000 RATE=0.5 BAG=/путь/к/записи docker compose up play
 ```
-
-После `play` в `output/` лежат результат каждого кадра (`<запись>_result.jsonl`, то же, что публикуется в `/tunnel_od/result`), итог прогона с задержками (`<запись>_stats.json`) и e2e-замер (`<запись>_e2e.json`). В логе узла — строка `СТОП кадр …` на каждый кадр со СТОП и `ИТОГ {...}` в конце.
 
 Другие режимы:
 
@@ -155,7 +226,7 @@ docker tag mirror.gcr.io/library/ros:humble-ros-base-jammy ros:humble-ros-base-j
 docker compose build
 
 # вариант 2, для голого docker build: указать базовый образ аргументом
-docker build --build-arg BASE_IMAGE=mirror.gcr.io/library/ros:humble-ros-base-jammy --target detector -t tunnel_od .
+docker build --build-arg BASE_IMAGE=mirror.gcr.io/library/ros:humble-ros-base-jammy --target detector -t metro-detector .
 ```
 
 Если недоступен и `pypi.org`, добавьте к `docker build` `--build-arg PIP_INDEX_URL=https://<зеркало>/simple`.
@@ -174,13 +245,13 @@ BAG=/путь/к/записи docker compose up play     # образ уже е�
 То же, что `docker compose up play`, голым Docker. Сборка — стадия `detector` (последняя стадия Dockerfile, `viz`, добавляет RViz для `demo`):
 
 ```bash
-docker build --target detector -t tunnel_od .
+docker build --target detector -t metro-detector .
 mkdir -p output
 docker run --rm --shm-size 2g \
   -v "$PWD/config:/opt/tunnel_od/config:ro" \
   -v "$PWD/output:/out" \
   -v "/путь/к/записи:/bag:ro" \
-  tunnel_od ros2 launch tunnel_od_detector play.launch.py bag:=/bag rate:=1.0
+  metro-detector ros2 launch tunnel_od_detector play.launch.py bag:=/bag rate:=1.0
 ```
 
 Для детерминированной оценки добавьте `-e TUNNEL_OD_REFIT_MODE=sync -e TUNNEL_OD_MAX_PENDING=100000` и `rate:=0.5`. `output/` нужно создать заранее: иначе Docker создаст его от root.
@@ -198,21 +269,25 @@ docker run --rm --shm-size 2g \
 ## Устройство
 
 ```
-core/            алгоритм: пакет Python tunnel_od (numpy, без ROS)
-ros2_ws/src/     tunnel_od_preproc — приём облака (C++), tunnel_od_detector — узел и launch-файлы
+core/            алгоритм: пакет Python (numpy, без ROS)
+ros2_ws/src/     узел приёма облака (C++), узел детектора (Python) и launch-файлы
 config/          параметры, транспорт DDS, вид RViz
 evaluation/      оценка качества офлайн: python -m evaluation
 tests/           тесты ядра
-docs/            архитектура, алгоритм, эксперименты, формат входа
+docs/            архитектура, алгоритм, эксперименты, формат входа; с чего начать — docs/README.md
+report/          готовый отчёт и 3D-плеер (они же — страница проекта)
 ```
 
 ```
-ros2 bag play ─▶ tunnel_od_preproc (C++) ─▶ tunnel_od_detector (Python, ядро tunnel_od) ─▶ /tunnel_od/result
-                                                                                        └▶ /tunnel_od/markers ─▶ RViz2
+ros2 bag play ─▶ приём облака (C++) ─▶ детектор (Python + ядро) ─▶ /tunnel_od/result
+                                                                └▶ /tunnel_od/markers ─▶ RViz2
 ```
+
+Префикс `tunnel_od` в именах топиков, пакетов и образа — техническое имя (tunnel obstacle detection), а не название решения; команда — «Голуби».
 
 | Документ | О чём |
 |---|---|
+| [docs/README.md](docs/README.md) | карта документации: что читать под какой вопрос |
 | [docs/architecture.md](docs/architecture.md) | компоненты, топики, поля результата, запуск, DDS и большие кадры |
 | [docs/algorithm.md](docs/algorithm.md) | как устроен детектор: ось пути, полотно, зона, накопление; параметры и ограничения |
 | [docs/experiments.md](docs/experiments.md) | дальность, ложные тревоги, скорость, [подход команды](docs/experiments.md#подход-команды) и варианты A→P, что не сработало |
