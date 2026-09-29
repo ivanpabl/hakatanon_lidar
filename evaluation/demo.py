@@ -23,7 +23,8 @@
 
 Снимок: --save-snapshot сохраняет отрывки (каждый SNAPSHOT_EVERY-й кадр) в сжатый json, --from-snapshot
 собирает плеер из него без записей и без tunnel_od. Снимок в git -- evaluation/reference/demo_snapshot.json.gz:
-    python -m evaluation demo --clip doubleT_obstacle:0:72 --no-approach --bg-points 5000 \
+    python -m evaluation demo --clip doubleT_obstacle:0:100 --clip roundT_doubleT:0:150 \
+        --approach roundT_squareT_pressureGate_squareT:30:person:170 --bg-points 5000 \
         --save-snapshot evaluation/reference/demo_snapshot.json.gz
 """
 import argparse
