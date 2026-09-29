@@ -1,0 +1,38 @@
+name: GitHub Pages
+
+# Публикует готовый отчёт report/ (index.html + 3D-плеер demo.html) как страницу проекта.
+# Источник Pages в настройках репозитория должен быть «GitHub Actions» (configure-pages включает его сам).
+
+on:
+  push:
+    branches: [main]
+    paths: ['report/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: report/ → GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: report
+      - id: deployment
+        uses: actions/deploy-pages@v4
